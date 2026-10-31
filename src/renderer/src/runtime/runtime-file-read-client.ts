@@ -5,6 +5,7 @@ import type {
 } from '../../../shared/runtime-types'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
+import { BINARY_PROBE_BYTES } from '../../../shared/binary-buffer'
 import type {
   RuntimeFileDownloadResult,
   RuntimeFileOperationArgs,
@@ -25,6 +26,7 @@ import { readRuntimeTerminalArtifactContent } from './runtime-terminal-artifact-
 import {
   pagedTextFileResult,
   pinRemoteFileAddress,
+  readRemoteBinaryFile,
   readRemoteFileInChunks,
   readRemoteFilePreview
 } from './runtime-paged-file-read'
@@ -101,9 +103,13 @@ export async function readRuntimeFileContent({
     // Match the exact typed error so an unrelated failure can't spoof the fallback.
     if (err instanceof RuntimeRpcCallError && err.message === 'binary_file') {
       // Why: baseline checks call this too and discard binary content, so paging is opt-in.
-      return readRemoteFilePreview(remote, { pageOversized: pageOversizedBinary === true })
+      return readRemoteBinaryFile(remote, { pageOversized: pageOversizedBinary === true })
     }
     throw err
+  }
+  // Hosts before content sniffing send an unlisted binary as text; NUL is git's binary signal.
+  if (result.content.slice(0, BINARY_PROBE_BYTES).includes('\0')) {
+    return { content: '', isBinary: true }
   }
   if (result.truncated) {
     // Why: files.read stops at 512 KiB to fit one reply; a truncated payload saved as

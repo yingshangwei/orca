@@ -29,7 +29,11 @@ import {
   MAX_JOURNAL_LIFECYCLE_BATCH_BYTES,
   MAX_JOURNAL_LIFECYCLE_BATCH_MUTATIONS
 } from './journal-row-schema'
-import { boundInlineText, JOURNAL_DISPATCH_REASON_LIMITS } from './journal-payload-bounds'
+import {
+  boundInlineText,
+  boundRunningToolOutput,
+  JOURNAL_DISPATCH_REASON_LIMITS
+} from './journal-payload-bounds'
 import { assertSubmissionIdUnused } from './journal-write-guards'
 import { turnEndAfterStop } from './journal-stop-turn-end'
 import { nextJournalItemRevision } from './journal-item-revision'
@@ -260,7 +264,7 @@ export function buildJournalItemRow(
   // A tombstoned row keeps its revision in `tombstones`, and the reducer drops
   // any item at or below it — so a re-add has to outrank the tombstone too.
   const revision = nextJournalItemRevision(input.state, itemId, input.revisions)
-  const body = turnEndAfterStop(input.state, resolved, input.body)
+  const body = boundRunningToolOutput(turnEndAfterStop(input.state, resolved, input.body))
   return {
     kind: 'item',
     ...journalItemEchoFields(input),

@@ -9,6 +9,7 @@ import { BrowserWindow, ipcMain, webContents, type WebContents } from 'electron'
 import type { Store } from '../persistence'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import { isFeatureInteractionId } from '../../shared/feature-interactions'
+import { isTrustedMainRendererSender } from './main-renderer-sender-trust'
 
 let trustedUIRendererWebContentsId: number | null = null
 
@@ -131,23 +132,5 @@ export function registerUIHandlers(
 }
 
 export function isTrustedUIRenderer(sender: WebContents): boolean {
-  if (sender.isDestroyed() || sender.getType() !== 'window') {
-    return false
-  }
-  if (trustedUIRendererWebContentsId != null) {
-    return sender.id === trustedUIRendererWebContentsId
-  }
-
-  const senderUrl = sender.getURL()
-  if (process.env.ELECTRON_RENDERER_URL) {
-    try {
-      return new URL(senderUrl).origin === new URL(process.env.ELECTRON_RENDERER_URL).origin
-    } catch {
-      return false
-    }
-  }
-
-  // Why: packaged fallback must be tied to the created main window id, not any
-  // file:// document that can obtain this IPC channel.
-  return false
+  return isTrustedMainRendererSender(sender, trustedUIRendererWebContentsId)
 }

@@ -12,6 +12,7 @@ import {
   namesAgentJournalProducer
 } from '../../../shared/agent-session-journal-producer'
 import type { JournalLifecycleMutation } from './journal-row-schema'
+import { boundRunningToolOutput } from './journal-payload-bounds'
 
 export type JournalItemAddress =
   | { identity: AgentJournalItemIdentity; itemId?: never }
@@ -81,7 +82,7 @@ export function journalLifecycleMutationRow(
         kind: 'item',
         itemId,
         revision,
-        body: mutation.body,
+        body: boundRunningToolOutput(mutation.body),
         ...journalItemEchoFields(mutation),
         turnScope: mutation.turnScope,
         ownerFence,

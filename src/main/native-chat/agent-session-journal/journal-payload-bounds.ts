@@ -1,6 +1,9 @@
 // Completed content is canonical; running revisions keep previews until the full close.
 import { createHash } from 'node:crypto'
-import type { AgentJournalBoundedPayload } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalBoundedPayload,
+  AgentJournalItemBody
+} from '../../../shared/agent-session-journal-types'
 
 export type JournalPayloadLimits = {
   /** Bytes of the payload kept in `head`. */
@@ -45,6 +48,18 @@ export function journalPayload(payload: string): AgentJournalBoundedPayload {
 /** Whole once `running` is false; a preview while the call still runs. */
 export function journalToolPayload(payload: string, running: boolean): AgentJournalBoundedPayload {
   return running ? boundPayload(payload, JOURNAL_RUNNING_PREVIEW_LIMITS) : journalPayload(payload)
+}
+
+/** Growing calls are re-saved on every revision, so the journal keeps whole output only on the closing one. */
+export function boundRunningToolOutput(body: AgentJournalItemBody): AgentJournalItemBody {
+  if (body.kind !== 'tool-call' || body.state !== 'running' || !body.output) {
+    return body
+  }
+  const { output } = body
+  const limit = JOURNAL_RUNNING_PREVIEW_LIMITS.inlineHeadBytes
+  return output.truncated || output.byteLength <= limit
+    ? body
+    : { ...body, output: { ...output, head: utf8Head(output.head, limit), truncated: true } }
 }
 
 /** Clip `payload` to the inline head. `truncated` means the head is not the whole value;

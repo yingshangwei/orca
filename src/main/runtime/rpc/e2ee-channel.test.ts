@@ -192,12 +192,18 @@ describe('E2EEChannel', () => {
       expect(ctx.onReady).not.toHaveBeenCalled()
     })
 
-    it('rejects malformed JSON', () => {
-      const ctx = setup()
-      ctx.channel.handleRawMessage('not json')
+    it.each(['not json', 'null', '[]', '"hello"', '42', 'true', 'false'])(
+      'rejects invalid handshake JSON: %s',
+      (raw) => {
+        const ctx = setup()
+        expect(() => ctx.channel.handleRawMessage(raw)).not.toThrow()
 
-      expect(ctx.onError).toHaveBeenCalledWith(4001, 'Invalid handshake message')
-    })
+        expect(ctx.onError).toHaveBeenCalledOnce()
+        expect(ctx.onError).toHaveBeenCalledWith(4001, 'Invalid handshake message')
+        expect(ctx.onReady).not.toHaveBeenCalled()
+        expect(ctx.ws.sent).toEqual([])
+      }
+    )
 
     it('rejects structurally amplified hello JSON before parsing', () => {
       const ctx = setup()
