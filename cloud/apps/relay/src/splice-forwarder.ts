@@ -78,7 +78,9 @@ export function wireSplice(input: {
     let queuedBytes = 0
     let wedgedSince: number | null = null
     cleanups.push(() => {
-      input.budget.release(queuedBytes)
+      input.budget.release(
+        queuedBytes + queue.length * RELAY_ADMISSION_BUDGETS.queuedFrameOverheadBytes
+      )
       queuedBytes = 0
       queue.length = 0
       transport(source)?.resume()
@@ -96,7 +98,7 @@ export function wireSplice(input: {
       ) {
         const frame = queue.shift()!
         queuedBytes -= frame.bytes
-        input.budget.release(frame.bytes)
+        input.budget.release(frame.bytes + RELAY_ADMISSION_BUDGETS.queuedFrameOverheadBytes)
         target.send(frame.data, { binary: frame.binary })
       }
       if (queue.length === 0) {
@@ -130,9 +132,13 @@ export function wireSplice(input: {
         input.onForwardedBytes?.(bytes)
         return
       }
+      if (queue.length >= RELAY_ADMISSION_BUDGETS.spliceHardQueuedFrames) {
+        close(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'relay queue limit exceeded', 'queue-frame-limit')
+        return
+      }
       if (
         queuedBytes + bytes > RELAY_ADMISSION_BUDGETS.spliceHardQueuedBytes ||
-        !input.budget.reserve(bytes)
+        !input.budget.reserve(bytes + RELAY_ADMISSION_BUDGETS.queuedFrameOverheadBytes)
       ) {
         close(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'relay queue limit exceeded', 'queue-limit')
         return

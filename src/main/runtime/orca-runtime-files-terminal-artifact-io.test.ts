@@ -14,6 +14,9 @@ import {
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { RUNTIME_PREVIEWABLE_BINARY_MAX_BYTES } from './files/file-preview-budget'
 import type { RuntimeFileCommands } from './orca-runtime-files'
+import { getDiskBaselineSignature } from '../../shared/disk-baseline-signature'
+import { writeLocalTextFileWithDiskPrecondition } from '../ipc/filesystem/local-disk-write-precondition'
+import type * as FsPromises from 'node:fs/promises'
 
 vi.mock('fs', async () => (await import('./orca-runtime-files-mock-registry')).fsModuleMock())
 vi.mock('fs/promises', async () =>
@@ -141,6 +144,90 @@ describe('RuntimeFileCommands', () => {
         )
       ).rejects.toThrow('terminal_file_grant_stale')
       await expect(readFile(artifactPath, 'utf8')).resolves.toBe('{"ok":"ext"}')
+    })
+
+    it('lets only one of two concurrent writes from different clients land', async () => {
+      const artifactPath = await tempFile('result.json', '{"ok":true}')
+      const { commands } = createRuntimeFileCommands({ path: '/repo' })
+      resolveAuthorizedPathMock.mockImplementation(async (p: string) => p)
+      // The registry stubs rename; commit for real so the second writer sees the first one's bytes.
+      renameMock.mockImplementation(async (from, to) => writeFile(to, await readFile(from)))
+
+      const first = absoluteFileTarget(await resolveTerminalArtifactPath(commands, artifactPath))
+      const second = absoluteFileTarget(
+        await resolveTerminalArtifactPath(commands, artifactPath, null, 'client-b')
+      )
+
+      const results = await Promise.allSettled([
+        commands.writeTerminalArtifactFile(
+          'id:wt-1',
+          first.grantId,
+          first.absolutePath,
+          '{"from":"a"}',
+          'client-a'
+        ),
+        commands.writeTerminalArtifactFile(
+          'id:wt-1',
+          second.grantId,
+          second.absolutePath,
+          '{"from":"b"}',
+          'client-b'
+        )
+      ])
+
+      const winner = results.findIndex((result) => result.status === 'fulfilled')
+      expect(results[1 - winner]).toMatchObject({
+        status: 'rejected',
+        reason: new Error('terminal_file_grant_stale')
+      })
+      await expect(readFile(artifactPath, 'utf8')).resolves.toBe(
+        winner === 0 ? '{"from":"a"}' : '{"from":"b"}'
+      )
+    })
+
+    it('keeps a guarded editor save behind an artifact awaiting its final commit', async () => {
+      vi.useRealTimers()
+      const artifactPath = await tempFile('result.json', '{"ok":true}')
+      const { commands } = createRuntimeFileCommands({ path: '/repo' })
+      resolveAuthorizedPathMock.mockImplementation(async (p: string) => p)
+      const actual = await vi.importActual<typeof FsPromises>('node:fs/promises')
+      const committing = Promise.withResolvers<void>()
+      const releaseCommit = Promise.withResolvers<void>()
+      renameMock.mockImplementation(async (from, to) => {
+        committing.resolve()
+        await releaseCommit.promise
+        await actual.rename(from, to)
+      })
+      const target = absoluteFileTarget(await resolveTerminalArtifactPath(commands, artifactPath))
+      const artifact = commands.writeTerminalArtifactFile(
+        'id:wt-1',
+        target.grantId,
+        target.absolutePath,
+        '{"from":"artifact"}',
+        'client-a'
+      )
+      await committing.promise
+      const editor = writeLocalTextFileWithDiskPrecondition(artifactPath, '{"from":"editor"}', {
+        expectedSignature: getDiskBaselineSignature('{"ok":true}')
+      })
+      let waitTimer: ReturnType<typeof setTimeout> | undefined
+      try {
+        // Real fs must get an event-loop turn; the commit barrier holds its checked baseline fixed.
+        const beforeCommit = await Promise.race([
+          editor,
+          new Promise<'still-queued'>((resolve) => {
+            waitTimer = setTimeout(() => resolve('still-queued'), 100)
+          })
+        ])
+        expect(beforeCommit).toBe('still-queued')
+      } finally {
+        clearTimeout(waitTimer)
+        releaseCommit.resolve()
+        await Promise.allSettled([artifact, editor])
+      }
+      await expect(artifact).resolves.toEqual({ ok: true })
+      await expect(editor).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+      await expect(readFile(artifactPath, 'utf8')).resolves.toBe('{"from":"artifact"}')
     })
 
     it('keeps the original terminal artifact when atomic commit fails', async () => {

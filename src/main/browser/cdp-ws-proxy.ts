@@ -12,6 +12,7 @@ import type { CapturePaintHold } from './cdp-screenshot'
 import type { AgentInputFocusGuard } from './agent-input-focus-guard'
 import { CdpPageInputCommands } from './cdp-page-input-commands'
 import { isTrustedCdpLoopbackRequest } from './cdp-loopback-request-guard'
+import { parseCdpClientCommand } from './cdp-client-command'
 import {
   assertRemoteCliPageAccess,
   runUnderRemoteCliPageAdmission
@@ -99,6 +100,8 @@ export class CdpWsProxy {
       this.wss.on('connection', (ws) => {
         this.closeClient()
         this.client = ws
+        // Keep errors contained even after a replaced client's message listeners are detached.
+        ws.on('error', () => ws.terminate())
         const onMessage = (data: WebSocket.RawData): void => {
           runUnderRemoteCliPageAdmission(this.webContents.id, () =>
             this.handleClientMessage(ws, data.toString())
@@ -173,15 +176,20 @@ export class CdpWsProxy {
   }
 
   private handleClientMessage(client: WebSocket, raw: string): void {
-    let msg: { id?: number; method?: string; params?: Record<string, unknown>; sessionId?: string }
+    let parsed: unknown
     try {
-      msg = JSON.parse(raw)
+      parsed = JSON.parse(raw)
     } catch {
       return
     }
-    if (msg.id == null || !msg.method) {
+    const envelope = parseCdpClientCommand(parsed)
+    if (!envelope.command) {
+      if (envelope.invalidId !== null) {
+        this.responder.sendError(envelope.invalidId, 'Invalid CDP request', client)
+      }
       return
     }
+    const msg = envelope.command
     const clientId = msg.id
     this.responder.recordRequestSessionId(client, clientId, msg)
     // Why here too: a revoked host's helper is refused even its read-only steps, so it stops at once.

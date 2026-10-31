@@ -1,4 +1,4 @@
-import { readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import {
@@ -11,9 +11,6 @@ const ABANDONED_LOCK_AGE_MS = PACK_REFS_TIMEOUT_MS
 
 /** Beyond this a recorded pid may have been recycled, so it stops being evidence of life. */
 const PID_REUSE_HORIZON_MS = 24 * 60 * 60_000
-
-/** The ref tree is wide but shallow; this only stops a pathological walk. */
-const REF_LOCK_SCAN_CEILING = 4096
 
 /**
  * Makes a `packed-refs.lock` Orca left behind attributable, and only that one.
@@ -47,9 +44,6 @@ export class PackRefsLockOwnership {
     if (!reclaim.ok) {
       return reclaim
     }
-    // Per-ref strands outlive their pack and are invisible to Git, which never
-    // clears a `refs/**\/*.lock` it did not create in this process.
-    await this.reclaimStrandedRefLocks(now)
     try {
       await writeFile(this.markerPath, JSON.stringify({ pid: process.pid }), 'utf-8')
     } catch {
@@ -114,61 +108,9 @@ export class PackRefsLockOwnership {
     await rm(this.markerPath, { force: true }).catch(() => {})
     return { ok: true }
   }
-
-  /**
-   * Clear `refs/**\/*.lock` files a dead pack of ours left behind.
-   *
-   * `tempfile.c` opens the lock `O_EXCL` before `activate_tempfile()` links it
-   * into the list the signal handler walks, so a kill inside that window leaves
-   * a 0-byte file. Afterwards `update-ref -d` and any fetch touching that ref
-   * fail with `cannot lock ref ... File exists`, forever. Same three conditions
-   * as the packed-refs lock, plus a size check: a live writer's lock is not empty.
-   */
-  private async reclaimStrandedRefLocks(now: number): Promise<void> {
-    const marker = await readOwnerMarker(this.markerPath)
-    if (marker === null || isProcessAlive(marker.pid)) {
-      return
-    }
-    const markerAgeMs = await fileAgeMs(this.markerPath, now)
-    if (markerAgeMs === null || markerAgeMs < ABANDONED_LOCK_AGE_MS) {
-      return
-    }
-    const path = isWindowsAbsolutePathLike(this.markerPath) ? win32 : posix
-    const pending = [path.join(path.dirname(this.markerPath), 'refs')]
-    let visited = 0
-    while (pending.length > 0) {
-      const directory = pending.pop()
-      if (directory === undefined || (visited += 1) > REF_LOCK_SCAN_CEILING) {
-        return
-      }
-      let entries: { name: string; isDirectory: () => boolean }[]
-      try {
-        entries = await readdir(directory, { withFileTypes: true })
-      } catch {
-        continue
-      }
-      for (const entry of entries) {
-        const full = path.join(directory, entry.name)
-        if (entry.isDirectory()) {
-          pending.push(full)
-        } else if (entry.name.endsWith('.lock') && (await isEmptyFile(full))) {
-          await rm(full, { force: true }).catch(() => {})
-        }
-      }
-    }
-  }
 }
 
 export type PackRefsLockClaim = { ok: true } | { ok: false; reason: string }
-
-/** A strand from the `O_EXCL` window is 0 bytes; a live writer's lock is not. */
-async function isEmptyFile(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).size === 0
-  } catch {
-    return false
-  }
-}
 
 async function readOwnerMarker(path: string): Promise<{ pid: number } | null> {
   try {

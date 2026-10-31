@@ -181,15 +181,27 @@ export async function writeLocalTextFileWithDiskPrecondition(
     await writeFile(filePath, content, 'utf-8')
     return FILE_WRITE_OK
   }
+  // Refuse symlink loops whose baseline and shared lock cannot be proven.
+  return runSerializedLocalFileWrite(filePath, compareAndWrite, () => ({
+    ok: false,
+    diskConflict: 'changed'
+  }))
+}
+
+/** Every in-process writer that checks a file before replacing it shares this lock, so no two pass the check together. */
+export async function runSerializedLocalFileWrite<T>(
+  filePath: string,
+  write: () => Promise<T>,
+  unprovableLock: () => T
+): Promise<T> {
   const pathKey = await editorWritePathKey(filePath)
   if (pathKey === null) {
-    // Why refuse: a link loop can't be compared or locked, and disk can't hold the baseline there.
-    return { ok: false, diskConflict: 'changed' }
+    return unprovableLock()
   }
   return runKeyedSerializedOperation(editorWritesByPath, pathKey, async () => {
     const inodeKey = await editorWriteInodeKey(filePath)
     return inodeKey === null
-      ? compareAndWrite()
-      : runKeyedSerializedOperation(editorWritesByInode, inodeKey, compareAndWrite)
+      ? write()
+      : runKeyedSerializedOperation(editorWritesByInode, inodeKey, write)
   })
 }
