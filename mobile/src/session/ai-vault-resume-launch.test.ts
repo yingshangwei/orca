@@ -113,11 +113,11 @@ describe('buildMobileAiVaultResumeCommand', () => {
   it('passes command overrides through to the shared builder', () => {
     expect(
       buildMobileAiVaultResumeCommand({
-        session: session({ sessionId: 'abc' }),
+        session: session({ agent: 'codex', sessionId: 'abc' }),
         hostPlatform: 'linux',
-        commandOverride: 'claude-dev'
+        commandOverride: 'codex-dev'
       })
-    ).toBe("cd '/Users/ada/repo' && claude-dev --resume 'abc'")
+    ).toBe("cd '/Users/ada/repo' && codex-dev resume 'abc'")
   })
 })
 
@@ -222,6 +222,16 @@ describe('buildMobileAiVaultResumeLaunch', () => {
         }
       })
     ).toThrow('Blocked environment key: ANTHROPIC_BASE_URL')
+  })
+
+  it('refuses a blocked Claude command instead of falling back to the plain resume builder', () => {
+    expect(() =>
+      buildMobileAiVaultResumeLaunch({
+        session: session(),
+        hostPlatform: 'darwin',
+        settings: { agentCmdOverrides: { claude: 'claude-dev' } }
+      })
+    ).toThrow('cannot override the connection')
   })
 
   it('deletes inherited Codex homes when resuming a real-home session like desktop', () => {

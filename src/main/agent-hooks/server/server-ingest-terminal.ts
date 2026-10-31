@@ -251,7 +251,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       previous.payload.turnCompletedAt === this.activeHookTurnCompletedAtByPaneKey.get(paneKey)
     if (
       !previous?.restoredUnconfirmed &&
-      !previous?.providerSessionOnly &&
+      !(event.origin === 'herdr' && previous?.providerSessionOnly) &&
       event.isReplay !== true &&
       (!event.providerSession ||
         agentProviderSessionsEqual(
