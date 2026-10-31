@@ -441,7 +441,7 @@ describe('OrcaRuntimeService', () => {
       getSettings: () => ({
         ...store.getSettings(),
         disabledTuiAgents: [],
-        agentCmdOverrides: { claude: 'host-claude' },
+        agentCmdOverrides: {},
         agentDefaultArgs: { claude: '--host-default' },
         agentDefaultEnv: { claude: { HOST_PROFILE: 'true' } }
       })
@@ -469,7 +469,7 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
         command: expect.stringMatching(
-          /^host-claude .*'--permission-mode' 'plan'.*'--model' 'opus'.*'--effort' 'high'.*--prefill 'review before sending'/
+          /^claude .*'--permission-mode' 'plan'.*'--model' 'opus'.*'--effort' 'high'.*--prefill 'review before sending'/
         ),
         env: expect.objectContaining({ HOST_PROFILE: 'true' })
       })
