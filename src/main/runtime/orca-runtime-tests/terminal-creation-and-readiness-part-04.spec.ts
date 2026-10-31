@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,9 +21,10 @@ import {
 } from '../orca-runtime-test-fixtures.spec'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { wireHeadlessServeRuntime } from '../orca-runtime-test-scenario-builders.spec'
+import * as teamsShim from '../claude-agent-teams-shim-env'
 
 describe('OrcaRuntimeService', () => {
-  it('restores captured native Claude Agent Teams mode with fresh service env', async () => {
+  it('rejects captured native Claude Agent Teams mode without a PTY or team', async () => {
     setPlatform('linux')
     // Why: native panes write their tmux shim under ~/.orca.
     const home = await mkdtemp(join(tmpdir(), 'orca-agent-teams-home-'))
@@ -65,61 +67,63 @@ describe('OrcaRuntimeService', () => {
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
-    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      command: 'claude --resume claude-session',
-      env: {
-        CLAUDE_PROFILE: 'captured',
-        // Why: native panes need an absolute CLI; without one the plan degrades to in-process teammates.
-        ORCA_AGENT_TEAMS_SHIM_BIN: '/opt/orca/bin/orca-ide',
-        ORCA_AGENT_TEAMS_TEAM_ID: 'stale-team',
-        ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
-        TMUX: '/tmp/orca-claude-agent-teams/stale-team,0,1'
-      },
-      launchAgent: 'claude',
-      launchConfig: {
-        agentCommand: 'claude',
-        agentArgs: '--teammate-mode auto',
-        agentEnv: {
+    await expect(
+      runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+        command: 'claude --resume claude-session',
+        env: {
           CLAUDE_PROFILE: 'captured',
           ORCA_AGENT_TEAMS_SHIM_BIN: '/opt/orca/bin/orca-ide',
           ORCA_AGENT_TEAMS_TEAM_ID: 'stale-team',
           ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
           TMUX: '/tmp/orca-claude-agent-teams/stale-team,0,1'
+        },
+        launchAgent: 'claude',
+        launchConfig: {
+          agentCommand: 'claude',
+          agentArgs: '--teammate-mode auto',
+          agentEnv: {
+            CLAUDE_PROFILE: 'captured',
+            ORCA_AGENT_TEAMS_SHIM_BIN: '/opt/orca/bin/orca-ide',
+            ORCA_AGENT_TEAMS_TEAM_ID: 'stale-team',
+            ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
+            TMUX: '/tmp/orca-claude-agent-teams/stale-team,0,1'
+          }
         }
-      }
+      })
+    ).rejects.toThrow('native panes require a PATH overlay')
+
+    expect(spawn).not.toHaveBeenCalled()
+    expect(revealTerminalSession).not.toHaveBeenCalled()
+    expect(runtime['claudeAgentTeams'].getActiveTeamCount()).toBe(0)
+    expect(existsSync(join(home, '.orca', 'claude-agent-teams-bin'))).toBe(false)
+  })
+
+  it('refuses native team preparation before auth, shim writes, or team registration', async () => {
+    const prepareClaudeAuth = vi.fn(async () => {
+      throw new Error('auth must not be reached')
+    })
+    const runtime = new OrcaRuntimeService(store, undefined, { prepareClaudeAuth })
+    const writeShim = vi
+      .spyOn(teamsShim, 'ensureClaudeAgentTeamsShimDir')
+      .mockResolvedValue('/fixture/unused-native-team-shim')
+    const createTeam = vi.spyOn(runtime['claudeAgentTeams'], 'createLaunchEnv')
+    onTestFinished(() => {
+      writeShim.mockRestore()
+      createTeam.mockRestore()
     })
 
-    const spawnCall = spawn.mock.calls[0]?.[0] as
-      | { command?: string; env?: Record<string, string> }
-      | undefined
-    expect(spawnCall?.command).toBe('claude --teammate-mode auto --resume claude-session')
-    expect(spawnCall?.env).toMatchObject({
-      CLAUDE_PROFILE: 'captured',
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      ORCA_AGENT_TEAMS_SHIM_BIN: '/opt/orca/bin/orca-ide',
-      TMUX_PANE: '%1'
-    })
-    expect(spawnCall?.env?.ORCA_AGENT_TEAMS_TEAM_ID).toMatch(/^team-/)
-    expect(spawnCall?.env?.ORCA_AGENT_TEAMS_TEAM_ID).not.toBe('stale-team')
-    expect(spawnCall?.env?.ORCA_AGENT_TEAMS_TOKEN).not.toBe('stale-token')
-    expect(spawnCall?.env?.TMUX).not.toBe('/tmp/orca-claude-agent-teams/stale-team,0,1')
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      TEST_WORKTREE_ID,
-      expect.objectContaining({
-        launchConfig: expect.objectContaining({
-          agentCommand: 'claude --teammate-mode auto',
-          agentEnv: expect.objectContaining({
-            CLAUDE_PROFILE: 'captured',
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            TMUX_PANE: '%1'
-          })
-        }),
-        launchAgent: 'claude'
+    await expect(
+      runtime.prepareClaudeAgentTeamsLeaderForHandle({
+        handle: 'term-refused-native-team',
+        baseEnv: { PATH: '/usr/bin' },
+        prepareAuth: true
       })
-    )
-    const revealedLaunchConfig = revealTerminalSession.mock.calls[0]?.[1]?.launchConfig
-    expect(revealedLaunchConfig?.agentEnv.ORCA_AGENT_TEAMS_TEAM_ID).not.toBe('stale-team')
-    expect(revealedLaunchConfig?.agentEnv.ORCA_AGENT_TEAMS_TOKEN).not.toBe('stale-token')
+    ).rejects.toThrow('native panes require a PATH overlay')
+
+    expect(prepareClaudeAuth).not.toHaveBeenCalled()
+    expect(writeShim).not.toHaveBeenCalled()
+    expect(createTeam).not.toHaveBeenCalled()
+    expect(runtime['claudeAgentTeams'].getActiveTeamCount()).toBe(0)
   })
 
   it('does not apply current Agent Teams mode to captured plain Claude resumes', async () => {

@@ -62,7 +62,6 @@ describe('registerPtyHandlers', () => {
         setupDaemonAdapter,
         withWin32Platform,
         makeProjectRuntimeStore,
-        daemonSpawnAndGetOptions,
         daemonSpawnAndGetEnv
       } = createDaemonActiveProviderFixtures({ handlers, mainWindow })
 
@@ -430,7 +429,7 @@ describe('registerPtyHandlers', () => {
           expect(daemonSpawn).not.toHaveBeenCalled()
         })
       })
-      it('keeps the Agent Teams tmux shim ahead of host PATH shims for runtime-created daemon PTYs', async () => {
+      it('rejects an Agent Teams PATH overlay before a runtime-created daemon PTY spawns', async () => {
         type RuntimeSpawnController = {
           spawn(args: {
             cols: number
@@ -461,28 +460,26 @@ describe('registerPtyHandlers', () => {
         const prevPackaged = mockedApp.isPackaged
         mockedApp.isPackaged = false
         try {
-          await controller.spawn({
-            cols: 80,
-            rows: 24,
-            worktreeId: 'wt-runtime',
-            command: 'claude',
-            env: {
-              PATH: `/tmp/orca-agent-teams-bin${delimiter}/usr/bin`,
-              ORCA_AGENT_TEAMS_TEAM_ID: 'team-test',
-              TERM_PROGRAM: 'Orca'
-            },
-            envToDelete: ['TERM_PROGRAM']
-          })
+          await expect(
+            controller.spawn({
+              cols: 80,
+              rows: 24,
+              worktreeId: 'wt-runtime',
+              command: 'claude',
+              env: {
+                PATH: `/tmp/orca-agent-teams-bin${delimiter}/usr/bin`,
+                ORCA_AGENT_TEAMS_TEAM_ID: 'team-test',
+                TERM_PROGRAM: 'Orca'
+              },
+              envToDelete: ['TERM_PROGRAM']
+            })
+          ).rejects.toThrow('Blocked environment key: PATH')
         } finally {
           mockedApp.isPackaged = prevPackaged
         }
 
-        const spawnOptions = daemonSpawn.mock.calls.at(-1)?.[0] as DaemonSpawnCall
-        const spawnedPath = spawnOptions.env.PATH.split(delimiter)
-        expect(spawnedPath[0]).toBe('/tmp/orca-agent-teams-bin')
-        expect(spawnedPath.some((entry) => entry.includes(join('cli', 'bin')))).toBe(true)
-        expect(spawnOptions.env.TERM_PROGRAM).toBeUndefined()
-        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['TERM_PROGRAM']))
+        expect(daemonSpawn).not.toHaveBeenCalled()
+        expect(spawnMock).not.toHaveBeenCalled()
       })
       it('strips inherited agent-hook endpoint env from development daemon PTYs', async () => {
         const { app } = await import('electron')
@@ -500,38 +497,33 @@ describe('registerPtyHandlers', () => {
           mockedApp.isPackaged = prev
         }
       })
-      it('keeps the Agent Teams tmux shim ahead of host PATH shims on daemon pty:spawn', async () => {
-        // Why: dev mode makes buildPtyHostEnv prepend its own CLI shim on every platform, so
-        // the promotion below has something to beat instead of passing trivially.
+      it('rejects an Agent Teams PATH overlay before daemon pty:spawn', async () => {
+        const daemonSpawn = setupDaemonAdapter()
+        handlers.clear()
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared window fixture provides the handler registration surface.
+        registerPtyHandlers(mainWindow as never)
         const { app } = await import('electron')
-        const mockedApp = app as unknown as { isPackaged: boolean }
-        const prevPackaged = mockedApp.isPackaged
-        mockedApp.isPackaged = false
-        let spawnOptions: Awaited<ReturnType<typeof daemonSpawnAndGetOptions>>
+        const prevPackaged = app.isPackaged
+        Object.defineProperty(app, 'isPackaged', { value: false })
         try {
-          spawnOptions = await daemonSpawnAndGetOptions(
-            {
-              PATH: `/tmp/orca-agent-teams-bin${delimiter}/usr/bin`,
-              ORCA_AGENT_TEAMS_TEAM_ID: 'team-test',
-              TERM_PROGRAM: 'Orca'
-            },
-            undefined,
-            undefined,
-            undefined,
-            {
+          await expect(
+            handlers.get('pty:spawn')!(null, {
+              cols: 80,
+              rows: 24,
               command: 'claude',
-              envToDelete: ['TERM_PROGRAM']
-            }
-          )
+              envToDelete: ['TERM_PROGRAM'],
+              env: {
+                PATH: `/tmp/orca-agent-teams-bin${delimiter}/usr/bin`,
+                ORCA_AGENT_TEAMS_TEAM_ID: 'team-test',
+                TERM_PROGRAM: 'Orca'
+              }
+            })
+          ).rejects.toThrow('Blocked environment key: PATH')
         } finally {
-          mockedApp.isPackaged = prevPackaged
+          Object.defineProperty(app, 'isPackaged', { value: prevPackaged })
         }
-
-        const spawnedPath = spawnOptions.env.PATH.split(delimiter)
-        expect(spawnedPath[0]).toBe('/tmp/orca-agent-teams-bin')
-        expect(spawnedPath.some((entry) => entry.includes(join('cli', 'bin')))).toBe(true)
-        expect(spawnOptions.env.TERM_PROGRAM).toBeUndefined()
-        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['TERM_PROGRAM']))
+        expect(daemonSpawn).not.toHaveBeenCalled()
+        expect(spawnMock).not.toHaveBeenCalled()
       })
       it('injects dev-mode ORCA_USER_DATA_PATH + dev CLI PATH on the daemon path', async () => {
         // Why: the mocked `app` is a plain object, so we can flip isPackaged for the test's scope.

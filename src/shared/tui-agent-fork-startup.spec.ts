@@ -34,12 +34,16 @@ describe('agent fork startup', () => {
     const plan = buildAgentResumeStartupPlan({
       agent: 'claude',
       providerSession: SESSION,
-      cmdOverrides: { claude: 'claude --continue' },
+      cmdOverrides: {},
+      agentArgs: '--continue',
+      sessionOptions: { model: 'opus', effort: 'high' },
       platform: 'darwin',
       fork: true
     })
 
-    expect(plan?.launchCommand).toBe("claude '--resume' 's1' '--fork-session'")
+    expect(plan?.launchCommand).toBe(
+      "claude '--model' 'opus' '--effort' 'high' '--resume' 's1' '--fork-session'"
+    )
   })
 
   it('builds a Codex fork plan that opens in the launch folder', () => {

@@ -50,7 +50,11 @@ describe('OrcaRuntimeService', () => {
     }
   )
 
-  it('rejects a bare Claude command on an SSH runtime', async () => {
+  it.each([
+    { scenario: 'bare', env: undefined, disabled: false },
+    { scenario: 'caller environment', env: { KEEP: '1' }, disabled: false },
+    { scenario: 'disabled agent', env: undefined, disabled: true }
+  ])('rejects a Claude command on an SSH runtime with $scenario', async ({ env, disabled }) => {
     const remoteRepo = {
       id: TEST_REPO_ID,
       path: 'C:/remote/repo',
@@ -69,7 +73,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getSettings: () => ({
         ...store.getSettings(),
-        disabledTuiAgents: [],
+        disabledTuiAgents: disabled ? ['claude'] : [],
         terminalWindowsShell: 'cmd.exe',
         agentCmdOverrides: {},
         agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
@@ -88,6 +92,7 @@ describe('OrcaRuntimeService', () => {
     await expect(
       runtime.createTerminal('path:C:/remote/repo', {
         command: 'claude',
+        ...(env ? { env } : {}),
         title: 'worker'
       })
     ).rejects.toThrow('Could not build launch command for claude.')

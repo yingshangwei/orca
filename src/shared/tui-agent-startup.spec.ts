@@ -271,64 +271,34 @@ describe('tui agent startup plans', () => {
     expect(plan?.launchCommand).not.toContain('--settings')
   })
 
-  it('uses the Linux Orca CLI command for Claude Agent Teams launches', () => {
-    const plan = buildAgentStartupPlan({
-      agent: 'claude-agent-teams',
-      prompt: '',
-      cmdOverrides: {},
-      platform: 'linux',
-      allowEmptyPromptLaunch: true
-    })
-
-    expect(plan?.launchCommand).toBe('orca-ide claude-teams')
+  it.each([
+    { platform: 'linux' as const, isRemote: false },
+    { platform: 'linux' as const, isRemote: true },
+    { platform: 'darwin' as const, isRemote: false },
+    { platform: 'win32' as const, isRemote: true }
+  ])('refuses Claude Agent Teams on $platform (remote=$isRemote)', ({ platform, isRemote }) => {
+    expect(
+      buildAgentStartupPlan({
+        agent: 'claude-agent-teams',
+        prompt: '',
+        cmdOverrides: {},
+        platform,
+        isRemote,
+        allowEmptyPromptLaunch: true
+      })
+    ).toBeNull()
   })
 
-  it('uses the plain orca shim for Claude Agent Teams on Linux SSH remotes', () => {
-    // Why: the SSH relay deploys the CLI shim as `orca` (not the local-only
-    // `orca-ide` GNOME-screen-reader workaround), so a remote launch must not
-    // emit `orca-ide claude-teams` — that name is not on the remote PATH and
-    // `claude-teams` is rejected by the relay's CLI switch (issue #6500).
-    const plan = buildAgentStartupPlan({
-      agent: 'claude-agent-teams',
-      prompt: '',
-      cmdOverrides: {},
-      platform: 'linux',
-      isRemote: true,
-      allowEmptyPromptLaunch: true
-    })
-
-    expect(plan?.launchCommand).toBe('orca claude-teams')
-  })
-
-  it('keeps the Windows orca.cmd shim for Claude Agent Teams on SSH remotes', () => {
-    // Why: the Windows remote shim is also `orca.cmd`, matching the local
-    // win32 override, so remoteness must not alter the Windows command.
-    const plan = buildAgentStartupPlan({
-      agent: 'claude-agent-teams',
-      prompt: '',
-      cmdOverrides: {},
-      platform: 'win32',
-      isRemote: true,
-      allowEmptyPromptLaunch: true
-    })
-
-    expect(plan?.launchCommand).toBe('orca.cmd claude-teams')
-  })
-
-  it('keeps the Linux orca-ide wrapper for local (non-remote) Claude Agent Teams', () => {
-    // Why: the `orca-ide` rename is still required for a local Linux desktop
-    // install (avoids shadowing the GNOME Orca screen reader), so an explicit
-    // isRemote:false must preserve it.
-    const plan = buildAgentStartupPlan({
-      agent: 'claude-agent-teams',
-      prompt: '',
-      cmdOverrides: {},
-      platform: 'linux',
-      isRemote: false,
-      allowEmptyPromptLaunch: true
-    })
-
-    expect(plan?.launchCommand).toBe('orca-ide claude-teams')
+  it('refuses a configured native-pane alias instead of accepting its override or arguments', () => {
+    expect(
+      buildAgentStartupPlan({
+        agent: 'claude-agent-teams',
+        prompt: 'review this',
+        cmdOverrides: { 'claude-agent-teams': 'claude' },
+        agentArgs: '--settings /tmp/alternate-settings.json',
+        platform: 'linux'
+      })
+    ).toBeNull()
   })
 
   it('launches OpenClaude as a distinct argv agent', () => {
@@ -426,7 +396,7 @@ describe('tui agent startup plans', () => {
     }
   )
 
-  it('leaves Claude command overrides untouched', () => {
+  it('refuses Claude command overrides', () => {
     const plan = buildAgentStartupPlan({
       agent: 'claude',
       prompt: 'fix it',
@@ -434,7 +404,7 @@ describe('tui agent startup plans', () => {
       platform: 'linux'
     })
 
-    expect(plan?.launchCommand).toBe("claude --dangerously-skip-permissions 'fix it'")
+    expect(plan).toBeNull()
   })
 
   it('leaves Codex command overrides untouched', () => {

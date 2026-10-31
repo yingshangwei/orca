@@ -38,6 +38,10 @@ describe('the prompt-transport predicate against the plan it predicts', () => {
 
   it.each(ALL_AGENTS)('agrees with the built plan for %s', (agent) => {
     const plan = planFor(agent)
+    if (agent === 'claude-agent-teams') {
+      expect(plan).toBeNull()
+      return
+    }
     expect(plan).not.toBeNull()
     // `followupPrompt` is the plan saying "the command does NOT carry this"; the predicate must
     // say the same thing, and it is read before any plan is built.
@@ -47,6 +51,10 @@ describe('the prompt-transport predicate against the plan it predicts', () => {
   it('puts the prompt in the launch command exactly when it says it does', () => {
     for (const agent of ALL_AGENTS) {
       const plan = planFor(agent)
+      if (agent === 'claude-agent-teams') {
+        expect(plan).toBeNull()
+        continue
+      }
       if (!agentPromptRidesLaunchCommand(agent)) {
         // The command must not smuggle the text in some other way.
         expect(plan!.launchCommand).not.toContain(PROMPT)

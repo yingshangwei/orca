@@ -7,11 +7,7 @@ import type {
   AgentTeamsTmuxCompatRequest,
   AgentTeamsTmuxCompatResponse
 } from '../../claude-agent-teams-types'
-import {
-  ensureClaudeAgentTeamsShimDir,
-  resolveClaudeAgentTeamsShimBin
-} from '../../claude-agent-teams-shim-env'
-import { applyClaudeEnvPatch } from '../../../claude-accounts/environment'
+import { refuseClaudeNativePaneTeams } from '../../../../shared/claude-local-policy'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 import { SPLIT_PANE_WAIT_TIMEOUT_MESSAGE } from './terminal-split-wait-timeout'
 
@@ -138,29 +134,12 @@ export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends
     })
   }
 
-  async prepareClaudeAgentTeamsLeaderForHandle(args: {
+  async prepareClaudeAgentTeamsLeaderForHandle(_args: {
     handle: string
     baseEnv?: Record<string, string>
     prepareAuth?: boolean
   }): Promise<{ env: Record<string, string>; envToDelete?: string[] }> {
-    const baseEnv = {
-      ...process.env,
-      ...args.baseEnv
-    }
-    const auth = args.prepareAuth && this.prepareClaudeAuth ? await this.prepareClaudeAuth() : null
-    if (auth) {
-      applyClaudeEnvPatch(baseEnv, auth.envPatch)
-    }
-    const shimDir = await ensureClaudeAgentTeamsShimDir()
-    const shimBin = resolveClaudeAgentTeamsShimBin(baseEnv)
-    const launch = this.claudeAgentTeams.createLaunchEnv({
-      leaderHandle: args.handle,
-      baseEnv,
-      shimDir,
-      shimBin
-    })
-    const env = auth ? { ...auth.envPatch, ...launch.env } : launch.env
-    return { env }
+    refuseClaudeNativePaneTeams()
   }
 
   // Why: a leader handle that never binds to a PTY (lost pane race) has no exit

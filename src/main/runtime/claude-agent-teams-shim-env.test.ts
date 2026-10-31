@@ -29,7 +29,7 @@ describe('claude agent teams shim env', () => {
     await expect(readFile(join(root, 'tmux'), 'utf8')).resolves.toContain('agent-teams-tmux "$@"')
   })
 
-  it('builds native shim env only for direct Claude commands', async () => {
+  it('refuses native shim launch preparation before writing a shim or registering a team', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
     roots.push(root)
     // Why: the plan writes its tmux shim under ~/.orca.
@@ -42,36 +42,22 @@ describe('claude agent teams shim env', () => {
       await chmod(cliPath, 0o755)
     }
 
-    let capturedShimBin = ''
-    const plan = await buildClaudeAgentTeamsLaunchPlan({
+    const createTeamEnv = vi.fn(() => ({ TMUX_PANE: '%1' }))
+    const plan = buildClaudeAgentTeamsLaunchPlan({
       command: "claude 'hello'",
       mode: 'native-panes-shim',
       baseEnv: { PATH: root },
-      createTeamEnv: (shimDir, shimBin) => {
-        capturedShimBin = shimBin
-        return {
-          PATH: `${shimDir}:/usr/bin`,
-          TMUX: '/tmp/orca/fake,0,0',
-          TMUX_PANE: '%1'
-        }
-      }
+      createTeamEnv
     })
 
-    if (process.platform === 'win32') {
-      expect(plan).toMatchObject({
-        command: "claude --teammate-mode in-process 'hello'",
-        env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
-      })
-      expect(plan?.envToDelete).toBeUndefined()
-      expect(capturedShimBin).toBe('')
-    } else {
-      expect(plan).toMatchObject({
-        command: "claude --teammate-mode auto 'hello'",
-        env: expect.objectContaining({ TMUX_PANE: '%1' }),
-        envToDelete: ['TERM_PROGRAM']
-      })
-      expect(capturedShimBin).toBe(cliPath)
-    }
+    await (process.platform === 'win32'
+      ? expect(plan).resolves.toEqual({
+          command: "claude --teammate-mode in-process 'hello'",
+          env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
+        })
+      : expect(plan).rejects.toThrow('native panes require a PATH overlay'))
+    expect(createTeamEnv).not.toHaveBeenCalled()
+    expect(existsSync(join(root, '.orca', 'claude-agent-teams-bin'))).toBe(false)
 
     await expect(
       buildClaudeAgentTeamsLaunchPlan({
@@ -130,22 +116,51 @@ describe('claude agent teams shim env', () => {
     }
   )
 
-  it('falls back to in-process teammates when no absolute CLI can be qualified', async () => {
-    const createTeamEnv = (): Record<string, string> => {
-      throw new Error('native shim env must not be built without a qualified CLI')
-    }
+  it('does not silently fall back from native panes when no absolute CLI can be qualified', async () => {
+    const createTeamEnv = vi.fn(() => ({}))
+    const plan = buildClaudeAgentTeamsLaunchPlan({
+      command: 'claude',
+      mode: 'native-panes-shim',
+      baseEnv: { PATH: '.' },
+      createTeamEnv
+    })
 
+    await (process.platform === 'win32'
+      ? expect(plan).resolves.toEqual({
+          command: 'claude --teammate-mode in-process',
+          env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
+        })
+      : expect(plan).rejects.toThrow('native panes require a PATH overlay'))
+    expect(createTeamEnv).not.toHaveBeenCalled()
+  })
+
+  it('preserves explicitly requested in-process teammates without native resources', async () => {
+    const createTeamEnv = vi.fn(() => ({}))
     await expect(
       buildClaudeAgentTeamsLaunchPlan({
-        command: 'claude',
-        mode: 'native-panes-shim',
-        baseEnv: { PATH: '.' },
+        command: "claude 'hello'",
+        mode: 'in-process',
+        baseEnv: {},
         createTeamEnv
       })
     ).resolves.toEqual({
-      command: 'claude --teammate-mode in-process',
+      command: "claude --teammate-mode in-process 'hello'",
       env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
     })
+    expect(createTeamEnv).not.toHaveBeenCalled()
+  })
+
+  it('leaves plain Claude launches alone when teams are off', async () => {
+    const createTeamEnv = vi.fn(() => ({}))
+    await expect(
+      buildClaudeAgentTeamsLaunchPlan({
+        command: 'claude',
+        mode: 'off',
+        baseEnv: {},
+        createTeamEnv
+      })
+    ).resolves.toBeNull()
+    expect(createTeamEnv).not.toHaveBeenCalled()
   })
 
   it.skipIf(process.platform === 'win32')(

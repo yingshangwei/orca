@@ -170,7 +170,7 @@ describe('tui agent startup session options', () => {
 
   it('quotes option values for a remote POSIX launch', () => {
     const plan = buildAgentStartupPlan({
-      agent: 'claude',
+      agent: 'codex',
       prompt: '',
       cmdOverrides: {},
       platform: 'linux',

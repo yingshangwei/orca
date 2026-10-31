@@ -3,11 +3,11 @@ import { accessSync, constants, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
 import {
-  addClaudeTeammateModeAuto,
   addClaudeTeammateModeInProcess,
   isDirectClaudeCommand,
   type ClaudeAgentTeamsMode
 } from '../../shared/claude-agent-teams-tmux-compat'
+import { refuseClaudeNativePaneTeams } from '../../shared/claude-local-policy'
 import { getOrcaCliCommandNameForPlatform } from '../../shared/orca-cli-command-name'
 import { resolvePathEnvKey } from '../pty/windows-path-segment-merge'
 
@@ -42,21 +42,7 @@ export async function buildClaudeAgentTeamsLaunchPlan(args: {
       env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
     }
   }
-  const shimBin = resolveClaudeAgentTeamsShimBin(args.baseEnv)
-  if (!shimBin) {
-    // Why: without an absolute CLI path the shim would resolve a bare `orca` against the pane cwd, so degrade instead.
-    return {
-      command: addClaudeTeammateModeInProcess(args.command),
-      env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
-    }
-  }
-  const shimDir = await ensureClaudeAgentTeamsShimDir()
-  const env = args.createTeamEnv(shimDir, shimBin)
-  return {
-    command: addClaudeTeammateModeAuto(args.command),
-    env,
-    envToDelete: ['TERM_PROGRAM']
-  }
+  refuseClaudeNativePaneTeams()
 }
 
 /** Absolute path to the Orca CLI that backs the tmux shim, or null when none can be qualified. */

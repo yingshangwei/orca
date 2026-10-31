@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { assertLocalClaudeConfiguration } from './claude-local-configuration'
-import { assertLocalClaudeLaunch } from './claude-local-launch-policy'
+import { assertLocalClaudeCommand, assertLocalClaudeLaunch } from './claude-local-launch-policy'
 import { claudeStructuredSpawnOptions } from './claude-structured-spawn-options'
 
 const roots: string[] = []
@@ -71,6 +71,29 @@ describe('local Claude connection policy', () => {
     )
     await expect(assertLocalClaudeConfiguration(f)).rejects.toThrow(`Conflicting ${key}`)
     await expect(assertLocalClaudeConfiguration(f)).rejects.not.toThrow('synthetic-conflict-value')
+  })
+
+  it('refuses an injected native-team shim directory while preserving an inherited value', async () => {
+    const f = await fixture()
+    const overlay = { ORCA_AGENT_TEAMS_SHIM_DIR: '/synthetic/shim' }
+    await expect(
+      assertLocalClaudeCommand({
+        binary: 'claude',
+        args: [],
+        env: overlay,
+        inheritedEnv: f.env,
+        cwd: f.cwd
+      })
+    ).rejects.toThrow('Blocked environment key: ORCA_AGENT_TEAMS_SHIM_DIR')
+    await expect(
+      assertLocalClaudeCommand({
+        binary: 'claude',
+        args: [],
+        env: overlay,
+        inheritedEnv: { ...f.env, ...overlay },
+        cwd: f.cwd
+      })
+    ).resolves.toBeUndefined()
   })
 
   it('refuses missing gateway configuration instead of falling back to Anthropic', async () => {
