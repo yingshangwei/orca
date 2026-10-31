@@ -50,6 +50,7 @@ vi.mock('electron', () => ({
   protocol: { handle: mocks.handleProtocol },
   app: {
     on: vi.fn(),
+    commandLine: { hasSwitch: vi.fn(() => false) },
     setName: vi.fn(),
     getPath: vi.fn(() => mocks.userDataPath),
     getVersion: vi.fn(() => '1.0.0'),
