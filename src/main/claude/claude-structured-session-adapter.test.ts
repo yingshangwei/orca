@@ -27,7 +27,7 @@ import { invokeCanUseTool } from './claude-can-use-tool-test-support'
 import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 
 describe('ClaudeStructuredSessionAdapter.acquire', () => {
-  it('pins the account and proves init without treating the system-frame uuid as a chain leaf', async () => {
+  it('forwards the account for validation and proves init without treating the system-frame uuid as a chain leaf', async () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
@@ -40,10 +40,8 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
 
     expect(claude.connections[0].launch).toMatchObject({
       cwd: '/work/repo',
-      env: {
-        [SPAWN_TOKEN_ENV]: 'spawn-9',
-        CLAUDE_CONFIG_DIR: '/accounts/claude'
-      }
+      claudeConfigDir: '/accounts/claude',
+      env: { [SPAWN_TOKEN_ENV]: 'spawn-9' }
     })
     // supportedDialogKinds is now a query() launch option, not an initialize request param.
     expect(claude.connections[0].calls.slice(0, 2)).toEqual([
@@ -299,7 +297,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
     })
   })
 
-  it('forwards configured launch environment while keeping ownership pins authoritative', async () => {
+  it('forwards the launch environment and account separately while keeping the spawn token authoritative', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude, {
       env: {
@@ -312,10 +310,11 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
 
     await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
 
+    expect(claude.connections[0].launch.claudeConfigDir).toBe('/accounts/claude')
     expect(claude.connections[0].launch.env).toEqual({
       ANTHROPIC_AUTH_TOKEN: 'configured-token',
       ANTHROPIC_BASE_URL: 'https://gateway.example.test',
-      CLAUDE_CONFIG_DIR: '/accounts/claude',
+      CLAUDE_CONFIG_DIR: '/wrong/account',
       [SPAWN_TOKEN_ENV]: 'spawn-9'
     })
   })
@@ -330,7 +329,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
     expect(claude.connections[0].launch.env).toEqual({ [SPAWN_TOKEN_ENV]: 'spawn-9' })
   })
 
-  it('re-pins the account home when the launch env would send the child elsewhere', async () => {
+  it('preserves conflicting home evidence for the connection to reject before spawning', async () => {
     const claude = fakeClaude()
     const accountHome = join(homedir(), '.claude')
     const adapter = adapterFor(claude, {
@@ -340,8 +339,9 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
 
     await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
 
+    expect(claude.connections[0].launch.claudeConfigDir).toBe(accountHome)
     expect(claude.connections[0].launch.env).toEqual({
-      CLAUDE_CONFIG_DIR: accountHome,
+      CLAUDE_CONFIG_DIR: '/other/account',
       [SPAWN_TOKEN_ENV]: 'spawn-9'
     })
   })

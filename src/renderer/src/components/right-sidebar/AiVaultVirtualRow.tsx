@@ -177,11 +177,22 @@ export function AiVaultVirtualRow({
     searchResumeAllowed &&
     usesLegacyResumeCommand &&
     (!isAntigravityReferenceSession(row.session) || !resumeGating.resumeDisabled)
-  const resumeStartup = canBuildResumeStartup
-    ? buildResumeStartup(row.session, resumeState?.worktreeId)
-    : { command: '' }
+  let resumeStartup: AiVaultResumeStartup = { command: '' }
+  let realHomeResumeStartup = resumeStartup
+  let resumeStartupBlocked = false
+  if (canBuildResumeStartup) {
+    try {
+      resumeStartup = buildResumeStartup(row.session, resumeState?.worktreeId)
+      realHomeResumeStartup = buildResumeStartup(
+        { ...row.session, codexHome: null },
+        resumeState?.worktreeId
+      )
+    } catch {
+      resumeStartupBlocked = true
+    }
+  }
   const visibleResumeActions =
-    searchResumeAllowed && resumeActions
+    searchResumeAllowed && !resumeStartupBlocked && resumeActions
       ? resumeActions
       : {
           worktree: { worktreeId: null, disabled: true },
@@ -213,15 +224,11 @@ export function AiVaultVirtualRow({
           sourceHostLabel={searchHitHostLabels?.get(row.session.executionHostId)}
           liveState={getSessionLiveState(row.session)}
           resumeStartup={resumeStartup}
-          realHomeResumeStartup={
-            canBuildResumeStartup
-              ? buildResumeStartup({ ...row.session, codexHome: null }, resumeState?.worktreeId)
-              : resumeStartup
-          }
+          realHomeResumeStartup={realHomeResumeStartup}
           worktreeInfo={worktreeInfo}
           vaultScope={vaultScope}
           detailsExpanded={expandedSessionIds.has(row.session.id)}
-          resumeDisabled={resumeDisabled}
+          resumeDisabled={resumeDisabled || resumeStartupBlocked}
           resumeLabel={resumeLabel}
           resumeActions={visibleResumeActions}
           onToggleDetails={() => {
@@ -229,7 +236,7 @@ export function AiVaultVirtualRow({
             onToggleSessionDetails(row.session.id)
           }}
           onPick={
-            onPickSession
+            onPickSession && !resumeStartupBlocked
               ? () => {
                   onSelect?.()
                   onPickSession(row.session)
@@ -244,37 +251,41 @@ export function AiVaultVirtualRow({
           onJumpToWorktree={worktreeJumpId ? () => onJumpToWorktree(worktreeJumpId) : undefined}
           subagentResume={{ getState: getSessionResumeState, onResume }}
           onResume={() => {
-            if (resumeWorktreeId) {
+            if (!resumeStartupBlocked && resumeWorktreeId) {
               onResume(row.session, resumeWorktreeId)
             }
           }}
           onContinueInNewSession={
-            searchResumeAllowed && continuationWorktreeId
+            searchResumeAllowed && !resumeStartupBlocked && continuationWorktreeId
               ? () => onContinueInNewSession(row.session, continuationWorktreeId)
               : undefined
           }
           onResumeInNewChat={
-            resumeInNewChatWorkspaceId
+            !resumeStartupBlocked && resumeInNewChatWorkspaceId
               ? () => onResumeInNewChat(row.session, resumeInNewChatWorkspaceId)
               : undefined
           }
           onResumeInNewCli={
-            resumeInNewCliWorktreeId
+            !resumeStartupBlocked && resumeInNewCliWorktreeId
               ? () => onResumeInNewCli(row.session, resumeInNewCliWorktreeId)
               : undefined
           }
           onResumeInWorktree={() => {
-            if (searchResumeAllowed && resumeActions?.worktree.worktreeId) {
+            if (
+              searchResumeAllowed &&
+              !resumeStartupBlocked &&
+              resumeActions?.worktree.worktreeId
+            ) {
               onResume(row.session, resumeActions.worktree.worktreeId)
             }
           }}
           onResumeInNewTab={() => {
-            if (searchResumeAllowed && resumeActions?.newTab.worktreeId) {
+            if (searchResumeAllowed && !resumeStartupBlocked && resumeActions?.newTab.worktreeId) {
               onResume(row.session, resumeActions.newTab.worktreeId)
             }
           }}
           onCopyResume={
-            searchResumeAllowed && resumeGating.canCopyResumeCommand
+            searchResumeAllowed && !resumeStartupBlocked && resumeGating.canCopyResumeCommand
               ? () => onCopyResume(row.session, resumeState?.worktreeId)
               : undefined
           }

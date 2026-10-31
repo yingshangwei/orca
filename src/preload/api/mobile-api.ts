@@ -34,7 +34,6 @@ export type MobileApi = {
         /** Null when no direct address was advertised — the QR pairs over Relay alone. */
         endpoint: string | null
         deviceId: string
-        /** Mode the QR actually encodes. */
         connectionMode: MobilePairingConnectionMode
       }
   >

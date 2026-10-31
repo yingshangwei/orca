@@ -5,8 +5,9 @@ import { parse } from 'yaml'
 
 const workflow = parse(readFileSync('.github/workflows/node-server-tests.yml', 'utf8'))
 
-function runnerFor(job, os, fast) {
+function runnerFor(job, os, fast, eventName = 'workflow_dispatch') {
   return runInNewContext(job['runs-on'].slice(3, -2), {
+    github: { event_name: eventName },
     inputs: { fast_runners: fast },
     matrix: { os },
     fromJSON: JSON.parse
@@ -64,15 +65,34 @@ it.each([
 ])('sizes %s for its work without changing default callers', (name, hostedRunner, fastRunner) => {
   expect(runnerFor(workflow.jobs[name], undefined, false)).toBe(hostedRunner)
   expect(runnerFor(workflow.jobs[name], undefined, true)).toBe(fastRunner)
+  expect(runnerFor(workflow.jobs[name], undefined, undefined, 'pull_request')).toBe(
+    name === 'changes' ? fastRunner : hostedRunner
+  )
 })
 
 it('still builds and uploads cross-compiled Windows template addons on the x64 lane', () => {
   const steps = workflow.jobs.persistence.steps
-  for (const fragment of ['process-table addons', 'CLI launchers', 'security addons']) {
-    const upload = steps.find((step) => step.name?.includes(`Keep the Windows ${fragment}`))
-    expect(upload.if).toContain("matrix.os == 'windows-2022'")
-  }
   const launcher = steps.find((step) => step.uses?.includes('prepare-windows-cli-launcher'))
-  expect(launcher.with.arches).toContain("matrix.os == 'windows-2022'")
-  expect(launcher.with.arches).toContain("'x64 arm64'")
+  for (const [os, arch, buildTemplate, expectedArches, expectedUpload] of [
+    ['windows-2022', 'X64', true, 'x64 arm64', true],
+    ['windows-2022', 'X64', false, 'x64', false],
+    ['windows-11-arm', 'ARM64', true, 'arm64', false],
+    ['windows-11-arm', 'ARM64', false, 'arm64', false]
+  ]) {
+    for (const hasSecurityBuilder of [true, false]) {
+      const ctx = {
+        inputs: { build_template: buildTemplate },
+        matrix: { os },
+        runner: { arch },
+        hashFiles: () => (hasSecurityBuilder ? 'fixture-builder-hash' : '')
+      }
+      for (const fragment of ['process-table addons', 'CLI launchers', 'security addons']) {
+        const upload = steps.find((step) => step.name?.includes(`Keep the Windows ${fragment}`))
+        expect(runInNewContext(upload.if, ctx), `${os} ${fragment}`).toBe(
+          expectedUpload && (fragment !== 'security addons' || hasSecurityBuilder)
+        )
+      }
+      expect(runInNewContext(launcher.with.arches.slice(3, -2), ctx)).toBe(expectedArches)
+    }
+  }
 })

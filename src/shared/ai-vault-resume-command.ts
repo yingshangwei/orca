@@ -17,6 +17,7 @@ import {
   withoutEnvCommand
 } from './tui-agent-startup-shell'
 import type { AiVaultAgent, AiVaultSession } from './ai-vault-types'
+import { refuseClaudeConfigurationMutation } from './claude-local-policy'
 
 export function buildAiVaultResumeCommand(args: {
   agent: AiVaultAgent
@@ -31,6 +32,9 @@ export function buildAiVaultResumeCommand(args: {
 }): string {
   const { agent, sessionId, cwd, platform, commandOverride, codexHome, resumeFilePath, shell } =
     args
+  if (agent === 'claude' && commandOverride?.trim()) {
+    refuseClaudeConfigurationMutation()
+  }
   const baseCommand = commandOverride?.trim() || defaultAiVaultResumeCommandBase(agent)
   // Why: OMP's and Prime Agent's `--resume` accept an absolute transcript path,
   // which resolves regardless of which session-dir root (custom

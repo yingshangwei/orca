@@ -383,17 +383,15 @@ describe('claude structured launch resolution', () => {
     })
   })
 
-  it('keeps the session launch environment pinned after account settings change', async () => {
+  it('refuses connection changes from Orca account settings', async () => {
     const resolver = resolverFor(record(), () => ({
       ANTHROPIC_AUTH_TOKEN: 'rotated-token',
       ANTHROPIC_BASE_URL: 'https://gateway.example.test'
     }))
 
-    expect((await resolver({ identity: IDENTITY })).env).toMatchObject({
-      ANTHROPIC_AUTH_TOKEN: 'rotated-token',
-      ANTHROPIC_BASE_URL: 'https://gateway.example.test'
-    })
-    expect((await resolver({ identity: IDENTITY })).env?.ANTHROPIC_AUTH_TOKEN).toBe('rotated-token')
+    await expect(resolver({ identity: IDENTITY })).rejects.toThrow(
+      'Blocked environment key: ANTHROPIC_AUTH_TOKEN'
+    )
   })
 
   it("lets the agent read the host's chat attachment store, outside the workspace", async () => {
@@ -439,7 +437,7 @@ describe('claude structured launch resolution', () => {
     expect(launch.env?.SHELL_ONLY_MARKER).toBe('from-shell')
   })
 
-  it('drops an inherited CLAUDE_CONFIG_DIR so the record stays the only Claude home the pin sees', async () => {
+  it('preserves the inherited CLAUDE_CONFIG_DIR without changing the recorded transcript home', async () => {
     const launch = await createClaudeStructuredLaunchResolver({
       resolveLaunchArgs: () => [],
       store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
@@ -453,13 +451,13 @@ describe('claude structured launch resolution', () => {
       })
     })({ identity: IDENTITY })
 
-    expect(launch.env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
+    expect(launch.env?.CLAUDE_CONFIG_DIR).toBe('/shell/claude')
     expect(launch.env?.SHELL_ONLY_MARKER).toBe('from-shell')
     expect(launch.claudeConfigDir).toBe('/home/work/.claude')
   })
 
-  it('keeps a configured overlay CLAUDE_CONFIG_DIR over the dropped inherited one', async () => {
-    const launch = await createClaudeStructuredLaunchResolver({
+  it('refuses a configured CLAUDE_CONFIG_DIR override', async () => {
+    const resolve = createClaudeStructuredLaunchResolver({
       resolveLaunchArgs: () => [],
       store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
       resolveWorkspacePath: async (id) => `/repos/${id}`,
@@ -467,9 +465,11 @@ describe('claude structured launch resolution', () => {
       resolveAuthPolicy: () => ({ account: 'system' }),
       resolveEnv: () => ({ CLAUDE_CONFIG_DIR: '/accounts/selected/home' }),
       resolveInheritedEnv: async () => ({ PATH: '/shell/bin', CLAUDE_CONFIG_DIR: '/shell/claude' })
-    })({ identity: IDENTITY })
+    })
 
-    expect(launch.env?.CLAUDE_CONFIG_DIR).toBe('/accounts/selected/home')
+    await expect(resolve({ identity: IDENTITY })).rejects.toThrow(
+      'Blocked environment key: CLAUDE_CONFIG_DIR'
+    )
   })
 
   it("keeps the shell's auth key under a managed account, beside its proxy address", async () => {
@@ -492,15 +492,16 @@ describe('claude structured launch resolution', () => {
     })
   })
 
-  it('lets an explicit Claude env overlay override ambient auth under system auth', async () => {
+  it('refuses an explicit Claude env overlay that changes ambient auth', async () => {
     const restore = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = 'sk-ant-SHELL-LEAK'
     try {
-      const launch = await resolverFor(record(), () => ({
+      const resolve = resolverFor(record(), () => ({
         ANTHROPIC_API_KEY: 'sk-ant-CONFIGURED'
-      }))({ identity: IDENTITY })
-
-      expect(launch.env?.ANTHROPIC_API_KEY).toBe('sk-ant-CONFIGURED')
+      }))
+      await expect(resolve({ identity: IDENTITY })).rejects.toThrow(
+        'Blocked environment key: ANTHROPIC_API_KEY'
+      )
     } finally {
       if (restore === undefined) {
         delete process.env.ANTHROPIC_API_KEY
@@ -518,19 +519,30 @@ describe('claude structured launch resolution', () => {
     makeExecutable(claudeCommand)
     makeExecutable(nodeCommand)
 
+    const configDir = join(root, '.claude')
+    mkdirSync(configDir)
+    writeFileSync(
+      join(configDir, 'settings.json'),
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080' } })
+    )
     const launch = await createClaudeStructuredLaunchResolver({
       resolveLaunchArgs: () => [],
-      store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
+      store: {
+        getRecord: () =>
+          record({ accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: configDir } }),
+        pinLaunchDirectory: vi.fn()
+      },
       resolveWorkspacePath: async (id) => `/repos/${id}`,
       resolveCommand: () => claudeCommand,
       resolveAuthPolicy: () => ({ account: 'system' }),
-      resolveEnv: () => ({
-        PATH: '/usr/bin',
-        CLAUDE_CONFIG_DIR: '/accounts/selected/home'
-      })
+      resolveInheritedEnv: async () => ({ PATH: '/usr/bin', HOME: root })
     })({ identity: IDENTITY })
 
-    expect((launch.env?.PATH ?? launch.env?.Path)?.split(delimiter)[0]).toBe(binDir)
+    // Right behind this app's CLI, so a runtime dir holding another `orca` cannot shadow it.
+    expect((launch.env?.PATH ?? launch.env?.Path)?.split(delimiter).slice(1)).toEqual([
+      binDir,
+      '/usr/bin'
+    ])
   })
 
   it('refuses other hosts, WSL, providers, and account-home variables', async () => {
@@ -569,7 +581,11 @@ describe('readable Claude thinking', () => {
       resolveLaunchArgs: () => launchArgs,
       resolveCommand: () => command,
       resolveAuthPolicy: () => ({ account: 'system' }),
-      resolveEnv: () => ({ PROJECT_SHIM: '1', ANTHROPIC_API_KEY: 'sk-user' }),
+      resolveEnv: () => ({ PROJECT_SHIM: '1' }),
+      resolveInheritedEnv: async () => ({
+        PATH: process.env.PATH ?? '',
+        ANTHROPIC_API_KEY: 'sk-user'
+      }),
       hasTranscript: async () => false,
       ...(cliFlags ? { cliFlags } : {})
     })({ identity: IDENTITY })

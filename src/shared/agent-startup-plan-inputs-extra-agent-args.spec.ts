@@ -12,8 +12,7 @@ const SETTINGS = {
 describe('resolveAgentStartupPlanInputs with extra agent args', () => {
   it.each([
     ['linux', false],
-    ['win32', false],
-    ['win32', true]
+    ['win32', false]
   ] as const)('merges over the host defaults on %s (remote %s)', (platform, isRemote) => {
     const inputs = resolveAgentStartupPlanInputs({
       agent: 'claude',
@@ -27,6 +26,20 @@ describe('resolveAgentStartupPlanInputs with extra agent args', () => {
     expect(plan?.launchCommand).toContain('opus')
     expect(plan?.launchCommand).not.toContain('sonnet')
     expect(plan?.launchCommand).toContain('--dangerously-skip-permissions')
+  })
+
+  it('refuses remote Claude launches even with valid extra arguments', () => {
+    const inputs = resolveAgentStartupPlanInputs({
+      agent: 'claude',
+      settings: SETTINGS,
+      platform: 'win32',
+      isRemote: true,
+      shell: undefined,
+      extraAgentArgs: '--model opus --add-dir "my docs"'
+    })
+
+    expect(inputs.agentArgs).toContain('opus')
+    expect(buildAgentStartupPlan({ ...inputs, prompt: 'go' })).toBeNull()
   })
 
   it('builds the same command the desktop path builds', () => {

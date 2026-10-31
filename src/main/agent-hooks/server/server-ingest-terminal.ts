@@ -11,10 +11,7 @@ import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/
 import { agentSubagentsEqual } from '../../../shared/agent-status-subagent-snapshot'
 import { isAgentStatusHeldOpenByChildWork } from '../../../shared/agent-lead-status-fold'
 import { AgentHookServerIngestNormalization } from './server-ingest-normalization'
-import {
-  HOOK_SILENCE_BEFORE_PROGRAM_STATUS_FALLBACK_MS,
-  programStatusYieldsToHookRow
-} from './program-status/hook-precedence'
+import { programStatusHookYieldEndsAt } from './program-status/hook-precedence'
 import type { ProgramStatusFacet } from '../../../shared/program-status/facet'
 
 const PROGRAM_STATUS_FACET_REPUBLISH_MS = 250
@@ -190,6 +187,12 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       event.yieldsToHookSince !== undefined &&
       previous?.observation?.origin === 'hook' &&
       previous.receivedAt >= event.yieldsToHookSince
+    const now = Date.now()
+    // Before the removal branch: a removal is a turn boundary in the program's report order.
+    const workingSince =
+      event.fromProgramStatus === true
+        ? this.programStatusFacets.noteState(paneKey, event.payload.state, now)
+        : undefined
     if (event.removesProgramStatusRow === true) {
       // Why: gone records end only the program's own row; they are no verdict on a hook agent.
       this.hookSilenceRechecks.cancel(paneKey)
@@ -203,13 +206,15 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       }
       return
     }
-    const hookOwnsAgent =
-      event.fromProgramStatus === true &&
-      programStatusYieldsToHookRow(previous, event.payload, Date.now())
+    const yieldEndsAt =
+      event.fromProgramStatus === true
+        ? programStatusHookYieldEndsAt(previous, event.payload, workingSince)
+        : undefined
+    const hookOwnsAgent = yieldEndsAt !== undefined && now < yieldEndsAt
     if (event.fromProgramStatus === true) {
-      if (hookOwnsAgent && previous && event.payload.state !== previous.payload.state) {
+      if (hookOwnsAgent && previous && Number.isFinite(yieldEndsAt)) {
         const yieldedTo = previous.receivedAt
-        const delayMs = yieldedTo + HOOK_SILENCE_BEFORE_PROGRAM_STATUS_FALLBACK_MS - Date.now()
+        const delayMs = yieldEndsAt - now
         this.hookSilenceRechecks.defer(paneKey, delayMs + 1, (currentPaneKey) => {
           const row = this.state.lastStatusByPaneKey.get(currentPaneKey)
           // Only against the hook observation it yielded to: a newer turn or a cleared pane drops it.
@@ -251,7 +256,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       previous.payload.turnCompletedAt === this.activeHookTurnCompletedAtByPaneKey.get(paneKey)
     if (
       !previous?.restoredUnconfirmed &&
-      !previous?.providerSessionOnly &&
+      !(event.origin === 'herdr' && previous?.providerSessionOnly) &&
       event.isReplay !== true &&
       (!event.providerSession ||
         agentProviderSessionsEqual(

@@ -14,6 +14,7 @@ import {
 import type { TuiAgent } from './tui-agent'
 import {
   assertClaudeArgumentsUnmodified,
+  CLAUDE_NATIVE_PANE_TEAMS_MESSAGE,
   CLAUDE_LOCAL_CONFIGURATION_MESSAGE
 } from './claude-local-policy'
 
@@ -36,6 +37,9 @@ export function resolveAgentLaunchCommand(args: {
   sessionOptionsOverrideAgentArgs?: boolean
   isRemote?: boolean
 }): ResolvedAgentLaunchCommand {
+  if (args.agent === 'claude-agent-teams') {
+    return { ok: false, error: CLAUDE_NATIVE_PANE_TEAMS_MESSAGE }
+  }
   const override = args.cmdOverrides[args.agent]
   if (args.agent === 'claude' && (override?.trim() || args.isRemote)) {
     return { ok: false, error: CLAUDE_LOCAL_CONFIGURATION_MESSAGE }

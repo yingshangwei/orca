@@ -100,9 +100,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('resolves the invocation cwd from ORCA_CLI_CWD when no cwd is passed', async () => {
-    // Why: the SSH relay bridge runs the CLI on the Orca host with the remote
-    // shell's cwd carried in ORCA_CLI_CWD (#7716); cwd-based selectors must
-    // resolve against it, not the host process cwd.
+    // ORCA_CLI_CWD carries the remote shell's cwd when the bridge executes the CLI on the host.
     process.env.ORCA_CLI_CWD = '/tmp/repo/feature/src'
     try {
       queueFixtures(
@@ -131,107 +129,26 @@ describe('orca cli worktree awareness', () => {
     }
   })
 
-  it.skipIf(process.platform === 'win32')(
-    'prepares and starts Claude Agent Teams in the current Orca terminal',
-    async () => {
-      process.env.ORCA_PANE_KEY = 'tab-1:11111111-1111-4111-8111-111111111111'
-      queueFixtures(
-        callMock,
-        okFixture('req_agent_teams_prepare', {
-          launch: {
-            env: {
-              CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-              TMUX: '/tmp/orca-claude-agent-teams/team-1,0,1',
-              TMUX_PANE: '%1',
-              PATH: '/tmp/orca-shim:/usr/bin'
-            }
-          }
-        })
-      )
+  it.each<[string, string[]]>([
+    ['a bare launch', []],
+    ['connection settings', ['--settings', '/tmp/alternate-settings.json']],
+    ['a resumed session', ['--resume', 'session-1', '--model', 'sonnet', 'review this']],
+    ['an in-process request through the native-pane wrapper', ['--teammate-mode', 'in-process']]
+  ])('refuses Claude Agent Teams %s without RPC or spawn', async (_case, args) => {
+    process.env.ORCA_PANE_KEY = 'tab-1:11111111-1111-4111-8111-111111111111'
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const previousExitCode = process.exitCode
+    try {
+      await main(['claude-teams', ...args], '/tmp/repo')
 
-      await main(['claude-teams'], '/tmp/repo')
-
-      expect(callMock).toHaveBeenCalledWith('agentTeams.prepareLaunch', {
-        paneKey: 'tab-1:11111111-1111-4111-8111-111111111111',
-        prepareAuth: true,
-        env: expect.objectContaining({
-          ORCA_PANE_KEY: 'tab-1:11111111-1111-4111-8111-111111111111'
-        })
-      })
-      expect(spawnMock).toHaveBeenCalledWith('claude', ['--teammate-mode', 'auto'], {
-        stdio: 'inherit',
-        env: expect.objectContaining({
-          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-          TMUX_PANE: '%1'
-        })
-      })
+      expect(process.exitCode).toBe(1)
+      expect(error.mock.calls.flat().join('\n')).toContain('native panes require a PATH overlay')
+      expect(callMock).not.toHaveBeenCalled()
+      expect(spawnMock).not.toHaveBeenCalled()
+    } finally {
+      process.exitCode = previousExitCode
     }
-  )
-
-  it.skipIf(process.platform === 'win32')(
-    'passes Claude Agent Teams arguments through to Claude Code',
-    async () => {
-      process.env.ORCA_PANE_KEY = 'tab-1:11111111-1111-4111-8111-111111111111'
-      queueFixtures(
-        callMock,
-        okFixture('req_agent_teams_prepare', {
-          launch: {
-            env: {
-              CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-              TMUX: '/tmp/orca-claude-agent-teams/team-1,0,1',
-              TMUX_PANE: '%1',
-              PATH: '/tmp/orca-shim:/usr/bin'
-            }
-          }
-        })
-      )
-
-      await main(
-        ['claude-teams', '--resume', 'session-1', '--model', 'sonnet', 'review this'],
-        '/tmp/repo'
-      )
-
-      expect(spawnMock).toHaveBeenCalledWith(
-        'claude',
-        ['--teammate-mode', 'auto', '--resume', 'session-1', '--model', 'sonnet', 'review this'],
-        {
-          stdio: 'inherit',
-          env: expect.objectContaining({
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            TMUX_PANE: '%1'
-          })
-        }
-      )
-    }
-  )
-
-  it.skipIf(process.platform === 'win32')(
-    'does not duplicate an explicit Claude teammate mode',
-    async () => {
-      process.env.ORCA_PANE_KEY = 'tab-1:11111111-1111-4111-8111-111111111111'
-      queueFixtures(
-        callMock,
-        okFixture('req_agent_teams_prepare', {
-          launch: {
-            env: {
-              CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-              TMUX: '/tmp/orca-claude-agent-teams/team-1,0,1',
-              TMUX_PANE: '%1',
-              PATH: '/tmp/orca-shim:/usr/bin'
-            }
-          }
-        })
-      )
-
-      await main(['claude-teams', '--teammate-mode', 'in-process'], '/tmp/repo')
-
-      expect(spawnMock).toHaveBeenCalledWith(
-        'claude',
-        ['--teammate-mode', 'in-process'],
-        expect.objectContaining({ stdio: 'inherit' })
-      )
-    }
-  )
+  })
 
   it('rejects remote `worktree current` without listing worktrees from client cwd', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})

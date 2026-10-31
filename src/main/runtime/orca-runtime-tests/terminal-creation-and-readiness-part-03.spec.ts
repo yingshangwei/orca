@@ -50,7 +50,11 @@ describe('OrcaRuntimeService', () => {
     }
   )
 
-  it('does not use the local Windows shell setting for remote Windows bare agent creates', async () => {
+  it.each([
+    { scenario: 'bare', env: undefined, disabled: false },
+    { scenario: 'caller environment', env: { KEEP: '1' }, disabled: false },
+    { scenario: 'disabled agent', env: undefined, disabled: true }
+  ])('rejects a Claude command on an SSH runtime with $scenario', async ({ env, disabled }) => {
     const remoteRepo = {
       id: TEST_REPO_ID,
       path: 'C:/remote/repo',
@@ -69,7 +73,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getSettings: () => ({
         ...store.getSettings(),
-        disabledTuiAgents: [],
+        disabledTuiAgents: disabled ? ['claude'] : [],
         terminalWindowsShell: 'cmd.exe',
         agentCmdOverrides: {},
         agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
@@ -85,17 +89,14 @@ describe('OrcaRuntimeService', () => {
       getForegroundProcess: async () => null
     })
 
-    const terminal = await runtime.createTerminal('path:C:/remote/repo', {
-      command: 'claude',
-      title: 'worker'
-    })
-
-    const spawnCall = spawn.mock.calls[0]?.[0] as { command?: string } | undefined
-    expect(spawnCall?.command).toBe("claude '--dangerously-skip-permissions'")
-    expect(terminal).toMatchObject({
-      executionHostId: 'ssh:ssh-1',
-      hostPlatform: 'linux'
-    })
+    await expect(
+      runtime.createTerminal('path:C:/remote/repo', {
+        command: 'claude',
+        ...(env ? { env } : {}),
+        title: 'worker'
+      })
+    ).rejects.toThrow('Could not build launch command for claude.')
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('matches canonical bare agent commands when a command override is configured', async () => {
@@ -450,7 +451,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })

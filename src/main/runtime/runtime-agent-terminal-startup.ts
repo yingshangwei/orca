@@ -36,6 +36,8 @@ import { resolveQoderTerminalCommand } from './qoder-terminal-command-resolution
 import { resolveStartupShell } from '../../shared/tui-agent-startup-shell'
 import { resolveWslSessionContext } from '../daemon/wsl-session-context'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
+import { refuseClaudeNativePaneTeams } from '../../shared/claude-local-policy'
+import { isClaudeLaunchCommand } from '../ipc/pty/host-env/fresh-spawn-routing'
 
 /** No launch command could be built for a requested `startupAgent`. */
 export class AgentLaunchUnbuildableError extends Error {}
@@ -58,6 +60,17 @@ export async function resolveAgentTerminalCreateOptions(
   opts: TerminalCreateOptions,
   host: AgentTerminalPlanHost
 ): Promise<TerminalCreateOptions> {
+  if (
+    workspace.connectionId &&
+    (opts.startupAgent === 'claude' ||
+      opts.launchAgent === 'claude' ||
+      isClaudeLaunchCommand(opts.command))
+  ) {
+    throw new AgentLaunchUnbuildableError('Could not build launch command for claude.')
+  }
+  if (opts.startupAgent === 'claude-agent-teams' || opts.launchAgent === 'claude-agent-teams') {
+    refuseClaudeNativePaneTeams()
+  }
   const store = host.store ?? undefined
   // Why: raw shell commands like `codex exec` must remain user-authored shell.
   // Only unmanaged, repo-backed, bare agent launches get Settings defaults.
@@ -220,10 +233,8 @@ async function buildRuntimeAgentTerminalStartupOptions(
   if (!startupPlan) {
     // Why: an explicit agent that yields no plan would otherwise spawn a bare
     // shell that never reaches agent readiness.
-    if (opts.startupAgent) {
-      throw new AgentLaunchUnbuildableError(
-        `Could not build launch command for ${opts.startupAgent}.`
-      )
+    if (opts.startupAgent || agent === 'claude-agent-teams' || (agent === 'claude' && isRemote)) {
+      throw new AgentLaunchUnbuildableError(`Could not build launch command for ${agent}.`)
     }
     return opts
   }

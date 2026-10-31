@@ -105,16 +105,17 @@ function worktreeOn(hostId: string, path: string): StoreWorktree {
 
 async function launchOnLinux(): Promise<void> {
   const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
-  launchAgentInNewTab({
+  const result = launchAgentInNewTab({
     requestId: 'request-1',
     agent: 'claude-agent-teams',
     worktreeId: 'wt-1',
     launchPlatform: 'linux'
   })
-}
-
-function queuedCommand(): string {
-  return queuedStartups()[0]?.command
+  expect(result).toBeNull()
+  expect(mockCreateTab).not.toHaveBeenCalled()
+  const { createWebRuntimeSessionTerminal } =
+    await import('@/runtime/web-runtime-terminal-creation')
+  expect(createWebRuntimeSessionTerminal).not.toHaveBeenCalled()
 }
 
 describe('launchAgentInNewTab execution host resolution', () => {
@@ -135,7 +136,7 @@ describe('launchAgentInNewTab execution host resolution', () => {
     store.ptyIdsByTabId = {}
   })
 
-  it('shapes the launch from the worktree host, not a rival repo row on another SSH host', async () => {
+  it('refuses native panes on the local worktree even when a rival repo row names SSH', async () => {
     // `store.repos.find` is host-blind, so a worktree that names its own host could be shaped by
     // an `ssh:openclaw` row it has nothing to do with (#11163).
     store.repos = [
@@ -146,10 +147,10 @@ describe('launchAgentInNewTab execution host resolution', () => {
 
     await launchOnLinux()
 
-    expect(queuedCommand()).toBe("orca-ide claude-teams '--dangerously-skip-permissions'")
+    expect(queuedStartups()).toEqual([])
   })
 
-  it('keeps a worktree on one SSH host remote while a rival row names another', async () => {
+  it('refuses native panes on an SSH worktree with a rival host row', async () => {
     store.repos = [
       { id: 'repo-1', connectionId: 'openclaw', path: '/srv/openclaw' },
       { id: 'repo-1', connectionId: null, executionHostId: 'ssh:m4air', path: '/srv/m4air' }
@@ -158,10 +159,10 @@ describe('launchAgentInNewTab execution host resolution', () => {
 
     await launchOnLinux()
 
-    expect(queuedCommand()).toBe("orca claude-teams '--dangerously-skip-permissions'")
+    expect(queuedStartups()).toEqual([])
   })
 
-  it('keeps a runtime host reaching a nested SSH target on the relay shim name', async () => {
+  it('refuses native panes on a runtime host with a nested SSH target', async () => {
     store.repos = [
       { id: 'repo-1', connectionId: 'nested', executionHostId: 'runtime:vm-1', path: '/srv/vm' }
     ]
@@ -169,10 +170,10 @@ describe('launchAgentInNewTab execution host resolution', () => {
 
     await launchOnLinux()
 
-    expect(queuedCommand()).toBe("orca claude-teams '--dangerously-skip-permissions'")
+    expect(queuedStartups()).toEqual([])
   })
 
-  it('keeps a runtime host with no nested SSH target on the local CLI name', async () => {
+  it('refuses native panes on a runtime host without a nested SSH target', async () => {
     store.repos = [
       { id: 'repo-1', connectionId: null, executionHostId: 'runtime:vm-1', path: '/srv/vm' }
     ]
@@ -180,6 +181,6 @@ describe('launchAgentInNewTab execution host resolution', () => {
 
     await launchOnLinux()
 
-    expect(queuedCommand()).toBe("orca-ide claude-teams '--dangerously-skip-permissions'")
+    expect(queuedStartups()).toEqual([])
   })
 })

@@ -331,8 +331,7 @@ describe('launch facts outside the tables', () => {
         let firstId: string | undefined
         let queuedSleep: Promise<void> | undefined
         let attempts = 0
-        vi.spyOn(teamsShim, 'ensureClaudeAgentTeamsShimDir').mockResolvedValue('/fixture/shim')
-        vi.spyOn(teamsShim, 'resolveClaudeAgentTeamsShimBin').mockReturnValue(null)
+        const allocateHandle = vi.spyOn(lanes.runtime, 'createPreAllocatedTerminalHandle')
         const prepareTeam = vi.spyOn(lanes.runtime, 'prepareClaudeAgentTeamsLeaderForHandle')
         const releaseTeam = vi.spyOn(lanes.runtime, 'releaseClaudeAgentTeamsLeaderForHandle')
         const registeredHandle = vi.spyOn(lanes.runtime, 'registerPreAllocatedHandleForPty')
@@ -398,7 +397,7 @@ describe('launch facts outside the tables', () => {
           cols: 80,
           rows: 24,
           cwd: POSIX_PATH,
-          command: 'claude --teammate-mode auto',
+          command: 'echo reentry',
           initiallyHidden: true
         })
         if (refused) {
@@ -415,16 +414,15 @@ describe('launch facts outside the tables', () => {
           ).toBe('fresh-reentry')
         }
         await queuedSleep
-        const handles = prepareTeam.mock.calls.map(([args]) => args.handle)
-        expect(new Set(handles).size).toBe(2)
-        expect(releaseTeam.mock.calls).toEqual(
-          (refused ? handles : handles.slice(0, 1)).map((handle) => [handle])
+        const handles = allocateHandle.mock.results.flatMap((result) =>
+          result.type === 'return' ? [result.value] : []
         )
+        expect(new Set(handles).size).toBe(2)
+        expect(prepareTeam).not.toHaveBeenCalled()
+        expect(releaseTeam).not.toHaveBeenCalled()
+        expect(lanes.runtime['claudeAgentTeams'].getActiveTeamCount()).toBe(0)
         expect(registeredHandle.mock.calls).toEqual(
           (refused ? [] : [1, 2]).map(() => ['fresh-reentry', handles[1]])
-        )
-        expect(releaseTeam.mock.invocationCallOrder[0]).toBeLessThan(
-          prepareTeam.mock.invocationCallOrder[1]!
         )
         expect(attempts).toBe(2)
         expect(releases).toHaveLength(refused ? 1 : 2)
@@ -447,7 +445,7 @@ describe('launch facts outside the tables', () => {
             ? [[true, undefined]]
             : [
                 [true, undefined],
-                [false, 'claude --teammate-mode auto']
+                [false, 'echo reentry']
               ]
         )
         expect(firstId).toBeDefined()
@@ -513,6 +511,43 @@ describe('launch facts outside the tables', () => {
           pane.leafId
         ]
       ).toBe(owner)
+    }
+  )
+
+  it.each(['ipc', 'runtime'] as const)(
+    '%s refuses native teams before creating a PTY or registering a team',
+    async (lane) => {
+      const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
+      const writeShim = vi
+        .spyOn(teamsShim, 'ensureClaudeAgentTeamsShimDir')
+        .mockResolvedValue('/fixture/unused-shim')
+      const createTeam = vi.spyOn(lanes.runtime['claudeAgentTeams'], 'createLaunchEnv')
+      onTestFinished(() => {
+        writeShim.mockRestore()
+        createTeam.mockRestore()
+      })
+      const request = {
+        worktreeId: launchWorkspaceId(POSIX_REPO),
+        tabId: HOST_TAB_ID,
+        leafId: HOST_LEAF_ID,
+        cols: 80,
+        rows: 24,
+        command: 'claude --teammate-mode auto',
+        launchAgent: 'claude' as const,
+        launchConfig: { agentCommand: 'claude', agentArgs: '--teammate-mode auto', agentEnv: {} }
+      }
+
+      await expect(
+        lane === 'ipc'
+          ? lanes.spawnWindow(request)
+          : lanes.runtime.createTerminal(`id:${request.worktreeId}`, request)
+      ).rejects.toThrow('native panes require a PATH overlay')
+
+      expect(lanes.provider).not.toHaveBeenCalled()
+      expect(lanes.reveal).not.toHaveBeenCalled()
+      expect(writeShim).not.toHaveBeenCalled()
+      expect(createTeam).not.toHaveBeenCalled()
+      expect(lanes.runtime['claudeAgentTeams'].getActiveTeamCount()).toBe(0)
     }
   )
 

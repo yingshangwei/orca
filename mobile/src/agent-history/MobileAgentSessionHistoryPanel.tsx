@@ -216,6 +216,7 @@ function MobileAgentSessionHistoryPanelContent({
         const launch = buildMobileAiVaultResumeLaunch({
           session: preparedSession,
           hostPlatform: platform,
+          isRemote: target.targetStatus === 'ssh',
           hostTerminalWindowsShell,
           settings
         })

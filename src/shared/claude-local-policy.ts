@@ -1,6 +1,12 @@
 export const CLAUDE_LOCAL_CONFIGURATION_MESSAGE =
   'Claude connection settings are owned by the local Claude installation and magpie. Orca may select a model and effort, but cannot override the connection.'
 
+export const CLAUDE_NATIVE_PANE_TEAMS_MESSAGE = `${CLAUDE_LOCAL_CONFIGURATION_MESSAGE} Claude Agent Teams native panes require a PATH overlay and are disabled.`
+
+export function refuseClaudeNativePaneTeams(): never {
+  throw new Error(CLAUDE_NATIVE_PANE_TEAMS_MESSAGE)
+}
+
 export const CLAUDE_DIRECT_REQUEST_MESSAGE =
   'Direct Claude requests are disabled. Use the local Claude CLI configured by magpie.'
 
@@ -41,6 +47,7 @@ export function isClaudeConnectionEnvironmentKey(name: string): boolean {
       'HOME',
       'USERPROFILE',
       'PATH',
+      'ORCA_AGENT_TEAMS_SHIM_DIR',
       'NODE_OPTIONS',
       'NODE_EXTRA_CA_CERTS',
       'NODE_TLS_REJECT_UNAUTHORIZED',

@@ -24,6 +24,7 @@ import {
   RESTORED_AUTHORITY_TOKEN,
   RESTORED_AUTHORITY_TOKEN_HASH,
   TEST_FOLDER_WORKSPACE_KEY,
+  TEST_REPO_ID,
   TEST_WINDOW_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
@@ -86,8 +87,15 @@ describe('OrcaRuntimeService', () => {
     const runtime = new OrcaRuntimeService(
       {
         ...store,
+        // The worker's repo lives on the SSH target whose partition holds its session.
+        getRepos: () => [{ ...store.getRepo(TEST_REPO_ID)!, connectionId: targetId }],
+        getRepo: (id: string) =>
+          id === TEST_REPO_ID
+            ? { ...store.getRepo(TEST_REPO_ID)!, connectionId: targetId }
+            : undefined,
         getWorkspaceSession: (hostId?: string | null) =>
-          hostId === `ssh:${targetId}` ? sshSession : getDefaultWorkspaceSession()
+          hostId === `ssh:${targetId}` ? sshSession : getDefaultWorkspaceSession(),
+        getWorkspaceSessionHostIds: () => ['local', `ssh:${targetId}`]
       },
       undefined,
       {
@@ -574,16 +582,9 @@ describe('OrcaRuntimeService', () => {
     expect(spawnCall?.command).toBe('cursor-agent "--force"')
   })
 
-  // Why: claude-agent-teams is the only agent whose launcher name varies by
-  // platform (launchCmdByPlatform), so it is what proves resolution is
-  // platform-aware rather than a fixed string.
-  it.each([
-    { platform: 'win32' as const, expected: 'orca.cmd claude-teams' },
-    { platform: 'linux' as const, expected: 'orca-ide claude-teams' },
-    { platform: 'darwin' as const, expected: 'orca claude-teams' }
-  ])(
-    'resolves a startupAgent through the $platform launcher name',
-    async ({ platform, expected }) => {
+  it.each(['win32', 'linux', 'darwin'] as const)(
+    'rejects an explicitly enabled native-pane startupAgent on %s without spawning',
+    async (platform) => {
       setPlatform(platform)
       const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
       const runtime = new OrcaRuntimeService({
@@ -603,12 +604,13 @@ describe('OrcaRuntimeService', () => {
         getForegroundProcess: async () => null
       })
 
-      await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-        startupAgent: 'claude-agent-teams'
-      })
-
-      const spawnCall = spawn.mock.calls[0]?.[0] as { command?: string } | undefined
-      expect(spawnCall?.command).toBe(expected)
+      await expect(
+        runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+          startupAgent: 'claude-agent-teams'
+        })
+      ).rejects.toThrow('native panes require a PATH overlay')
+      expect(spawn).not.toHaveBeenCalled()
+      expect(runtime['claudeAgentTeams'].getActiveTeamCount()).toBe(0)
     }
   )
 

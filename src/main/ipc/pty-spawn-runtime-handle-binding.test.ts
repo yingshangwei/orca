@@ -5,12 +5,6 @@ import { createHash } from 'node:crypto'
 import { delimiter } from 'node:path'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
-import { ClaudeAgentTeamsService } from '../runtime/claude-agent-teams-service'
-import {
-  clearPaneSpawnReservation,
-  makePaneSpawnReservationKey,
-  reservePaneSpawn
-} from './pty/pane/spawn-reservation'
 import { registerPtyHandlers } from './pty/register-handlers'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
@@ -60,7 +54,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 describe('registerPtyHandlers', () => {
   const { handlers, mainWindow, mainWindowIpcEvent } = setupPtyIpcSuite()
 
-  it('refreshes captured native Agent Teams env for renderer PTY spawns', async () => {
+  it('rejects a captured native Agent Teams PATH before renderer PTY spawn', async () => {
     const leafId = '11111111-1111-4111-8111-111111111111'
     const runtime = {
       setPtyController: vi.fn(),
@@ -84,67 +78,43 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    const result = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
-      cols: 80,
-      rows: 24,
-      cwd: '/repo',
-      command: 'claude --teammate-mode auto --resume claude-session',
-      tabId: 'tab-1',
-      leafId,
-      worktreeId: 'wt-1',
-      env: {
-        ORCA_PANE_KEY: `tab-1:${leafId}`,
-        ORCA_TAB_ID: 'tab-1',
-        ORCA_WORKTREE_ID: 'wt-1',
-        CLAUDE_PROFILE: 'captured',
-        PATH: `/tmp/stale-agent-teams${delimiter}/usr/bin`,
-        TMUX: '/tmp/orca-claude-agent-teams/team-stale,0,1',
-        ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale',
-        ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
-        TERM_PROGRAM: 'Orca'
-      },
-      launchConfig: {
-        agentCommand: 'claude --teammate-mode auto',
-        agentArgs: '',
-        agentEnv: {
+    await expect(
+      handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        cwd: '/repo',
+        command: 'claude --teammate-mode auto --resume claude-session',
+        tabId: 'tab-1',
+        leafId,
+        worktreeId: 'wt-1',
+        env: {
+          ORCA_PANE_KEY: `tab-1:${leafId}`,
+          ORCA_TAB_ID: 'tab-1',
+          ORCA_WORKTREE_ID: 'wt-1',
           CLAUDE_PROFILE: 'captured',
+          PATH: `/tmp/stale-agent-teams${delimiter}/usr/bin`,
+          TMUX: '/tmp/orca-claude-agent-teams/team-stale,0,1',
           ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale',
-          ORCA_AGENT_TEAMS_TOKEN: 'stale-token'
-        }
-      },
-      launchAgent: 'claude'
-    })) as { launchConfig?: { agentEnv: Record<string, string> } }
-
-    const spawnOptions = spawnMock.mock.calls.at(-1)?.[2] as { env: Record<string, string> }
-    expect(runtime.prepareClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledWith({
-      handle: 'term_agent_teams',
-      baseEnv: expect.objectContaining({
-        CLAUDE_PROFILE: 'captured',
-        ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale'
+          ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
+          TERM_PROGRAM: 'Orca'
+        },
+        launchConfig: {
+          agentCommand: 'claude --teammate-mode auto',
+          agentArgs: '',
+          agentEnv: {
+            CLAUDE_PROFILE: 'captured',
+            ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale',
+            ORCA_AGENT_TEAMS_TOKEN: 'stale-token'
+          }
+        },
+        launchAgent: 'claude'
       })
-    })
-    expect(spawnOptions.env).toMatchObject({
-      CLAUDE_PROFILE: 'captured',
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      ORCA_TERMINAL_HANDLE: 'term_agent_teams',
-      ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-      ORCA_AGENT_TEAMS_TOKEN: 'fresh-token',
-      TMUX: '/tmp/orca-claude-agent-teams/team-fresh,0,1',
-      TMUX_PANE: '%1'
-    })
-    expect(spawnOptions.env.PATH.split(delimiter)[0]).toBe('/tmp/fresh-agent-teams')
-    expect(spawnOptions.env.TERM_PROGRAM).toBeUndefined()
-    expect(result.launchConfig?.agentEnv).toMatchObject({
-      CLAUDE_PROFILE: 'captured',
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-      ORCA_AGENT_TEAMS_TOKEN: 'fresh-token',
-      TMUX: '/tmp/orca-claude-agent-teams/team-fresh,0,1'
-    })
-    expect(runtime.registerPreAllocatedHandleForPty).toHaveBeenCalledWith(
-      expect.any(String),
-      'term_agent_teams'
-    )
+    ).rejects.toThrow('Blocked environment key: PATH')
+
+    expect(runtime.prepareClaudeAgentTeamsLeaderForHandle).not.toHaveBeenCalled()
+    expect(runtime.registerPreAllocatedHandleForPty).not.toHaveBeenCalled()
+    expect(runtime.registerPty).not.toHaveBeenCalled()
+    expect(spawnMock).not.toHaveBeenCalled()
   })
   it('threads the validated pane identity into registerPty for a renderer PTY spawn (#7587)', async () => {
     const leafId = '88888888-8888-4888-8888-888888888888'
@@ -318,18 +288,14 @@ describe('registerPtyHandlers', () => {
       false
     )
   })
-  it('refreshes native Agent Teams env when captured teammate mode lives in launch args', async () => {
+  it('rejects captured native Agent Teams launch arguments before renderer PTY spawn', async () => {
     const leafId = '11111111-1111-4111-8111-111111111111'
     const runtime = {
       setPtyController: vi.fn(),
       createPreAllocatedTerminalHandle: vi.fn(() => 'term_agent_teams'),
-      prepareClaudeAgentTeamsLeaderForHandle: vi.fn(async () => ({
-        env: {
-          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-          ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-          ORCA_AGENT_TEAMS_TOKEN: 'fresh-token'
-        }
-      })),
+      prepareClaudeAgentTeamsLeaderForHandle: vi.fn(
+        OrcaRuntimeService.prototype.prepareClaudeAgentTeamsLeaderForHandle
+      ),
       registerPreAllocatedHandleForPty: vi.fn(),
       registerPty: vi.fn(),
       getDriver: vi.fn(() => ({ kind: 'host' })),
@@ -339,31 +305,36 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    await handlers.get('pty:spawn')!(mainWindowIpcEvent, {
-      cols: 80,
-      rows: 24,
-      cwd: '/repo',
-      command: 'claude --resume claude-session',
-      tabId: 'tab-1',
-      leafId,
-      worktreeId: 'wt-1',
-      env: {
-        ORCA_PANE_KEY: `tab-1:${leafId}`,
-        ORCA_TAB_ID: 'tab-1',
-        ORCA_WORKTREE_ID: 'wt-1'
-      },
-      launchConfig: {
-        agentCommand: 'claude',
-        agentArgs: '--teammate-mode auto',
-        agentEnv: {}
-      },
-      launchAgent: 'claude'
-    })
+    await expect(
+      handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        cwd: '/repo',
+        command: 'claude --resume claude-session',
+        tabId: 'tab-1',
+        leafId,
+        worktreeId: 'wt-1',
+        env: {
+          ORCA_PANE_KEY: `tab-1:${leafId}`,
+          ORCA_TAB_ID: 'tab-1',
+          ORCA_WORKTREE_ID: 'wt-1'
+        },
+        launchConfig: {
+          agentCommand: 'claude',
+          agentArgs: '--teammate-mode auto',
+          agentEnv: {}
+        },
+        launchAgent: 'claude'
+      })
+    ).rejects.toThrow('native panes require a PATH overlay')
 
     expect(runtime.prepareClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledWith({
       handle: 'term_agent_teams',
       baseEnv: expect.any(Object)
     })
+    expect(runtime.registerPreAllocatedHandleForPty).not.toHaveBeenCalled()
+    expect(runtime.registerPty).not.toHaveBeenCalled()
+    expect(spawnMock).not.toHaveBeenCalled()
   })
   it('reuses the runtime background handle in local PTY spawn env', async () => {
     type RuntimeSpawnController = {
@@ -408,124 +379,63 @@ describe('registerPtyHandlers', () => {
       'term_expected'
     )
     expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:spawned', {
-      id: spawned.id
+      id: spawned.id,
+      incarnationId: expect.any(String),
+      hostId: 'local'
     })
   })
-  it('releases the Agent Teams leader of a spawn that loses the pane mid-preflight', async () => {
-    const leafId = '22222222-2222-4222-8222-222222222222'
-    const teams = new ClaudeAgentTeamsService()
-    let handleSeq = 0
-    const runtime = {
-      setPtyController: vi.fn(),
-      createPreAllocatedTerminalHandle: vi.fn(() => `term_agent_teams_${++handleSeq}`),
-      prepareClaudeAgentTeamsLeaderForHandle: vi.fn(
-        async (args: { handle: string; baseEnv?: Record<string, string> }) =>
-          teams.createLaunchEnv({
-            leaderHandle: args.handle,
-            baseEnv: args.baseEnv ?? {},
-            shimDir: '/tmp/orca-agent-teams-shim',
-            shimBin: null
-          })
-      ),
-      releaseClaudeAgentTeamsLeaderForHandle: vi.fn((handle: string) => {
-        teams.removeTeamForLeaderHandle(handle)
-      }),
-      registerPreAllocatedHandleForPty: vi.fn(),
-      registerPty: vi.fn(),
-      getDriver: vi.fn(() => ({ kind: 'host' })),
-      onPtySpawned: vi.fn(),
-      onPtyExit: vi.fn(),
-      onPtyData: vi.fn()
+  it.each([
+    { name: 'a pane without a worktree id', worktreeId: undefined, providerFails: false },
+    { name: 'a provider that would fail', worktreeId: 'wt-1', providerFails: true }
+  ])(
+    'refuses native teams for $name before preparing a leader or spawning',
+    async ({ worktreeId, providerFails }) => {
+      const leafId = '33333333-3333-4333-8333-333333333333'
+      const runtime = {
+        setPtyController: vi.fn(),
+        createPreAllocatedTerminalHandle: vi.fn(() => 'term_agent_teams_refused'),
+        prepareClaudeAgentTeamsLeaderForHandle: vi.fn(
+          OrcaRuntimeService.prototype.prepareClaudeAgentTeamsLeaderForHandle
+        ),
+        releaseClaudeAgentTeamsLeaderForHandle: vi.fn(),
+        registerPreAllocatedHandleForPty: vi.fn(),
+        registerPty: vi.fn(),
+        getDriver: vi.fn(() => ({ kind: 'host' })),
+        onPtySpawned: vi.fn(),
+        onPtyExit: vi.fn(),
+        onPtyData: vi.fn()
+      }
+      if (providerFails) {
+        spawnMock.mockImplementation(() => {
+          throw new Error('provider spawn failed')
+        })
+      }
+      registerPtyHandlers(mainWindow as never, runtime as never)
+
+      await expect(
+        handlers.get('pty:spawn')!(mainWindowIpcEvent, {
+          cols: 80,
+          rows: 24,
+          cwd: '/repo',
+          command: 'claude --teammate-mode auto',
+          tabId: 'tab-1',
+          leafId,
+          worktreeId,
+          env: { ORCA_PANE_KEY: `tab-1:${leafId}`, ORCA_TAB_ID: 'tab-1' },
+          launchConfig: {
+            agentCommand: 'claude --teammate-mode auto',
+            agentArgs: '',
+            agentEnv: {}
+          },
+          launchAgent: 'claude'
+        })
+      ).rejects.toThrow('native panes require a PATH overlay')
+
+      expect(runtime.prepareClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledOnce()
+      expect(runtime.releaseClaudeAgentTeamsLeaderForHandle).not.toHaveBeenCalled()
+      expect(runtime.registerPreAllocatedHandleForPty).not.toHaveBeenCalled()
+      expect(runtime.registerPty).not.toHaveBeenCalled()
+      expect(spawnMock).not.toHaveBeenCalled()
     }
-
-    registerPtyHandlers(mainWindow as never, runtime as never)
-    // Why: no worktreeId, so the reservation key only resolves after env assembly — the
-    // window where a concurrent winner's reservation appears mid-preflight.
-    const spawnArgs = {
-      cols: 80,
-      rows: 24,
-      cwd: '/repo',
-      command: 'claude --teammate-mode auto',
-      tabId: 'tab-1',
-      leafId,
-      env: { ORCA_PANE_KEY: `tab-1:${leafId}`, ORCA_TAB_ID: 'tab-1' },
-      launchConfig: { agentCommand: 'claude --teammate-mode auto', agentArgs: '', agentEnv: {} },
-      launchAgent: 'claude'
-    }
-    const winner = (await handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs)) as {
-      id: string
-    }
-    expect(teams.getActiveTeamCount()).toBe(1)
-
-    const reservationKey = makePaneSpawnReservationKey(
-      undefined,
-      undefined,
-      makePaneKey('tab-1', leafId)
-    )!
-    const winnerReservation = reservePaneSpawn(reservationKey)
-    winnerReservation.resolve({ id: winner.id })
-    try {
-      const loser = await handlers.get('pty:spawn')!(mainWindowIpcEvent, spawnArgs)
-      expect(loser).toMatchObject({ id: winner.id, isReattach: true })
-    } finally {
-      clearPaneSpawnReservation(reservationKey, winnerReservation)
-    }
-
-    const loserHandle = runtime.prepareClaudeAgentTeamsLeaderForHandle.mock.calls[1]?.[0].handle
-    expect(runtime.prepareClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledTimes(2)
-    expect(runtime.releaseClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledWith(loserHandle)
-    // The losing request must not grow the team count it can never bind to a PTY.
-    expect(teams.getActiveTeamCount()).toBe(1)
-  })
-  it('releases the Agent Teams leader when its provider spawn fails', async () => {
-    const leafId = '33333333-3333-4333-8333-333333333333'
-    const teams = new ClaudeAgentTeamsService()
-    const runtime = {
-      setPtyController: vi.fn(),
-      createPreAllocatedTerminalHandle: vi.fn(() => 'term_agent_teams_failure'),
-      prepareClaudeAgentTeamsLeaderForHandle: vi.fn(
-        async (args: { handle: string; baseEnv?: Record<string, string> }) =>
-          teams.createLaunchEnv({
-            leaderHandle: args.handle,
-            baseEnv: args.baseEnv ?? {},
-            shimDir: '/tmp/orca-agent-teams-shim',
-            shimBin: null
-          })
-      ),
-      releaseClaudeAgentTeamsLeaderForHandle: vi.fn((handle: string) => {
-        teams.removeTeamForLeaderHandle(handle)
-      }),
-      registerPreAllocatedHandleForPty: vi.fn(),
-      registerPty: vi.fn(),
-      getDriver: vi.fn(() => ({ kind: 'host' })),
-      onPtySpawned: vi.fn(),
-      onPtyExit: vi.fn(),
-      onPtyData: vi.fn()
-    }
-    spawnMock.mockImplementation(() => {
-      throw new Error('provider spawn failed')
-    })
-
-    registerPtyHandlers(mainWindow as never, runtime as never)
-
-    await expect(
-      handlers.get('pty:spawn')!(mainWindowIpcEvent, {
-        cols: 80,
-        rows: 24,
-        cwd: '/repo',
-        command: 'claude --teammate-mode auto',
-        tabId: 'tab-1',
-        leafId,
-        worktreeId: 'wt-1',
-        env: { ORCA_PANE_KEY: `tab-1:${leafId}`, ORCA_TAB_ID: 'tab-1' },
-        launchConfig: { agentCommand: 'claude --teammate-mode auto', agentArgs: '', agentEnv: {} },
-        launchAgent: 'claude'
-      })
-    ).rejects.toThrow()
-
-    expect(runtime.releaseClaudeAgentTeamsLeaderForHandle).toHaveBeenCalledWith(
-      'term_agent_teams_failure'
-    )
-    expect(teams.getActiveTeamCount()).toBe(0)
-  })
+  )
 })

@@ -1,5 +1,5 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +12,7 @@ import {
 } from '../../shared/protocol-version'
 import { fakeClaude } from './claude-structured-fake-connection-test-fixture'
 import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { assertLocalClaudeLaunch } from '../claude/claude-local-launch-policy'
 import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -133,7 +134,7 @@ let root: string
 let dispatcher: RpcDispatcher
 let cleanups: Map<string, () => void>
 let transcriptPath: string
-/** The Claude home the durable record pins; the managed dir under `root` unless a test says otherwise. */
+/** The isolated local Claude home the durable record pins. */
 let recordAccountHomePath: string
 /** Managed-account state and configured overlay this host installs, per test. */
 let claudeAuthPolicy: ClaudeStructuredAuthPolicy
@@ -209,16 +210,24 @@ function textOf(item: AgentJournalRenderItem): string {
 beforeEach(async () => {
   operations = 0
   claudeAuthPolicy = { account: 'system' }
-  shellEnv = { PATH: '/shell/bin:/usr/bin' }
-  shellEnvironmentPolicy = { inheritAll: true, names: [] }
-  claudeLaunchEnv = {
-    ANTHROPIC_AUTH_TOKEN: 'configured-token',
-    ANTHROPIC_BASE_URL: 'https://gateway.example.test'
-  }
   root = await mkdtemp(join(tmpdir(), 'orca-claude-structured-integration-'))
-  recordAccountHomePath = join(root, 'claude-home')
-  transcriptPath = join(root, 'claude-home', 'projects', 'workspace', `${PROVIDER_SESSION}.jsonl`)
-  await mkdir(join(root, 'claude-home', 'projects', 'workspace'), { recursive: true })
+  recordAccountHomePath = join(root, '.claude')
+  shellEnv = {
+    PATH: '/shell/bin:/usr/bin',
+    HOME: root,
+    ANTHROPIC_AUTH_TOKEN: 'inherited-token',
+    ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080'
+  }
+  vi.stubEnv('HOME', root)
+  vi.stubEnv('CLAUDE_CONFIG_DIR', undefined)
+  shellEnvironmentPolicy = { inheritAll: true, names: [] }
+  claudeLaunchEnv = {}
+  transcriptPath = join(recordAccountHomePath, 'projects', 'workspace', `${PROVIDER_SESSION}.jsonl`)
+  await mkdir(join(recordAccountHomePath, 'projects', 'workspace'), { recursive: true })
+  await writeFile(
+    join(recordAccountHomePath, 'settings.json'),
+    JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080' } })
+  )
   resolveSessionFilePath.mockResolvedValue(transcriptPath)
   claude = fakeClaude(PROVIDER_SESSION)
   cleanups = new Map()
@@ -320,7 +329,7 @@ describe('a structured Claude session over agentSession.*', () => {
     ])
   })
 
-  it("keeps the shell's Anthropic auth with its proxy address once a managed account is pinned", async () => {
+  it('refuses a managed account connection overlay before starting Claude', async () => {
     claudeAuthPolicy = { account: 'managed' }
     claudeLaunchEnv = { ANTHROPIC_BASE_URL: 'https://gateway.example.test' }
     shellEnv = {
@@ -330,14 +339,9 @@ describe('a structured Claude session over agentSession.*', () => {
       CLAUDE_CONFIG_DIR: '/shell/claude'
     }
 
-    await ok<{ fence: number }>('agentSession.create', createIntentParams())
-
-    const env = claude.live().launch.env
-    expect(env).toMatchObject({
-      ANTHROPIC_API_KEY: 'sk-ant-SHELL-LEAK',
-      ANTHROPIC_BASE_URL: 'https://gateway.example.test',
-      CLAUDE_CONFIG_DIR: join(root, 'claude-home')
-    })
+    const response = await call('agentSession.create', createIntentParams())
+    expect(response).toMatchObject({ ok: false, error: { code: 'runtime_error' } })
+    expect(claude.connections).toHaveLength(0)
   })
 
   // The runtime builds each agent's adapter from a registration; this one must reach Claude's.
@@ -364,17 +368,27 @@ describe('a structured Claude session over agentSession.*', () => {
     })
   })
 
-  it('ignores a shell-exported CLAUDE_CONFIG_DIR: the pinned account chooses the Claude home', async () => {
-    // System auth on the CLI's own default home: an explicit pin to it would move the CLI off its
-    // default Keychain item, so the child must carry no CLAUDE_CONFIG_DIR at all.
+  it('forwards a conflicting record home for connection validation without overwriting the inherited home', async () => {
     recordAccountHomePath = join(homedir(), '.claude')
     shellEnv = { ...shellEnv, CLAUDE_CONFIG_DIR: '/shell/claude', SHELL_ONLY_MARKER: 'from-shell' }
 
     await ok<{ fence: number }>('agentSession.create', createIntentParams())
 
-    const env = claude.live().launch.env
-    expect(env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
-    expect(env?.SHELL_ONLY_MARKER).toBe('from-shell')
+    const launch = claude.live().launch
+    expect(launch.env?.CLAUDE_CONFIG_DIR).toBe('/shell/claude')
+    expect(launch.claudeConfigDir).toBe(recordAccountHomePath)
+    await expect(assertLocalClaudeLaunch(launch)).rejects.toThrow(
+      'Alternate Claude configuration directory'
+    )
+  })
+
+  it('keeps a matching inherited Claude home unchanged when starting a session', async () => {
+    shellEnv = { ...shellEnv, CLAUDE_CONFIG_DIR: recordAccountHomePath }
+
+    await ok<{ fence: number }>('agentSession.create', createIntentParams())
+
+    expect(claude.live().launch.env?.CLAUDE_CONFIG_DIR).toBe(recordAccountHomePath)
+    await expect(assertLocalClaudeLaunch(claude.live().launch)).resolves.toBeUndefined()
   })
 
   it('leaves unlisted shell exports out when inheritance is off', async () => {
@@ -573,13 +587,12 @@ describe('a structured Claude session over agentSession.*', () => {
     expect(claude.live().launch.options).toMatchObject({ sessionId: PROVIDER_SESSION })
     expect(claude.live().launch.options.resume).toBeUndefined()
     expect(claude.live().launch.env).toMatchObject({
-      ANTHROPIC_AUTH_TOKEN: 'configured-token',
-      ANTHROPIC_BASE_URL: 'https://gateway.example.test',
-      CLAUDE_CONFIG_DIR: join(root, 'claude-home'),
+      ANTHROPIC_AUTH_TOKEN: 'inherited-token',
+      ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080',
       [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: expect.any(String)
     })
-    // System auth: the user's own shell key is their sign-in, exactly as on the
-    // terminal path, and the configured overlay still wins over it.
+    expect(claude.live().launch.env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
+    // The inherited shell auth stays unchanged on the local Claude path.
     expect(claude.live().launch.env).toMatchObject({ ANTHROPIC_API_KEY: 'sk-ant-SHELL-LEAK' })
     expect(claude.live().launch.env?.PATH ?? claude.live().launch.env?.Path).toBeTruthy()
     const history = await call('agentSession.history', {
