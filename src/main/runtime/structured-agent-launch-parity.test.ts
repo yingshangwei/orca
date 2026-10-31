@@ -352,7 +352,7 @@ function accountHomeFor(agent: Agent): AgentSessionAccountHome {
   const directory = (name: string) => join(root, 'accounts', name)
   switch (agent) {
     case 'claude':
-      return { variable: 'CLAUDE_CONFIG_DIR', path: directory('claude') }
+      return { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'home', '.claude') }
     case 'codex':
       return { variable: 'CODEX_HOME', path: directory('codex') }
     case 'grok':
@@ -579,6 +579,11 @@ beforeAll(async () => {
   for (const directory of ['worktree', 'floating', 'floating-pinned', 'home', 'state']) {
     await mkdir(join(root, directory), { recursive: true })
   }
+  await mkdir(join(root, 'home', '.claude'), { recursive: true })
+  await writeFile(
+    join(root, 'home', '.claude', 'settings.json'),
+    JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080' } })
+  )
   process.env = inheritedEnvironment()
   installAppEnvironment()
   settings = defaultSettings()
@@ -638,6 +643,10 @@ describe.skipIf(process.platform === 'win32')('native-chat launch parity', () =>
       if (!registration) {
         throw new Error(`no registration for ${launch.agent}`)
       }
+      if (launch.agent === 'claude') {
+        process.env.CLAUDE_CONFIG_DIR = join(root, 'home', '.claude')
+        delete process.env.NODE_OPTIONS
+      }
       const sessionId = sessionIdFor(index)
       const { record, handle } = await recordFor(launch, sessionId)
       records.set(sessionId, record)
@@ -679,6 +688,15 @@ describe.skipIf(process.platform === 'win32')('native-chat launch parity', () =>
           () => null,
           (error: unknown) => error
         )
+        if (launch.agent === 'claude' && launch.configured) {
+          expect(outcome).toBeInstanceOf(Error)
+          expect(String(outcome)).toContain(
+            'Claude connection settings are owned by the local Claude'
+          )
+          expect(capture.spawns).toHaveLength(0)
+          expect(capture.launches).toHaveLength(0)
+          return
+        }
         expect(capture.spawns, String(outcome)).toHaveLength(1)
         expect(capture.launches).toHaveLength(1)
         const [spawn] = capture.spawns

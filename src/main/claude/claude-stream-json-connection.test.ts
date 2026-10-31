@@ -268,6 +268,30 @@ describe('Claude stream-json connection', () => {
     ).rejects.toThrow('local ANTHROPIC_BASE_URL')
   })
 
+  it('refuses a recorded home that differs from the launch environment before spawning', async () => {
+    const scenario = scriptScenario([HOLD_OPEN])
+    await expect(
+      open({ ...launchFor(scenario), claudeConfigDir: join(scenario.cwd, 'another-home') })
+    ).rejects.toThrow('Alternate Claude configuration directory')
+    expect(spawned).toHaveLength(0)
+  })
+
+  it('checks the recorded home against config inherited only from the parent process', async () => {
+    const scenario = scriptScenario([HOLD_OPEN])
+    vi.stubEnv('CLAUDE_CONFIG_DIR', join(scenario.cwd, 'parent-home'))
+    await expect(
+      open({ ...launchFor(scenario), claudeConfigDir: join(scenario.cwd, '.claude') })
+    ).rejects.toThrow('Alternate Claude configuration directory')
+    expect(spawned).toHaveLength(0)
+  })
+
+  it('starts a matching recorded home without injecting a configuration override', async () => {
+    const scenario = scriptScenario([HOLD_OPEN])
+    await open({ ...launchFor(scenario), claudeConfigDir: join(scenario.cwd, '.claude') })
+    await until(() => readReportSafely(scenario), 'the scripted CLI report')
+    expect(childEnv().CLAUDE_CONFIG_DIR).toBeUndefined()
+  })
+
   it('passes model and effort to the local CLI while keeping its connection environment', async () => {
     const scenario = scriptScenario([HOLD_OPEN])
     const launch = launchFor(scenario, {

@@ -55,6 +55,7 @@ export type ClaudeStreamJsonLaunch = {
   options: ClaudeStructuredSdkOptions
   cwd: string
   env?: Record<string, string>
+  claudeConfigDir?: string
   /** Removed after the child's env is built over Orca's own, as every provider child's are. */
   envToDelete?: readonly string[]
 }

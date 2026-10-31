@@ -33,7 +33,7 @@ function prewarmWith(records: AgentSessionRecord[], resolveCommand = () => '/bin
       getRecord: (id) => records.find((r) => r.sessionId === id) ?? null
     },
     resolveCommand,
-    resolveEnv: () => ({ PATH: '/shims' }),
+    resolveEnv: () => ({}),
     resolveInheritedEnv: async () => ({ PATH: '/usr/bin' })
   })
   return { prewarm, done }

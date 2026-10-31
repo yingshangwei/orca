@@ -33,5 +33,9 @@ export async function assertLocalClaudeLaunch(launch: ClaudeStreamJsonLaunch): P
   if (launch.envToDelete?.some(isClaudeConnectionEnvironmentKey)) {
     refuseClaudeConfigurationMutation()
   }
-  await assertLocalClaudeConfiguration({ env: launch.env ?? process.env, cwd: launch.cwd })
+  await assertLocalClaudeConfiguration({
+    env: launch.env ?? process.env,
+    cwd: launch.cwd,
+    configDir: launch.claudeConfigDir
+  })
 }

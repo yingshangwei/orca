@@ -14,7 +14,6 @@ import {
   readClaudeFrameString,
   readClaudeInit
 } from './claude-structured-init-proof'
-import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
 import { claudeProcessIdentity } from './claude-structured-owner-identity'
 import { ClaudePromptRegistry } from './claude-structured-prompt-replies'
 import { adoptClaudeStructuredSpawnOptions } from './claude-structured-spawn-options'
@@ -194,16 +193,8 @@ export async function acquireClaudeSession({
           pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
           options: launch.options,
           cwd: launch.cwd,
-          env: {
-            ...launch.env,
-            // Compared against what the child would otherwise inherit, so the record's
-            // account home still wins over a diverging overlay without a needless pin.
-            // (`process` is shadowed by a local later in this function, so it is not named here.)
-            ...claudeConfigDirEnvPatch(
-              launch.claudeConfigDir,
-              launch.env ? { env: launch.env } : {}
-            )
-          },
+          env: launch.env,
+          claudeConfigDir: launch.claudeConfigDir,
           ...(launch.envToDelete ? { envToDelete: launch.envToDelete } : {})
         },
         {

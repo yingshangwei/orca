@@ -132,9 +132,13 @@ beforeEach(async () => {
   clock = HOST_TEST_NOW
   directory = await mkdtemp(join(tmpdir(), 'orca-at-rest-commands-'))
   workspace = join(directory, 'workspace')
-  account = join(directory, 'claude-account')
+  account = join(directory, '.claude')
   await writeSkill(join(workspace, '.claude', 'skills'), 'review-pr')
   await writeCommand(join(account, 'commands'), 'deploy.md')
+  await writeFile(
+    join(account, 'settings.json'),
+    JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:18080' } })
+  )
   await openHost()
   const attached = await host.attach(
     caller,
@@ -174,7 +178,7 @@ describe("a Claude chat whose Claude isn't running lists Claude's own `/` comman
     let answer: string | Promise<string> = failed
     const probe = createClaudeCommandCatalogProbe({
       resolveCommand: () => 'claude',
-      resolveInheritedEnv: async () => ({ PATH: '/bin' }),
+      resolveInheritedEnv: async () => ({ PATH: '/bin', HOME: directory }),
       resolveAuthPolicy: () => ({ account: 'system' }),
       runListing: async (...call) => {
         asked.push(call)
@@ -219,7 +223,8 @@ describe("a Claude chat whose Claude isn't running lists Claude's own `/` comman
         description: 'Set a goal'
       })
       expect(asked[0]?.[0]).toMatchObject({ cwd: workspace })
-      expect(asked[0]?.[1].inheritedEnv?.CLAUDE_CONFIG_DIR).toBe(account)
+      expect(asked[0]?.[1].inheritedEnv?.HOME).toBe(directory)
+      expect(asked[0]?.[1].inheritedEnv).not.toHaveProperty('CLAUDE_CONFIG_DIR')
       failure.resolve(failed)
       await vi.waitFor(() => expect(warned).toHaveBeenCalledTimes(2))
       await new Promise((resolve) => setTimeout(resolve, 20))
@@ -254,7 +259,7 @@ describe("a Claude chat whose Claude isn't running lists Claude's own `/` comman
     const asked: ListingCall[] = []
     const probe = createClaudeCommandCatalogProbe({
       resolveCommand: () => 'claude',
-      resolveInheritedEnv: async () => ({ PATH: '/bin' }),
+      resolveInheritedEnv: async () => ({ PATH: '/bin', HOME: directory }),
       resolveAuthPolicy: () => ({ account: 'system' }),
       runListing: async (...call) => {
         asked.push(call)

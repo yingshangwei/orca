@@ -7,3 +7,5 @@ Orca native-pane Agent Teams are disabled because their tmux shim prepends a dir
 Normal local Claude launches and the explicit in-process teammate mode remain available. The `orca claude-teams` wrapper is disabled even with an in-process argument; use the normal Claude launch with in-process mode instead.
 
 Upstream account routing, connection overrides, automatic Claude settings/hooks installation and native-pane team tests describe behavior this fork deliberately restricts. Keep their exact differences visible in validation results; do not silently skip whole suites.
+
+Structured sessions validate the resolved Claude home against the final child environment before spawning. Orca does not inject `CLAUDE_CONFIG_DIR` to make a mismatched home work. When native-chat shell inheritance is disabled and the local CLI depends on that variable, include it in the allowed inherited variables.
