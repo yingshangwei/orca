@@ -61,7 +61,13 @@ type FolderWorkspaceUpdates = Partial<
   WorkspaceAttachmentMutation
 
 export class RuntimeProjectGroupController {
+  private beforeFolderWorkspaceDelete: ((workspace: FolderWorkspace) => Promise<void>) | null = null
+
   constructor(private readonly deps: RuntimeProjectGroupDependencies) {}
+
+  setBeforeFolderWorkspaceDelete(handler: (workspace: FolderWorkspace) => Promise<void>): void {
+    this.beforeFolderWorkspaceDelete = handler
+  }
 
   listGroups(): ProjectGroup[] {
     return this.deps.getStore()?.getProjectGroups?.() ?? []
@@ -104,7 +110,9 @@ export class RuntimeProjectGroupController {
 
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color'>>
+    updates: Partial<
+      Pick<ProjectGroup, 'name' | 'parentPath' | 'isCollapsed' | 'tabOrder' | 'color'>
+    >
   ): Promise<ProjectGroup | null> {
     const store = this.deps.getStore()
     if (!store?.updateProjectGroup) {
@@ -257,6 +265,7 @@ export class RuntimeProjectGroupController {
       assertWslMoveProjectWritable(store, { folderWorkspaceId })
     }
     if (workspace) {
+      await this.beforeFolderWorkspaceDelete?.(workspace)
       const worktreeId = folderWorkspaceKey(folderWorkspaceId)
       // Why: a mixed-host group has no single PTY target; forgetting the
       // workspace must still succeed, so skip the sweep instead of failing.

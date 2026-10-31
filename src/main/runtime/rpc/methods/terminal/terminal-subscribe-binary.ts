@@ -93,7 +93,7 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
         meta.seq
       )
     }
-    for (const chunk of iterateTerminalOutputFrameChunks(data, meta)) {
+    for (const chunk of iterateTerminalOutputFrameChunks(data, meta, 'text')) {
       sendFrame(chunk.opcode ?? TerminalStreamOpcode.Output, chunk.bytes, chunk.seq)
     }
   })

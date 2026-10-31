@@ -1,6 +1,6 @@
 import { join } from 'node:path'
+import { refuseClaudeConfigurationMutation } from '../../shared/claude-local-policy'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { toWindowsWslPath } from '../../shared/wsl-paths'
 import { resolveLocalAccountRuntimeTarget } from '../../shared/local-account-runtime'
 import type { Store } from '../persistence'
 import { isWslDistroRunning } from '../wsl-background-distro-gate'
@@ -44,7 +44,10 @@ export class ClaudeRuntimeAuthService {
     target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRuntimeAuthPreparation> {
     const wsl = this.wslRouteFor(target)
-    return wsl ? wsl.router.prepareLaunch(wsl.distro) : this.router.prepareLaunch()
+    if (wsl) {
+      refuseClaudeConfigurationMutation()
+    }
+    return this.router.prepareLaunch()
   }
 
   async prepareForRateLimitFetch(
@@ -78,37 +81,23 @@ export class ClaudeRuntimeAuthService {
     await this.serializeMutation(async () => {
       const wsl = this.wslRouteFor(target)
       if (wsl) {
-        await this.publishWsl(wsl.router, wsl.distro)
-      } else {
-        this.router.publish()
+        refuseClaudeConfigurationMutation()
       }
+      this.router.publish()
     })
   }
 
   /** Startup and rollback republish only running distros: neither may boot a stopped one. */
   async publishAll(): Promise<void> {
-    await this.serializeMutation(async () => {
-      this.router.publish()
-      const router = this.wslRouter
-      if (router) {
-        const distros = await router.runningDistros()
-        await Promise.all(distros.map((distro) => this.publishWsl(router, distro)))
-      }
-    })
+    await this.serializeMutation(async () => this.router.publish())
   }
 
   /** Creates and sets up an account's folder so Claude can sign in to it. */
   async prepareAccountFolder(
-    accountId: string,
-    target: ClaudeAccountSelectionTarget
+    _accountId: string,
+    _target: ClaudeAccountSelectionTarget
   ): Promise<ClaudeAccountFolder> {
-    const wsl = this.wslRouteFor(target)
-    if (!wsl) {
-      const home = await this.router.prepareAccount(accountId)
-      return { configDir: home, readPath: home }
-    }
-    const home = await wsl.router.prepareAccount(wsl.distro, accountId)
-    return { configDir: home, readPath: toWindowsWslPath(home, wsl.distro) }
+    return refuseClaudeConfigurationMutation()
   }
 
   async removeAccountFolder(
@@ -135,14 +124,6 @@ export class ClaudeRuntimeAuthService {
     const home =
       effective.runtime === 'wsl' && effective.wslDistro ? getWslHome(effective.wslDistro) : null
     return home ? join(home, '.claude') : this.router.systemDefaultHome()
-  }
-
-  // Why never thrown: a guest Orca cannot reach also cannot run a pane, and a deleted distro must
-  // not block removing its accounts. The next select, or a start while it runs, rewrites it.
-  private async publishWsl(router: ClaudeWslProfileRouter, distro: string): Promise<void> {
-    await router.publish(distro).catch((error: unknown) => {
-      console.warn(`[claude-profile] Could not update the Claude account in WSL ${distro}:`, error)
-    })
   }
 
   /** Null when the target is not a WSL distro this host can route. */

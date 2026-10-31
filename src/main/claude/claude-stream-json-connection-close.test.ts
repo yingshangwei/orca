@@ -1,3 +1,4 @@
+vi.mock('./claude-local-launch-policy', () => ({ assertLocalClaudeLaunch: async () => {} }))
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -62,7 +63,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -112,7 +113,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -158,7 +159,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -198,7 +199,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -232,7 +233,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -266,7 +267,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -312,7 +313,7 @@ describe('Claude stream-json close ordering', () => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       return {
@@ -343,6 +344,7 @@ describe('Claude stream-json close ordering', () => {
       options: {},
       cwd: '/work/repo'
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fake implements only the SDK iterator and spawn boundary used by this close-order test.
     const queryImpl = ((params: Parameters<typeof query>[0]) => {
       if (!params.options) {
         throw new Error('missing SDK options')
@@ -350,7 +352,7 @@ describe('Claude stream-json close ordering', () => {
       params.options.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       void (async () => {
@@ -387,11 +389,12 @@ describe('Claude stream-json close ordering', () => {
       options: {},
       cwd: '/work/repo'
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fake implements only the SDK iterator and spawn boundary used by this close-order test.
     const queryImpl = ((params: Parameters<typeof query>[0]) => {
       params.options?.spawnClaudeCodeProcess?.({
         command: 'claude',
         args: [],
-        env: {},
+        env: params.options?.env ?? {},
         signal: new AbortController().signal
       })
       void (async () => {

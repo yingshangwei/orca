@@ -1,3 +1,4 @@
+import { refuseClaudeConfigurationMutation } from '../../shared/claude-local-policy'
 import type {
   ClaudeManagedAccount,
   ClaudeManagedAccountSummary,
@@ -171,6 +172,9 @@ export class ClaudeAccountSelection {
     accountId: string | null,
     target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRateLimitAccountsState> {
+    if (accountId !== null) {
+      refuseClaudeConfigurationMutation()
+    }
     let effectiveTarget = target
     if (accountId !== null) {
       const account = this.requireAccount(accountId)

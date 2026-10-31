@@ -2,7 +2,7 @@ import type { MobileRelayEndpoint } from '../../../src/shared/mobile-relay-crede
 import { HostProfileSchema } from './types'
 import type { HostCatalogEntry, HostProfile, StoredHostProfile } from './types'
 import { getNextHostNameFromHosts } from './host-names'
-import { mergeHostNameIdentity, withPersonalName } from './host-name-identity'
+import { mergeHostNameIdentity } from './host-name-identity'
 import * as hostListLoads from './host-list-load-sharing'
 import { joinHostCatalogCredentials } from './host-catalog-credential-join'
 import { resetPairingKeychainForTests } from './pairing-keychain'
@@ -13,8 +13,10 @@ import {
   retryPendingHostCredentialCleanups,
   scheduleHostCredentialCleanup
 } from './host-credential-cleanup'
+import { findSameBackendHost, relayBackendOrigin } from './pairing-backend-scope'
 import {
   loadMobileRelayHostRoutingState,
+  readMobileRelayHostDirectorUrls,
   removeMobileRelayHostRouting,
   removeMobileRelayHostRoutings,
   saveMobileRelayHostRouting
@@ -85,14 +87,27 @@ async function doLoadHostListSnapshot(): Promise<hostListLoads.HostListSnapshot>
   })
 }
 
+async function readRelayBackendsByHostId(): Promise<Map<string, string>> {
+  const directorUrls = await readMobileRelayHostDirectorUrls()
+  return new Map(
+    [...directorUrls].map(([hostId, directorUrl]) => [hostId, relayBackendOrigin(directorUrl)])
+  )
+}
+
 export async function resolvePairingHostIdentity(
   publicKeyB64: string,
-  newHostId: string
+  newHostId: string,
+  relayDirectorUrl?: string
 ): Promise<{ id: string; name: string }> {
   // Why: one durable read both preserves an existing identity and names a new host, avoiding duplicate cards.
   await hostListMutationsSettled()
   const hosts = await readStoredHostProfilesForMutation()
-  const match = hosts.find((host) => host.publicKeyB64 === publicKeyB64)
+  // Why: each relay backend holds its own pairing of a desktop, so identity is scoped by backend too.
+  const match = await findSameBackendHost(
+    hosts.filter((host) => host.publicKeyB64 === publicKeyB64),
+    relayDirectorUrl === undefined ? null : relayBackendOrigin(relayDirectorUrl),
+    readRelayBackendsByHostId
+  )
   return match
     ? { id: match.id, name: match.name }
     : { id: newHostId, name: getNextHostNameFromHosts(hosts) }
@@ -180,9 +195,17 @@ export async function savePairedHost(host: HostProfile): Promise<void> {
   try {
     await mutateStoredHosts(async (hosts) => {
       const index = hosts.findIndex((h) => h.id === stored.id)
-      for (const candidate of hosts) {
-        if (candidate.id !== stored.id && candidate.publicKeyB64 === stored.publicKeyB64) {
-          duplicateHostIds.add(candidate.id)
+      const sameKeyHosts = hosts.filter(
+        (candidate) => candidate.id !== stored.id && candidate.publicKeyB64 === stored.publicKeyB64
+      )
+      if (sameKeyHosts.length > 0) {
+        // Why: another backend's pairing of this desktop is not a duplicate; an unreadable overlay rejects the save.
+        const backends = await readRelayBackendsByHostId()
+        const backend = validated.relay ? relayBackendOrigin(validated.relay.directorUrl) : null
+        for (const candidate of sameKeyHosts) {
+          if ((backends.get(candidate.id) ?? null) === backend) {
+            duplicateHostIds.add(candidate.id)
+          }
         }
       }
       let next: StoredHostProfile[]
@@ -294,45 +317,7 @@ export async function retryPendingHostCredentialCleanup(): Promise<{
   )
 }
 
-// Why: single mutation pass commits name + endpoint atomically so a mid-save failure can't persist one without the other.
-// `personalName: null` clears the phone's override, returning the row to the desktop-reported name.
-export async function updateHostNameAndEndpoint(
-  hostId: string,
-  updates: { personalName?: string | null; endpoint?: string }
-): Promise<void> {
-  await mutateStoredHosts((hosts) => {
-    const index = hosts.findIndex((host) => host.id === hostId)
-    if (index === -1) {
-      throw new Error('Host not found')
-    }
-    let updated: StoredHostProfile = {
-      ...hosts[index]!,
-      ...(updates.endpoint !== undefined ? { endpoint: updates.endpoint } : {})
-    }
-    if (updates.personalName !== undefined) {
-      updated = withPersonalName(updated, updates.personalName, hosts)
-    }
-    const next = hosts.slice()
-    next[index] = updated
-    return next
-  })
-}
-
-export async function updateLastConnected(hostId: string): Promise<void> {
-  try {
-    await mutateStoredHosts((hosts) => {
-      const index = hosts.findIndex((h) => h.id === hostId)
-      if (index === -1) {
-        return hosts
-      }
-      const next = hosts.slice()
-      next[index] = { ...next[index]!, lastConnected: Date.now() }
-      return next
-    })
-  } catch {
-    // Why: best-effort timestamp fired with void; swallow so unreadable storage doesn't reject.
-  }
-}
+export { updateHostNameAndEndpoint, updateLastConnected } from './host-profile-updates'
 
 /** Test-only: drain module mutation chain between cases. */
 export function resetHostStoreForTests(): void {

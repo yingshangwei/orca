@@ -1,4 +1,5 @@
 import { StructuredAgentArgumentsError } from '../native-chat/structured-agent-arguments-error'
+import { assertClaudeArgumentsUnmodified } from '../../shared/claude-local-policy'
 
 /** Flags supplied by the SDK or owned by Orca's structured transport. */
 const OWNED_FLAGS = new Set([
@@ -47,6 +48,7 @@ export function claudeStructuredLaunchArgs(args: readonly string[]): {
   extraArgs: Record<string, string | null>
   additionalDirectories: string[]
 } {
+  assertClaudeArgumentsUnmodified(args)
   const extraArgs: Record<string, string | null> = {}
   const additionalDirectories: string[] = []
   for (let index = 0; index < args.length; index++) {

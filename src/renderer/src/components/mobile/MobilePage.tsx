@@ -14,6 +14,7 @@ import {
   type MobilePairingConnectionMode
 } from '../../../../shared/mobile-pairing-connection-mode'
 import { useMobilePairingConnectionMode } from './use-mobile-pairing-connection-mode'
+import { useMobileRelayBackend } from './use-mobile-relay-backend'
 import { useMobilePairingGeneration } from './use-mobile-pairing-generation'
 import { useMobilePairingQrInvalidation } from './use-mobile-pairing-qr-invalidation'
 import { useMobileInstallActions } from './use-mobile-install-actions'
@@ -38,7 +39,9 @@ export default function MobilePage(): React.JSX.Element {
   const [pairingQrError, setPairingQrError] = useState(false)
   const [relayMintFailure, setRelayMintFailure] = useState<MobileRelayMintFailure | null>(null)
   const [pairLoading, setPairLoading] = useState(false)
-  const signedIn = useAppStore((state) => state.orcaProfileAuthStatus?.state === 'connected')
+  // Why named signedIn: the pairing gates predate self-hosted Relay; a configured
+  // self-hosted backend is as ready as a signed-in official one.
+  const { relayReady: signedIn, relayBackendKey } = useMobileRelayBackend()
   const refreshAuthStatus = useAppStore((state) => state.fetchOrcaProfileAuthStatus)
   const [connectionMode, setConnectionMode] = useMobilePairingConnectionMode()
   const [networkInterfaces, setNetworkInterfaces] = useState<MobileNetworkInterface[]>([])
@@ -182,6 +185,7 @@ export default function MobilePage(): React.JSX.Element {
   useMobilePairingQrInvalidation({
     connectionMode,
     signedIn,
+    relayBackendKey,
     pairLoading,
     hasGeneratedRef,
     pairingRequestIdRef,

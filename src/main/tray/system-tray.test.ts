@@ -83,6 +83,7 @@ class FakeTray {
 }
 
 vi.mock('electron', () => ({
+  app: { getVersion: () => '1.4.214' },
   Tray: FakeTray,
   Menu: { buildFromTemplate: menuFromTemplateMock },
   nativeImage: { createFromPath: createFromPathMock },

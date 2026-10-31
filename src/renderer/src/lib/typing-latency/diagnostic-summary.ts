@@ -11,6 +11,7 @@ import {
   normalizeRuntimePathForComparison
 } from '../../../../shared/cross-platform-path'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { nearestRankPercentile } from '../../../../shared/nearest-rank-percentile'
 import { getRendererAppPlatform } from '../renderer-app-platform'
 
 export type LatencyPercentiles = {
@@ -18,16 +19,6 @@ export type LatencyPercentiles = {
   p50: number | null
   p95: number | null
   max: number | null
-}
-
-/** Nearest-rank percentile; a probe reports what it actually observed, not an interpolation. */
-function percentile(sorted: number[], fraction: number): number | null {
-  if (sorted.length === 0) {
-    return null
-  }
-  const rank = Math.ceil(fraction * sorted.length)
-  const index = Math.min(sorted.length - 1, Math.max(0, rank - 1))
-  return sorted[index] ?? null
 }
 
 function round(value: number | null): number | null {
@@ -39,8 +30,8 @@ export function summarizeLatencySamples(values: readonly number[]): LatencyPerce
   const sorted = [...finite].sort((a, b) => a - b)
   return {
     count: sorted.length,
-    p50: round(percentile(sorted, 0.5)),
-    p95: round(percentile(sorted, 0.95)),
+    p50: round(nearestRankPercentile(sorted, 0.5)),
+    p95: round(nearestRankPercentile(sorted, 0.95)),
     max: round(sorted.at(-1) ?? null)
   }
 }

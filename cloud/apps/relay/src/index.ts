@@ -173,7 +173,7 @@ const heartbeat = startCellHeartbeat(config, {
   })
 })
 
-server.listen(config.port, () => {
+server.listen({ port: config.port, host: config.bindHost }, () => {
   console.log(`[orca-relay] listening on ${config.publicUrl} (port ${config.port})`)
 })
 

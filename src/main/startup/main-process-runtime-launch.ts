@@ -15,7 +15,11 @@ import { publishHeadlessRuntimeGraph } from '../runtime/headless-runtime-graph'
 import { OffscreenBrowserBackend } from '../browser/offscreen-browser-backend'
 import { browserManager } from '../browser/browser-manager'
 import { getDesktopRelayStatus } from './main-process-relay-status'
-import { startDesktopRelayService } from './main-process-relay-startup'
+import {
+  getRelayBackendConfig,
+  startDesktopRelayService,
+  updateRelayBackend
+} from './main-process-relay-startup'
 import { getServeOptions, getBundledWebClientRoot, printServeReady } from './main-process-serve'
 import {
   bindTerminalRuntimeStartupServices,
@@ -105,6 +109,10 @@ function installRuntimeRpc(
   runtimeRpc.setMobileDesktopRelayHosts(createRuntimeEnvironmentMobileRelayHosts())
   registerMobileHandlers(runtimeRpc, {
     getRelayStatus: getDesktopRelayStatus,
+    relayBackend: {
+      getConfig: () => getRelayBackendConfig(),
+      update: (input) => updateRelayBackend(input)
+    },
     consumePendingUnpairedDeviceAuthFailure: (webContentsId) => {
       if (
         !state.mainWindow ||

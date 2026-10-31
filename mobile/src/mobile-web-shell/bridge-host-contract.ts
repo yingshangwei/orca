@@ -7,7 +7,7 @@ import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'
 import type { BridgeHapticsKind } from './bridge/bridge-haptics-notify'
 import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
-import type { BridgeNativeVerb } from './bridge/bridge-native-verbs'
+import type { ScreenServedNativeVerb } from './bridge/bridge-native-verbs'
 import type { BridgeNotifyRefusal } from './bridge/bridge-notify-grants'
 import type { PageStorageForInit } from './page-storage-keys'
 
@@ -165,7 +165,7 @@ export type BridgeHostOptions = {
    * Rejecting is the refusal: the host turns it into an error frame the page's request rejects
    * with. Nothing here reaches the desktop.
    */
-  serveNativeVerb: (verb: BridgeNativeVerb, params: unknown) => Promise<unknown>
+  serveNativeVerb: (verb: ScreenServedNativeVerb, params: unknown) => Promise<unknown>
   /**
    * Opens a URL outside the app, which is the whole of the `externalLink` grant. Required for the
    * reason `onNavigate` is: the grant is issued on the strength of this existing.

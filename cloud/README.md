@@ -70,6 +70,13 @@ an immutable public source revision and combines it with its deployment configur
 relay and push images, and checks for secrets without cloud credentials. Private CI
 also validates Terraform, scans the SQL proxy and broker, and runs deployment contracts.
 
+## Self-hosted single-server relay
+
+The optional self-hosted mode includes a local token issuer, device-bound access keys,
+and a Docker Compose deployment with HTTPS and persistent SQLite. Desktop settings can
+switch between it and the existing official service. See [Self-hosted relay](self-hosted/README.md)
+for setup, mobile compatibility, credential retention and push notification limits.
+
 ## Local development
 
 ```sh
@@ -92,5 +99,7 @@ docker rm -f orca-relay-pg
 ```
 
 Configuration is read from environment variables validated in
-`apps/relay/src/config.ts`. `ORCA_RELAY_ASSIGNMENT_SIGNING_KEY` (at least 32
-bytes) is the only required value; everything else has a local default.
+`apps/relay/src/config.ts`. Cloud mode requires the public/cell URLs, authentication
+issuer and JWKS URL, assignment signing key, admin audience and deploy service
+account. Self-hosted mode supplies its own local authentication defaults; the setup
+script above generates its required configuration.

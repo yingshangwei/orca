@@ -177,7 +177,8 @@ export const MOBILE_WEB_PAGE_ROUTES = [
       'native.audio.stop'
     ],
     // `native.media.name` gives a file the composer attaches its real name; an older shell lacks it
-    // and the page names the file from its type, so the attach still works.
-    optionalGrants: ['externalNavigation', 'native.media.name']
+    // and the page names the file from its type, so the attach still works. `native.link.snapshot`
+    // measures the phone app's hop for the link details; an older shell shows that row as not measured.
+    optionalGrants: ['externalNavigation', 'native.media.name', 'native.link.snapshot']
   }
 ]

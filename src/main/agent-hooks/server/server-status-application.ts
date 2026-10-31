@@ -61,7 +61,8 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
     previous: EnrichedAgentHookEventPayload,
     mutationBefore?: EnrichedAgentHookEventPayload,
     emitEnrichedStatus = false,
-    newRun = false
+    newRun = false,
+    origin: AgentStatusObservationOrigin = 'osc'
   ): void {
     if (!this.canWriteLegacyStatusRow(previous)) {
       return
@@ -88,7 +89,7 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
         receivedAt: now,
         evidenceObservedAt: now,
         stateStartedAt,
-        observation: this.stampObservation(payload, 'osc', now)
+        observation: this.stampObservation(payload, origin, now)
       },
       mutationBefore ?? previous,
       this.cliWriterExecutionMatches,

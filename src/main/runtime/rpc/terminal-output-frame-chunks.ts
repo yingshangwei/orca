@@ -47,18 +47,27 @@ export function exceedsTerminalStreamChunkBytes(data: string): boolean {
   return false
 }
 
+// Why: `terminal.subscribe` clients have never decoded spans and drop them silently; only the
+// desktop multiplex may be sent one, so every caller has to say which reader it is writing for.
+export type TerminalOutputFrameEncoding = 'span' | 'text'
+
 export function* iterateTerminalOutputFrameChunks(
   data: string,
-  meta?: TerminalOutputMeta
+  meta: TerminalOutputMeta | undefined,
+  encoding: TerminalOutputFrameEncoding
 ): Generator<TerminalOutputFrameChunk> {
   const rawLength = meta?.rawLength ?? data.length
-  if (meta?.transformed || rawLength !== data.length) {
+  const rewritten = meta?.transformed === true || rawLength !== data.length
+  if (rewritten && encoding === 'span') {
     yield {
       opcode: TerminalStreamOpcode.OutputSpan,
       bytes: encodeTerminalStreamJson({ data, rawLength, transformed: true }),
       displayLength: data.length,
       seq: meta?.seq
     }
+    return
+  }
+  if (rewritten && data.length === 0) {
     return
   }
   if (!exceedsTerminalStreamChunkBytes(data)) {
@@ -70,8 +79,7 @@ export function* iterateTerminalOutputFrameChunks(
     return
   }
   const canPreserveChunkSeq = typeof meta?.seq === 'number' && rawLength === data.length
-  // Unreachable past the OutputSpan branch above (rawLength === data.length there), but kept
-  // as defence in depth: it is the only shape that can carry a seq the chunk offsets can't map.
+  // Why: a rewritten chunk sent as text has a seq its offsets can't map; only the last frame carries it.
   const shouldDelayFinalSeq = !canPreserveChunkSeq && typeof meta?.seq === 'number'
   const startSeq = canPreserveChunkSeq ? meta.seq! - rawLength : undefined
   let chunkStart = 0

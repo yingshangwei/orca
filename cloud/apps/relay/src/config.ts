@@ -46,12 +46,16 @@ const readinessGraceSchema = (defaultMs: number) =>
 
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8080),
+  ORCA_RELAY_BIND_HOST: z.string().trim().min(1).optional(),
   ORCA_RELAY_PUBLIC_URL: z.string().url(),
   ORCA_RELAY_CELL_URL: z.string().url(),
   ORCA_RELAY_AUTH_ISSUER: z.string().url(),
   ORCA_RELAY_AUTH_AUDIENCE: z.literal('orca-relay').default('orca-relay'),
   ORCA_RELAY_JWKS_URL: z.string().url(),
   ORCA_RELAY_ASSIGNMENT_SIGNING_KEY: z.string().min(32),
+  ORCA_RELAY_AUTH_MODE: z.enum(['cloud', 'self-hosted']).default('cloud'),
+  ORCA_RELAY_SELF_HOSTED_AUTH_FILE: z.string().min(1).optional(),
+  ORCA_RELAY_SELF_HOSTED_TRUST_PRIVATE_PROXY: z.enum(['true', 'false']).default('false'),
   ORCA_RELAY_ROLE: z.enum(['combined', 'director', 'cell']).default('combined'),
   ORCA_RELAY_CELL_ID: z.string().min(1).max(128).default('combined'),
   ORCA_RELAY_REGION: RelayRegionSchema.default(RELAY_DEFAULT_REGION),
@@ -201,11 +205,14 @@ export type RelayCellConfig = Omit<z.infer<typeof RelayCellConfigSchema>, 'regio
 
 export type RelayConfig = {
   port: number
+  bindHost?: string
   publicUrl: string
   cellUrl: string
   authIssuer: string
   authAudience: 'orca-relay'
   jwksUrl: string
+  selfHostedAuthFile?: string
+  selfHostedTrustPrivateProxy?: boolean
   assignmentSigningKey: Uint8Array
   role: 'combined' | 'director' | 'cell'
   cellId: string
@@ -264,7 +271,25 @@ function canonicalOrigin(value: string, name: string): string {
 }
 
 export function loadRelayConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
-  const parsed = EnvSchema.parse(env)
+  const selfHosted = env.ORCA_RELAY_AUTH_MODE === 'self-hosted'
+  const publicOrigin = env.ORCA_RELAY_PUBLIC_URL
+  const parsed = EnvSchema.parse(selfHosted ? {
+    ...env,
+    ORCA_RELAY_CELL_URL: env.ORCA_RELAY_CELL_URL ?? publicOrigin,
+    ORCA_RELAY_AUTH_ISSUER: publicOrigin,
+    ORCA_RELAY_JWKS_URL: publicOrigin ? `${publicOrigin}/.well-known/jwks.json` : undefined,
+    ORCA_RELAY_ADMIN_AUDIENCE: publicOrigin,
+    ORCA_RELAY_DEPLOY_SERVICE_ACCOUNT: 'disabled@self-hosted.invalid'
+  } : env)
+  if (selfHosted && (!parsed.ORCA_RELAY_SELF_HOSTED_AUTH_FILE || parsed.ORCA_RELAY_ROLE !== 'combined')) {
+    throw new Error('Self-hosted authentication requires combined mode and ORCA_RELAY_SELF_HOSTED_AUTH_FILE')
+  }
+  if (!selfHosted && parsed.ORCA_RELAY_SELF_HOSTED_AUTH_FILE) {
+    throw new Error('ORCA_RELAY_SELF_HOSTED_AUTH_FILE requires self-hosted authentication')
+  }
+  if (!selfHosted && parsed.ORCA_RELAY_SELF_HOSTED_TRUST_PRIVATE_PROXY === 'true') {
+    throw new Error('Private proxy trust requires self-hosted authentication')
+  }
   const adminServiceAccounts = [
     parsed.ORCA_RELAY_DEPLOY_SERVICE_ACCOUNT,
     parsed.ORCA_RELAY_CAPACITY_SERVICE_ACCOUNT,
@@ -352,11 +377,16 @@ export function loadRelayConfig(env: NodeJS.ProcessEnv = process.env): RelayConf
   }
   return {
     port: parsed.PORT,
+    bindHost: parsed.ORCA_RELAY_BIND_HOST,
     publicUrl,
     cellUrl: ownCell.url,
     authIssuer: canonicalOrigin(parsed.ORCA_RELAY_AUTH_ISSUER, 'ORCA_RELAY_AUTH_ISSUER'),
     authAudience: parsed.ORCA_RELAY_AUTH_AUDIENCE,
     jwksUrl: parsed.ORCA_RELAY_JWKS_URL,
+    ...(selfHosted ? {
+      selfHostedAuthFile: parsed.ORCA_RELAY_SELF_HOSTED_AUTH_FILE,
+      selfHostedTrustPrivateProxy: parsed.ORCA_RELAY_SELF_HOSTED_TRUST_PRIVATE_PROXY === 'true'
+    } : {}),
     assignmentSigningKey: new TextEncoder().encode(parsed.ORCA_RELAY_ASSIGNMENT_SIGNING_KEY),
     role: parsed.ORCA_RELAY_ROLE,
     cellId: ownCell.id,

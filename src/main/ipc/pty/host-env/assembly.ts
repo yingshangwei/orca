@@ -17,7 +17,6 @@ import { stripLegacyTerminalShimEnv } from '../../../pty/legacy-terminal-shim-di
 import { mergePersistedWindowsPath } from '../../../pty/windows-environment-path'
 import { resolveCodexShellLaunchPreflightCommand } from '../../../pty/codex-shell-launch-preflight'
 import { scheduleCodexHookReconcile } from '../../../codex/codex-hook-reconcile'
-import { buildConfiguredProxyEnv } from '../../../../shared/network-proxy'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { BuildPtyHostEnvOptions } from './types'
 import { stripInheritedOrcaCodexHomeOverride } from './codex-home'
@@ -47,7 +46,7 @@ export function buildPtyHostEnv(
   opts: BuildPtyHostEnvOptions
 ): Record<string, string> {
   mergePersistedWindowsPath(baseEnv)
-  Object.assign(baseEnv, buildConfiguredProxyEnv(opts.networkProxySettings))
+  // Shells may run Claude later; Orca's HTTP proxy must never replace their inherited routing.
 
   // Claude currently recognizes image support only in a short terminal allowlist.
   if (

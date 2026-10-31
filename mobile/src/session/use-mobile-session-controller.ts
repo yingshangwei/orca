@@ -30,6 +30,7 @@ import { useMobileSessionCloseActions } from './use-mobile-session-close-actions
 import { useMobileSessionBulkClose } from './use-mobile-session-bulk-close'
 import { useMobileSessionPresentation } from './use-mobile-session-presentation'
 import { useMobileSessionPanelRouteActions } from './use-mobile-session-panel-route-actions'
+import { useMobileLinkMonitor } from './use-mobile-link-monitor'
 
 export function useMobileSessionController() {
   const foundation = useMobileSessionFoundation()
@@ -120,7 +121,8 @@ export function useMobileSessionController() {
     presentation,
     useMobileSessionPanelRouteActions(presentation)
   )
-  return Object.assign(panelRouteActions, preferences)
+  const linkMonitor = useMobileLinkMonitor(panelRouteActions)
+  return Object.assign(panelRouteActions, preferences, { linkMonitor })
 }
 
 export type MobileSessionController = ReturnType<typeof useMobileSessionController>

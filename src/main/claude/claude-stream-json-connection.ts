@@ -1,10 +1,11 @@
+import { assertLocalClaudeLaunch } from './claude-local-launch-policy'
+import { CLAUDE_DEFAULT_SETTING_SOURCES } from './claude-structured-launch-resolution'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { providerDiagnostic, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import type * as ClaudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import type { CanUseTool, OnUserDialog, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { spawnProcess } from '@orca/process-host'
 import { buildClaudeChildProcessEnv } from './claude-child-process-environment'
-import { withoutInheritedClaudeConfigDir } from './claude-config-dir-pin'
 import {
   ClaudeControlRequestError,
   createClaudeControlSurface,
@@ -136,25 +137,22 @@ export async function openClaudeStreamJsonConnection(
   spawnImpl: PipedProcessSpawner = spawnProcess,
   queryImpl?: typeof ClaudeAgentSdk.query
 ): Promise<ClaudeStreamJsonConnection> {
+  const env = withoutKeys(
+    buildClaudeChildProcessEnv(launch.env, { scrubConfiguredChildSessionStamps: true }),
+    launch.envToDelete ?? []
+  )
+  await assertLocalClaudeLaunch({ ...launch, env })
   const { query } = await loadClaudeAgentSdk()
-  const spawner = createClaudeCodeProcessSpawn(spawnImpl, process.platform)
+  const spawner = createClaudeCodeProcessSpawn(spawnImpl, process.platform, env)
   const inbox = createClaudeUserMessageQueue()
   const session = (queryImpl ?? query)({
     prompt: inbox.messages,
     options: {
       ...launch.options,
+      settingSources: [...CLAUDE_DEFAULT_SETTING_SOURCES],
       cwd: launch.cwd,
-      // Why env is never omitted: the SDK inherits process.env when it is, which is
-      // exactly the ambient ANTHROPIC_* auth leak this lane already shipped once.
-      // Orca's own CLAUDE_CONFIG_DIR is dropped for the same reason the launch drops the
-      // shell's: the record's pin in `launch.env` must be the only home the child sees.
-      env: withoutKeys(
-        buildClaudeChildProcessEnv(launch.env, {
-          inheritedEnv: withoutInheritedClaudeConfigDir(process.env),
-          scrubConfiguredChildSessionStamps: true
-        }),
-        launch.envToDelete ?? []
-      ),
+      // Preserve the local Claude connection while removing only session bookkeeping.
+      env,
       pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
       spawnClaudeCodeProcess: spawner.spawn,
       ...(handlers.canUseTool ? { canUseTool: handlers.canUseTool } : {}),

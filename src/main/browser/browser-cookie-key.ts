@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
+import { securityCommandsWithheldReason } from '../host/keychain-withhold'
 import { diag } from './browser-cookie-import-diagnostics'
 import {
   CHROMIUM_BROWSERS,
@@ -44,6 +45,12 @@ export function getMacEncryptionKey(
   keychainService: string,
   keychainAccount: string
 ): EncryptionKeyResult | null {
+  const withheld = securityCommandsWithheldReason()
+  if (withheld !== null) {
+    // Why before the spawn: this read is synchronous, so its dialog would also freeze the window.
+    diag(`  macOS keychain not used: ${withheld}`)
+    return null
+  }
   try {
     const raw = runKeychainCommand(
       'security',

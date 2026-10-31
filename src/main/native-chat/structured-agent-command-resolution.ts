@@ -1,4 +1,5 @@
 import { delimiter, isAbsolute, resolve as resolvePath } from 'node:path'
+import { refuseClaudeConfigurationMutation } from '../../shared/claude-local-policy'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import {
@@ -51,6 +52,9 @@ export function resolveStructuredAgentCommand(
   options: CommandOptions = {},
   stock: { command?: string; resolve?: typeof resolveCliCommand } = {}
 ): string {
+  if (agent === 'claude' && hasExplicitTuiLaunchCommand(settings, agent)) {
+    refuseClaudeConfigurationMutation()
+  }
   if (!hasExplicitTuiLaunchCommand(settings, agent)) {
     // Why: inside a WSL guest the inherited PATH ends in /mnt/<drive> dirs holding Windows shims.
     const pathEnv = guestNativePathEnv(options.pathEnv)

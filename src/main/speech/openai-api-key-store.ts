@@ -1,4 +1,4 @@
-import { getSecretStore } from '../../shared/secret-store'
+import { assertPlaintextFallbackAllowed, getSecretStore } from '../../shared/secret-store'
 import { readCredentialFileProtection } from '../credential-file-protection'
 import {
   classifyUnenvelopedCredential,
@@ -89,6 +89,7 @@ export function saveOpenAiSpeechApiKey(apiKey: string): void {
     return
   }
 
+  assertPlaintextFallbackAllowed()
   console.warn('[speech] secret encryption unavailable — storing OpenAI speech key in plaintext')
   writeFileSync(getOpenAiKeyPath(), trimmed, { encoding: 'utf8', mode: 0o600 })
   cachedOpenAiSpeechApiKey = trimmed

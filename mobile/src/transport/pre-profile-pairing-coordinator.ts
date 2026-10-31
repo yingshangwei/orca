@@ -1,7 +1,8 @@
 import { Platform } from 'react-native'
 import { connect, type ConnectOptions } from './rpc-client'
 import { resolvePairingHostIdentity, savePairedHost } from './host-store'
-import type { HostProfile, PairingOffer } from './types'
+import type { PairingOffer } from './types'
+import { baseHost } from './pairing-base-host'
 import { isPairingRelayRpcUnavailable } from './pairing-relay-rpc-unavailable'
 import {
   relayCredentialProvision,
@@ -32,7 +33,11 @@ import { resolvePairingInviteThroughDirector } from './mobile-relay-invite-direc
 import { createRecoveringPairingRelayCandidate } from './pairing-relay-candidate'
 import { createPairingRelayLogger } from './pairing-relay-log'
 import { redactSocketEndpoint } from './socket-event-debug'
-import { assertCommittedInstall, relayHost } from './pairing-relay-host'
+import {
+  assertCommittedInstall,
+  assertRelayEndpointMatchesJournal,
+  relayHost
+} from './pairing-relay-host'
 import { recordHostDescriptorFromStatus } from './host-descriptor-recorder'
 import type { HostStatusReply } from './host-status-reply-schema'
 
@@ -165,7 +170,8 @@ async function runPairing(
   // updates one card instead of publishing a second identity (STA-1840).
   const { id: hostId, name: hostName } = await dependencies.resolveHostIdentity(
     offer.publicKeyB64,
-    `host-${now}`
+    `host-${now}`,
+    offer.relay?.directorUrl
   )
   assertActive(isDisposed)
   let journal: MobileRelayPairingJournal | null = null
@@ -274,6 +280,7 @@ async function runPairing(
   if (!endpoints.relay) {
     throw new Error('desktop returned no relay endpoint after credential install')
   }
+  assertRelayEndpointMatchesJournal(journal, endpoints.relay)
   assertActive(isDisposed)
   await dependencies.writeCredentialBundle(promotePairingJournalCredential({ journal, installed }))
   await dependencies.savePairedHost(relayHost(journal, endpoints.relay))
@@ -300,22 +307,6 @@ function recordWinnerDescriptor(
     dependencies.recordDescriptorFromStatus(hostId, status)
   } catch {
     // Best-effort bookkeeping; the host is already saved.
-  }
-}
-
-function baseHost(
-  offer: PairingOffer,
-  hostId: string,
-  name: string,
-  lastConnected: number
-): HostProfile {
-  return {
-    id: hostId,
-    name,
-    endpoint: offer.endpoint,
-    deviceToken: offer.deviceToken,
-    publicKeyB64: offer.publicKeyB64,
-    lastConnected
   }
 }
 

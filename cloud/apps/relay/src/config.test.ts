@@ -29,6 +29,43 @@ function cellEnvironment(capacity: number): NodeJS.ProcessEnv {
   }
 }
 
+describe('self-hosted relay configuration', () => {
+  const environment = {
+    ORCA_RELAY_PUBLIC_URL: 'https://relay.example.test',
+    ORCA_RELAY_ASSIGNMENT_SIGNING_KEY: 'assignment-key-with-at-least-thirty-two-bytes',
+    ORCA_RELAY_AUTH_MODE: 'self-hosted',
+    ORCA_RELAY_SELF_HOSTED_AUTH_FILE: '/data/auth.json'
+  }
+
+  it('allows a private listening interface without changing existing deployments', () => {
+    expect(loadRelayConfig(environment).bindHost).toBeUndefined()
+    expect(loadRelayConfig({ ...environment, ORCA_RELAY_BIND_HOST: '127.0.0.1' }).bindHost).toBe('127.0.0.1')
+    expect(loadRelayConfig({ ...environment, ORCA_RELAY_BIND_HOST: '::1' }).bindHost).toBe('::1')
+    expect(() => loadRelayConfig({ ...environment, ORCA_RELAY_BIND_HOST: ' ' })).toThrow()
+  })
+
+  it('uses the local issuer and combined cell without official identity configuration', () => {
+    expect(loadRelayConfig(environment)).toMatchObject({
+      publicUrl: environment.ORCA_RELAY_PUBLIC_URL,
+      cellUrl: environment.ORCA_RELAY_PUBLIC_URL,
+      authIssuer: environment.ORCA_RELAY_PUBLIC_URL,
+      jwksUrl: 'https://relay.example.test/.well-known/jwks.json',
+      role: 'combined',
+      selfHostedAuthFile: '/data/auth.json',
+      directorUrl: undefined,
+      heartbeatAudience: undefined
+    })
+    expect(loadRelayConfig(cellEnvironment(900)).selfHostedAuthFile).toBeUndefined()
+  })
+
+  it('fails closed on incomplete self-hosted authentication or a mixed cloud configuration', () => {
+    expect(() => loadRelayConfig({ ...environment, ORCA_RELAY_SELF_HOSTED_AUTH_FILE: undefined })).toThrow('requires combined mode')
+    expect(() => loadRelayConfig({ ...environment, ORCA_RELAY_ROLE: 'cell' })).toThrow('requires combined mode')
+    expect(() => loadRelayConfig({ ...cellEnvironment(900), ORCA_RELAY_SELF_HOSTED_AUTH_FILE: '/data/auth.json' })).toThrow('requires self-hosted authentication')
+    expect(() => loadRelayConfig({ ...environment, ORCA_RELAY_PUBLIC_URL: 'http://relay.example.test' })).toThrow('HTTPS')
+  })
+})
+
 describe('GCE relay capacity configuration', () => {
   it('defaults optional region correction off and bounds the cohort', () => {
     const env = cellEnvironment(4_000)

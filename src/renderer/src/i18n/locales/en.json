@@ -1,4 +1,11 @@
 {
+  "herdr": {
+    "open": "Open Herdr in Terminal",
+    "sync": "Sync Herdr windows",
+    "syncing": "Syncing Herdr…",
+    "synced": "Connected {{count}} Herdr terminals; added {{added}}.",
+    "failed": "Herdr action failed"
+  },
   "csv": {
     "detectingDelimiter": "Detecting delimiter…",
     "indexProgress": "Indexing CSV… {{percent}}%",
@@ -12014,7 +12021,35 @@
           "localDescription": "Phone must be on this Wi‑Fi or connected through Tailscale. No account needed.",
           "retrying": "Retrying",
           "relayCell": "Relay cell",
-          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account."
+          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.",
+          "relayUnavailableSelfHost": "Orca Relay isn’t available in this build. Use LAN or a self-hosted relay.",
+          "selfHostedDescription": "Phone can be on cellular or any Wi‑Fi. Routed through your self-hosted relay."
+        },
+        "MobileRelayBackendPanel": {
+          "configUnreadable": "Relay settings can’t be read. Choose Orca to discard them, or save a self-hosted URL and access key.",
+          "accessKeyUnreadable": "The saved access key can’t be unlocked. Unlock the system keychain, or enter the key again.",
+          "secretProtectionUnavailable": "The system keychain is unavailable, so the access key was not saved.",
+          "invalidOrigin": "Enter an HTTPS origin such as https://relay.example.com, with no path.",
+          "invalidAccessKey": "The access key must be 43 characters.",
+          "accessKeyRequired": "Enter the access key for this relay URL.",
+          "notConfigured": "Save a relay URL and access key before switching to it.",
+          "writeFailed": "The Relay backend settings could not be saved.",
+          "publicKeyCopied": "Desktop public key copied",
+          "publicKeyCopyFailed": "Failed to copy the public key",
+          "backendGroup": "Relay backend",
+          "official": "Orca",
+          "selfHosted": "Self-hosted",
+          "originLabel": "Relay URL",
+          "originPlaceholder": "https://relay.example.com",
+          "accessKeyLabel": "Access key",
+          "accessKeySaved": "Saved — enter a new key to replace it",
+          "accessKeyPlaceholder": "Access key from your relay",
+          "newOriginNeedsKey": "A different relay URL needs its own access key.",
+          "publicKeyDetail": "Enroll this desktop on your relay with its public key.",
+          "copyPublicKey": "Copy public key",
+          "pushUnavailable": "Background notifications are off while a self-hosted relay is selected. Phones paired with Orca’s relay keep their pairing.",
+          "save": "Save",
+          "saveAndUse": "Save and use"
         },
         "MobilePairingSetupSection": {
           "title": "Pair a phone",
@@ -20824,7 +20859,8 @@
       "waitingAriaLabel": "Update waiting for other Orca instances. Click to expand.",
       "preparingLabel": "Preparing update",
       "preparingAriaLabel": "Preparing update. Click to expand."
-    }
+    },
+    "localBuildDisabled": "Official updates and update notifications are disabled for this local build."
   },
   "jira": {
     "connect": {

@@ -1,4 +1,4 @@
-import { getSecretStore } from '../../shared/secret-store'
+import { assertPlaintextFallbackAllowed, getSecretStore } from '../../shared/secret-store'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -150,6 +150,7 @@ export function saveMiniMaxSessionCookie(cookie: string): void {
     cachedMiniMaxCookie = trimmed
     return
   }
+  assertPlaintextFallbackAllowed()
   console.warn('[minimax] safeStorage encryption unavailable — storing MiniMax cookie in plaintext')
   writeSecureFile(
     getMiniMaxCookiePath(),

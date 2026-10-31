@@ -2,6 +2,11 @@ import type { PipedChildProcess, PipedProcessSpawner } from '@orca/process-host/
 import type { SpawnOptions as ClaudeAgentSdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import { spawnProcess } from '@orca/process-host'
 import {
+  assertClaudeEnvironmentUnmodified,
+  isClaudeConnectionEnvironmentKey,
+  CLAUDE_LOCAL_CONFIGURATION_MESSAGE
+} from '../../shared/claude-local-policy'
+import {
   spawnManagedProviderProcess,
   type ManagedProviderProcess
 } from '../provider-process/managed-provider-process'
@@ -44,11 +49,22 @@ function definedEnv(env: Record<string, string | undefined>): Record<string, str
  */
 export function createClaudeCodeProcessSpawn(
   spawnImpl: PipedProcessSpawner = spawnProcess,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  expectedEnv?: Record<string, string>
 ): ClaudeCodeProcessSpawn {
   let managed: ManagedProviderProcess | null = null
   return {
     spawn: (options) => {
+      if (expectedEnv) {
+        assertClaudeEnvironmentUnmodified(options.env, expectedEnv)
+        for (const [key, value] of Object.entries(expectedEnv)) {
+          if (isClaudeConnectionEnvironmentKey(key) && options.env[key] !== value) {
+            throw new Error(
+              `${CLAUDE_LOCAL_CONFIGURATION_MESSAGE} SDK changed environment key: ${key}`
+            )
+          }
+        }
+      }
       // SDK abort would kill the child outside Orca's ladder, losing observed exit proof.
       managed = spawnManagedProviderProcess(
         {

@@ -46,7 +46,9 @@ existing daemon never copies. Telemetry reports a daemon started from a copy as
 
 Only Developer ID builds exercise the helper path in practice. A local ad hoc build's designated
 requirement is a cdhash, which the helper (a different binary) cannot match, so it falls back to the
-fork.
+fork. A local build re-signed by `mac-local-signing.mjs` (see `macos-local-signing.md`) gives the
+helper the app's certificate-pinned requirement, so it should take the helper path too; that is
+checked statically at signing, not yet by a launch.
 
 ## Why the helper is `com.stablyai.orca`
 

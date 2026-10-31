@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { z } from 'zod'
+import { SafeStorageWithheldError } from '../host/keychain-withhold'
 import { readKeychainPassword } from '../macos-keychain/generic-password'
 import {
   getCursorCliAuthPath,
@@ -82,7 +83,11 @@ async function readKeychainToken(): Promise<TokenReadResult> {
   try {
     const token = await readKeychainPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
     return token ? { status: 'ok', token } : { status: 'missing' }
-  } catch {
+  } catch (error) {
+    // Why missing: this run never asked, and an error would flag every user without Cursor.
+    if (error instanceof SafeStorageWithheldError) {
+      return { status: 'missing' }
+    }
     // Why: a denied or locked keychain must not mask a readable auth.json below it.
     return { status: 'error', error: 'Unable to read the Cursor login from the macOS Keychain' }
   }

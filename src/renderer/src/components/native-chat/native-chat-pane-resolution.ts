@@ -13,10 +13,10 @@ export type NativeChatPaneResolutionInput = {
   /** The coding-agent Orca launched in this terminal, if any (from TerminalTab).
    *  Drives the agent label when no live status entry has reported one yet. */
   launchAgent?: TuiAgent | null
-  /** Live agent-status entry for this pane, when one exists. Carries the
+  /** Live status or launch-resume identity for this pane. Carries the
    *  captured `providerSession` (the agent's own session id) once the agent has
    *  reported it, plus the detected `agentType`. */
-  agentStatusEntry?: AgentStatusEntry
+  agentStatusEntry?: Pick<AgentStatusEntry, 'agentType' | 'providerSession'>
   /** Runtime PTY id bound to this pane. ptyId is pane-manager runtime state, so
    *  it's passed in rather than looked up inside this pure function. */
   ptyId: string | null

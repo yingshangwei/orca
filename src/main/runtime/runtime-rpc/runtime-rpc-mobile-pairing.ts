@@ -234,6 +234,19 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     }
   }
 
+  /** Invalidate issued and in-flight Relay offers while retaining already paired devices. */
+  invalidateMobilePairingOffers(): void {
+    this.mobilePairingOfferGeneration += 1
+    this.mobileRelayPairingOfferInFlight = null
+    const pending = this.deviceRegistry?.getPendingDevice('mobile')
+    if (
+      pending &&
+      this.deviceRegistry?.getMobilePairingConnectionMode(pending.deviceId) === 'automatic'
+    ) {
+      this.discardPendingMobilePairingDevice(pending.deviceId)
+    }
+  }
+
   protected relayPairingRequestSuperseded(): PairingOfferUnavailable {
     return {
       available: false,

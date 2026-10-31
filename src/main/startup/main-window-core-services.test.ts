@@ -73,6 +73,9 @@ vi.mock('./main-process-pty-startup', () => ({
 vi.mock('./codex-launch-preparation', () => ({ prepareCodexRuntimeHomeForLaunch: vi.fn() }))
 vi.mock('./codex-session-resume-launch', () => ({ prepareCodexSessionResumeForLaunch: vi.fn() }))
 vi.mock('./main-window-lifecycle-flags', () => ({ isRecoveryReloadInFlight: vi.fn() }))
+vi.mock('./main-process-relay-backend-store', () => ({
+  shouldPreserveRelayOnOrcaSignOut: vi.fn(() => false)
+}))
 
 const { attachMainWindowCoreServices } = await import('./main-window-core-services')
 

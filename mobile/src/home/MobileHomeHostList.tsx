@@ -1,4 +1,4 @@
-import { memo, useCallback, type ReactElement } from 'react'
+import { memo, useCallback, useMemo, type ReactElement } from 'react'
 import { FlatList, StyleSheet, View } from 'react-native'
 import type { ListRenderItemInfo } from 'react-native'
 import { MobileHostCard } from '../components/MobileHostCard'
@@ -8,6 +8,7 @@ import { classifyConnection } from '../transport/connection-health'
 import { resolveHomeHostConnectionState } from '../transport/home-host-auto-connect'
 import type { ConnectionState, HostCatalogEntry } from '../transport/types'
 import type { HostWorktreeInfo } from '../worktree/home-worktree-info'
+import { homeHostBackendLabels } from './home-host-backend-label'
 import type { HomeHostConnections } from './home-host-connection-projection'
 import { MobileHomeListHeader } from './MobileHomeListHeader'
 
@@ -30,10 +31,12 @@ type MobileHomeHostListProps = {
 }
 
 export function MobileHomeHostList(props: MobileHomeHostListProps) {
+  const backendLabels = useMemo(() => homeHostBackendLabels(props.hosts), [props.hosts])
   const renderHost = useCallback(
     ({ item }: ListRenderItemInfo<HostCatalogEntry>) => (
       <MobileHomeHostRow
         item={item}
+        backendLabel={backendLabels.get(item.id)}
         autoConnectHostIds={props.autoConnectHostIds}
         hostAttempts={props.hostAttempts}
         hostLastConnected={props.hostLastConnected}
@@ -46,6 +49,7 @@ export function MobileHomeHostList(props: MobileHomeHostListProps) {
       />
     ),
     [
+      backendLabels,
       props.autoConnectHostIds,
       props.hostAttempts,
       props.hostLastConnected,
@@ -90,7 +94,7 @@ type MobileHomeHostRowProps = Pick<
   | 'onOpen'
   | 'onLongPress'
   | 'onOpenActions'
-> & { item: HostCatalogEntry }
+> & { item: HostCatalogEntry; backendLabel?: string }
 
 const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostRowProps) {
   const { item, onLongPress, onOpen, onOpenActions } = props
@@ -122,6 +126,7 @@ const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostR
       verdict={verdict}
       path={connection?.path ?? 'lan'}
       worktreeInfo={props.worktreeInfo[item.id]}
+      backendLabel={props.backendLabel}
       onPress={open}
       onLongPress={longPress}
       onOpenActions={openActions}

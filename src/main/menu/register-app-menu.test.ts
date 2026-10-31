@@ -24,7 +24,8 @@ vi.mock('electron', () => ({
     sendActionToFirstResponder: sendActionToFirstResponderMock
   },
   app: {
-    name: 'Orca'
+    name: 'Orca',
+    getVersion: () => '1.4.214'
   },
   webContents: {
     getFocusedWebContents: getFocusedWebContentsMock

@@ -79,40 +79,31 @@ describe('ClaudeRuntimeAuthService', () => {
     await expect(auth.prepareForClaudeLaunch()).resolves.toEqual({ runtime: 'host' })
   })
 
-  it('routes a WSL target that names no distro to the default distro', async () => {
+  it('refuses a WSL Claude launch and account routing', async () => {
     const auth = service('win32')
-    await expect(auth.prepareForClaudeLaunch({ runtime: 'wsl', wslDistro: null })).resolves.toEqual(
-      { runtime: 'wsl', wslDistro: 'Ubuntu' }
+    expect(() => auth.prepareForClaudeLaunch({ runtime: 'wsl', wslDistro: null })).toThrow(
+      'cannot override the connection'
     )
-    expect(auth.getRuntimeConfigDir({ runtime: 'wsl', wslDistro: null })).toBe(
-      '/wsl/Ubuntu/home/.claude'
-    )
-  })
-
-  it('never fails a select over a failed guest publish, and publishes one pass at a time', async () => {
-    const auth = service('win32')
-    vi.spyOn(fakes.wsl, 'publish').mockRejectedValue(new Error('distro is gone'))
     await expect(
       auth.syncForCurrentSelection({ runtime: 'wsl', wslDistro: 'Ubuntu' })
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow('cannot override the connection')
+  })
 
-    const order: string[] = []
-    let release = () => {}
-    const gate = new Promise<void>((resolve) => (release = resolve))
-    vi.spyOn(fakes.host, 'publish').mockImplementation(() => order.push('host'))
-    vi.spyOn(fakes.wsl, 'runningDistros')
-      .mockImplementationOnce(async () => {
-        await gate
-        order.push('first guests')
-        return []
-      })
-      .mockResolvedValue([])
-    const first = auth.publishAll()
-    const second = auth.publishAll()
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    expect(order).toEqual(['host'])
-    release()
-    await Promise.all([first, second])
-    expect(order).toEqual(['host', 'first guests', 'host'])
+  it('refuses managed account creation on every platform', async () => {
+    for (const platformName of ['darwin', 'linux', 'win32'] as const) {
+      const auth = service(platformName)
+      await expect(auth.prepareAccountFolder('new-account', { runtime: 'host' })).rejects.toThrow(
+        'cannot override the connection'
+      )
+    }
+  })
+
+  it('does not publish or provision WSL accounts at startup', async () => {
+    const running = vi.spyOn(fakes.wsl, 'runningDistros')
+    const publish = vi.spyOn(fakes.wsl, 'publish')
+    const auth = service('win32')
+    await auth.publishAll()
+    expect(running).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
   })
 })

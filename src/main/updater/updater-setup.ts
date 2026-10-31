@@ -20,6 +20,7 @@ import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
 import { AUTO_UPDATE_CHECK_INTERVAL_MS } from './updater-state'
 import { UpdaterDownloadInstall } from './updater-download-install'
 import { configureMacShipItScheduling } from './macos-shipit-scheduling'
+import { isAppUpdateEnabled } from '../app-update-policy'
 import type { PreQuitCleanupFailureMode, UpdateInstallMode } from './updater-state'
 
 export type UpdaterSetupOptions = {
@@ -38,18 +39,30 @@ export type UpdaterSetupOptions = {
 /** Initializes electron-updater and attaches lifecycle/event bridges. */
 export class UpdaterSetup extends UpdaterDownloadInstall {
   checkForUpdates(): void {
+    if (!isAppUpdateEnabled()) {
+      return
+    }
     this.checkForUpdatesInBackground()
   }
 
   checkForUpdatesFromMenu(options?: UpdateCheckOptions): void {
+    if (!isAppUpdateEnabled()) {
+      return
+    }
     super.checkForUpdatesFromMenu(options)
   }
 
   downloadUpdate(): void {
+    if (!isAppUpdateEnabled()) {
+      return
+    }
     super.downloadUpdate()
   }
 
   quitAndInstall(): void {
+    if (!isAppUpdateEnabled()) {
+      return
+    }
     super.quitAndInstall()
   }
 
@@ -58,10 +71,20 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
   }
 
   getUpdateStatus(): UpdateStatus {
+    if (!isAppUpdateEnabled()) {
+      return { state: 'idle', updatesDisabled: true }
+    }
     return super.getUpdateStatus()
   }
 
   getRemoteServerUpdateSupport(): RemoteServerUpdateSupport {
+    if (!isAppUpdateEnabled()) {
+      return {
+        installMode: this.updateInstallMode,
+        automatic: false,
+        reason: 'updater-unavailable'
+      }
+    }
     return super.getRemoteServerUpdateSupport()
   }
 
@@ -100,6 +123,9 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     channel: ReleaseChannel,
     options?: ReleaseBuildListOptions
   ): Promise<ReleaseBuild[]> {
+    if (!isAppUpdateEnabled()) {
+      throw new Error('Updates are disabled for this local build.')
+    }
     return super.listAvailableReleaseBuilds(channel, options)
   }
 
@@ -125,6 +151,11 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     this.getReleaseChannelOverride = opts?.getReleaseChannelOverride ?? null
     this.updateInstallMode = opts?.installMode ?? 'interactive'
     this.lastInstallDeferralVersion = { download: null, install: null }
+
+    if (!isAppUpdateEnabled()) {
+      this.sendStatus({ state: 'idle', updatesDisabled: true })
+      return
+    }
 
     const serveHandoffFailure = getServeUpdateHandoffFailure()
     if (serveHandoffFailure) {

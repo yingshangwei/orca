@@ -13,7 +13,7 @@ import {
 
 describe('mobile subscribe residual metadata', () => {
   it.each([undefined, 5, 12])(
-    'strips a snapshot-boundary query without changing transformed span rawLength %s',
+    'strips a snapshot-boundary query and sends rewritten output as text at rawLength %s',
     async (transformedRawLength) => {
       vi.useFakeTimers()
       const controller = new AbortController()
@@ -79,31 +79,18 @@ describe('mobile subscribe residual metadata', () => {
           const frame = decodeTerminalStreamFrame(bytes)
           return frame ? [frame] : []
         })
-        const output = frames.filter(
-          (frame) =>
-            frame.opcode === TerminalStreamOpcode.Output ||
-            frame.opcode === TerminalStreamOpcode.OutputSpan
-        )
+        expect(frames.some((frame) => frame.opcode === TerminalStreamOpcode.OutputSpan)).toBe(false)
+        const output = frames.filter((frame) => frame.opcode === TerminalStreamOpcode.Output)
         expect(
           output.map((frame) => ({
-            opcode: frame.opcode,
             seq: frame.seq,
-            payload:
-              frame.opcode === TerminalStreamOpcode.Output
-                ? decodeTerminalStreamText(frame.payload)
-                : decodeTerminalStreamJson(frame.payload)
+            payload: decodeTerminalStreamText(frame.payload)
           }))
         ).toEqual([
-          { opcode: TerminalStreamOpcode.Output, seq: 15, payload: '\x1b[6nafter' },
+          { seq: 15, payload: '\x1b[6nafter' },
           ...(transformedRawLength === undefined
             ? []
-            : [
-                {
-                  opcode: TerminalStreamOpcode.OutputSpan,
-                  seq: 15 + transformedRawLength,
-                  payload: { data: 'PAINT', rawLength: transformedRawLength, transformed: true }
-                }
-              ])
+            : [{ seq: 15 + transformedRawLength, payload: 'PAINT' }])
         ])
         if (transformedRawLength !== undefined) {
           expect(

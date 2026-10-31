@@ -111,6 +111,12 @@ export class RelayOriginPool {
   }
 
   private createOrigin(assignment: RelayAssignment, relayJwt: string): RelayControlOrigin {
+    if (
+      this.options.allowedCellOrigin !== undefined &&
+      assignment.cellUrl !== this.options.allowedCellOrigin
+    ) {
+      throw new Error('relay_cell_origin_not_allowed')
+    }
     return new RelayControlOrigin({
       ...this.options,
       assignment,

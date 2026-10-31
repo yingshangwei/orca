@@ -96,14 +96,14 @@ describe('one copy of each chat-picked flag', () => {
   )
 
   it.each(['echo --model diagnostic && claude', "claude --append-system-prompt '--model'"])(
-    'preserves picks when override tokens are not agent options: %s',
+    'rejects a custom Claude command even when it also contains model-like text: %s',
     (command) => {
-      const result = launch({
-        cmdOverrides: { claude: command },
-        sessionOptions: { model: 'opus', effort: 'high' }
-      })
-      expect(result.command).toBe(`${command} '--model' 'opus' '--effort' 'high'`)
-      expect(result.appliedSessionOptions).toEqual({ model: 'opus', effort: 'high' })
+      expect(() =>
+        launch({
+          cmdOverrides: { claude: command },
+          sessionOptions: { model: 'opus', effort: 'high' }
+        })
+      ).toThrow('cannot override the connection')
     }
   )
 

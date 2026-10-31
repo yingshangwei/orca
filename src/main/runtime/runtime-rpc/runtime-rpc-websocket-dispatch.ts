@@ -248,6 +248,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
                 authenticatedSocket.clientCapabilities = clientCapabilities
               }
             : undefined,
+        mobileOutboundEvidence: authenticatedSocket?.readOutboundEvidence,
         pairing: pairingContext,
         deviceSelf:
           authenticatedSocket && this.deviceRegistry

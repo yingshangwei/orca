@@ -545,6 +545,11 @@ module.exports = {
         'orca-keyboard-layout',
         context.packager
       )
+      await signMacStandaloneHelper(
+        join(resourcesDir, '..', 'MacOS', 'orca-relay-keychain'),
+        'orca-relay-keychain',
+        context.packager
+      )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
     }
   },
@@ -689,6 +694,10 @@ module.exports = {
       {
         from: 'native/keyboard-layout-macos/.build/release/orca-keyboard-layout',
         to: 'MacOS/orca-keyboard-layout'
+      },
+      {
+        from: 'native/relay-keychain-macos/.build/release/orca-relay-keychain',
+        to: 'MacOS/orca-relay-keychain'
       }
     ],
     target: [

@@ -37,7 +37,7 @@ vi.mock('./relay-session-broker', () => {
   return { RelaySessionBroker }
 })
 
-import { DesktopRelayService } from './desktop-relay-service'
+import { DesktopRelayService, officialRelayBackend } from './desktop-relay-service'
 
 function service(): DesktopRelayService {
   fakes.brokers.length = 0
@@ -61,10 +61,14 @@ function service(): DesktopRelayService {
     })
   } as unknown as OrcaRuntimeRpcServer
   return new DesktopRelayService({
-    authConfig: {
-      relayDirectorUrl: 'https://relay.example.test',
-      relayTokenEndpoint: 'https://login.example.test/relay-token'
-    } as OrcaCloudAuthConfig,
+    backend: officialRelayBackend(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked auth reader and broker only consume these endpoint fields.
+      {
+        relayDirectorUrl: 'https://relay.example.test',
+        relayTokenEndpoint: 'https://login.example.test/relay-token'
+      } as OrcaCloudAuthConfig,
+      '/tmp/orca-relay-liveness-test'
+    ),
     userDataPath: '/tmp/orca-relay-liveness-test',
     appVersion: '1.4.188',
     runtimeRpc,

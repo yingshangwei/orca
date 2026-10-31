@@ -20,6 +20,8 @@ export const AGENT_STATUS_OBSERVATION_ORIGINS = [
   'title',
   /** Derived from the pane's own process/output evidence (e.g. Command Code output seeds). */
   'process',
+  /** Reported by an existing agent in a linked Herdr terminal. */
+  'herdr',
   /** Seeded when Orca launched the agent itself, before any provider signal. */
   'launch',
   /** Stamped by orchestration dispatch rather than by the agent. */

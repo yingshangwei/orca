@@ -5,6 +5,13 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { terminalDocumentDouble } from './document/document-terminal-double.test-support'
 import type { TerminalDocumentTerminal } from './document/document-terminal-shape'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
+import type { TerminalWebViewHandle } from './terminal-webview-contract'
+import { TerminalPaneView } from '../session/TerminalPaneView'
+import {
+  meterTerminalWrites,
+  pageTerminalOutputMeter,
+  type TerminalDocumentOutputMeter
+} from './terminal-page-output-meter'
 import { TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'
 import terminalNerdFontUrl from '../../assets/fonts/SymbolsNerdFontMono-Regular.woff2'
 
@@ -52,6 +59,7 @@ vi.mock('react-native', () => ({
   AppState: { addEventListener: () => ({ remove() {} }) }
 }))
 vi.mock('lucide-react-native', () => ({ RefreshCw: 'Icon' }))
+vi.mock('./TerminalWebView', () => import('./TerminalWebView.web'))
 
 const { createTerminalDocument } = await import('./document/create-terminal-document')
 const { mountTerminalWebDocument } = await import('./terminal-web-document-mount')
@@ -89,6 +97,187 @@ afterEach(() => {
   renderer = null
   restoreTransform?.()
   restoreTransform = null
+})
+
+describe('the page output meter sees what the document is handed', () => {
+  it('counts a write, starts over on a new snapshot, and forgets a disposed document', () => {
+    gridTerminal = () => {
+      const engine = terminalDocumentDouble()
+      engine.terminal.write = () => {}
+      return engine.terminal
+    }
+    const terminal = mountTerminalWebDocument(plantHost(), () => {})
+
+    terminal.send({ type: 'write', data: 'output', id: 1 })
+    expect(pageTerminalOutputMeter.read().pendingChars).toBe('output'.length)
+
+    terminal.send({ ...INIT, initialData: 'snap', frame: null, id: 2 })
+    expect(pageTerminalOutputMeter.read().pendingChars).toBe('snap'.length)
+
+    terminal.dispose()
+    expect(pageTerminalOutputMeter.read()).toMatchObject({ documents: 0, pendingChars: 0 })
+  })
+
+  /**
+   * A mounted document whose xterm never finishes a write until the case says so. The grid seam
+   * stands in for the mount's `createTerminal`, so the case wraps the double with the mount's meter.
+   */
+  async function mountWithWriteInFlight() {
+    const parses: (() => void)[] = []
+    const attachDocument = pageTerminalOutputMeter.attachDocument
+    let meter: TerminalDocumentOutputMeter | null = null
+    const attach = vi.spyOn(pageTerminalOutputMeter, 'attachDocument').mockImplementation(() => {
+      meter = attachDocument()
+      return meter
+    })
+    gridTerminal = () => {
+      const engine = terminalDocumentDouble()
+      engine.terminal.write = (_data, callback) => {
+        parses.push(() => callback?.())
+      }
+      return meter ? meterTerminalWrites(engine.terminal, meter) : engine.terminal
+    }
+    const terminal = mountTerminalWebDocument(plantHost(), () => {})
+    attach.mockRestore()
+    terminal.send({ ...INIT, frame: null, id: 1 })
+    await settle()
+    terminal.send({ type: 'write', data: 'output', id: 2 })
+    expect(parses).toHaveLength(1)
+    return { parses, terminal }
+  }
+
+  it('does not let the replaced terminal parse settle a new snapshot', async () => {
+    const { parses, terminal } = await mountWithWriteInFlight()
+
+    terminal.send({ ...INIT, initialData: 'snap', frame: null, id: 3 })
+    parses[0]?.()
+
+    expect(pageTerminalOutputMeter.read().pendingChars).toBe('snap'.length)
+    terminal.dispose()
+  })
+
+  it('does not let a parse from before a clear settle what follows it', async () => {
+    const { parses, terminal } = await mountWithWriteInFlight()
+
+    terminal.send({ type: 'clear', id: 3 })
+    terminal.send({ type: 'write', data: 'next', id: 4 })
+    parses[0]?.()
+
+    expect(pageTerminalOutputMeter.read().pendingChars).toBe('next'.length)
+    parses[1]?.()
+    expect(pageTerminalOutputMeter.read().pendingChars).toBe(0)
+    terminal.dispose()
+  })
+})
+
+describe('terminal panes start when first selected', () => {
+  it('starts only the selected document among several terminal tabs', () => {
+    vi.useFakeTimers()
+    const count = 3
+    const refs = new Map<string, TerminalWebViewHandle>()
+    const ready: string[] = []
+    const engines: ReturnType<typeof terminalDocumentDouble>[] = []
+    const replayed: string[] = []
+    const addListener = vi.spyOn(document, 'addEventListener')
+    const removeListener = vi.spyOn(document, 'removeEventListener')
+    gridTerminal = () => {
+      const engine = terminalDocumentDouble()
+      engine.terminal.write = (data, callback) => {
+        replayed.push(data)
+        callback?.()
+      }
+      engines.push(engine)
+      return engine.terminal
+    }
+    const noop = () => {}
+    const onRef = (handle: string, ref: TerminalWebViewHandle | null) => {
+      if (ref) {
+        refs.set(handle, ref)
+      } else {
+        refs.delete(handle)
+      }
+    }
+    const onWebReady = (handle: string) => {
+      ready.push(handle)
+      const ref = refs.get(handle)
+      expect(ref).toBeDefined()
+      void ref?.init({ ...INIT, initialData: `snapshot:${handle}`, frame: null })
+    }
+    const panes = (selected: number) =>
+      Array.from({ length: count }, (_, index) =>
+        createElement(TerminalPaneView, {
+          key: index,
+          handle: `terminal-${index}`,
+          active: index === selected,
+          keyboardLift: 0,
+          textScale: 1,
+          onRef,
+          onWebReady,
+          onTextScaleChange: noop,
+          onCellBoxChange: noop,
+          onSelectionMode: noop,
+          onSelectionCopy: noop,
+          onSelectionEvicted: noop,
+          onModesChanged: noop,
+          onKeyboardAvoidanceMetrics: noop,
+          onHaptic: noop,
+          onTerminalInput: noop,
+          onTerminalQueryReply: noop,
+          onTerminalTap: noop,
+          onFileTap: noop,
+          onOpenUrl: noop
+        })
+      )
+    const documentListeners = () => addListener.mock.calls.length - removeListener.mock.calls.length
+    try {
+      act(() => {
+        renderer = create(createElement('div', null, panes(0)), {
+          createNodeMock: () => plantHost()
+        })
+      })
+      expect(startedBuilds).toEqual([true])
+      expect(ready).toEqual(['terminal-0'])
+      expect(refs.size).toBe(1)
+      expect(document.querySelectorAll(`.${HOST_CLASS}`)).toHaveLength(1)
+      const perDocument = documentListeners()
+      expect(perDocument).toBeGreaterThan(0)
+      const firstHost = document.querySelector(`.${HOST_CLASS}`)
+      act(() => {
+        vi.advanceTimersByTime(32)
+      })
+      expect(replayed).toEqual([expect.stringContaining('snapshot:terminal-0')])
+
+      act(() => renderer?.update(createElement('div', null, panes(1))))
+      expect(startedBuilds).toEqual([true, true])
+      expect(ready).toEqual(['terminal-0', 'terminal-1'])
+      expect(refs.size).toBe(2)
+      expect(documentListeners()).toBe(2 * perDocument)
+      act(() => {
+        vi.advanceTimersByTime(32)
+      })
+      expect(replayed).toEqual([
+        expect.stringContaining('snapshot:terminal-0'),
+        expect.stringContaining('snapshot:terminal-1')
+      ])
+
+      act(() => renderer?.update(createElement('div', null, panes(0))))
+      expect(document.querySelector(`.${HOST_CLASS}`)).toBe(firstHost)
+      expect(startedBuilds).toEqual([true, true])
+      expect(ready).toEqual(['terminal-0', 'terminal-1'])
+      expect(engines.map((engine) => engine.disposals())).toEqual([0, 0])
+
+      act(() => renderer?.unmount())
+      renderer = null
+      expect(refs.size).toBe(0)
+      expect(document.querySelectorAll(`.${HOST_CLASS}`)).toHaveLength(0)
+      expect(documentListeners()).toBe(0)
+      expect(engines.map((engine) => engine.disposals())).toEqual([1, 1])
+    } finally {
+      vi.useRealTimers()
+      addListener.mockRestore()
+      removeListener.mockRestore()
+    }
+  })
 })
 
 describe('a stopped document takes its engines with it', () => {

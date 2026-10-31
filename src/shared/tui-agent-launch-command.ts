@@ -12,6 +12,10 @@ import {
   type AgentStartupShell
 } from './tui-agent-startup-shell'
 import type { TuiAgent } from './tui-agent'
+import {
+  assertClaudeArgumentsUnmodified,
+  CLAUDE_LOCAL_CONFIGURATION_MESSAGE
+} from './claude-local-policy'
 
 export type ResolvedAgentLaunchCommand =
   | {
@@ -33,6 +37,9 @@ export function resolveAgentLaunchCommand(args: {
   isRemote?: boolean
 }): ResolvedAgentLaunchCommand {
   const override = args.cmdOverrides[args.agent]
+  if (args.agent === 'claude' && (override?.trim() || args.isRemote)) {
+    return { ok: false, error: CLAUDE_LOCAL_CONFIGURATION_MESSAGE }
+  }
   const command =
     override ||
     getTuiAgentLaunchCommand(TUI_AGENT_CONFIG[args.agent], args.platform, {
@@ -47,6 +54,16 @@ export function resolveAgentLaunchCommand(args: {
     : { ok: true as const, tokens: [], spans: [] }
   if (!trailingTokens.ok) {
     return { ok: false, error: `CLI arguments are invalid: ${trailingTokens.error}` }
+  }
+  if (args.agent === 'claude') {
+    try {
+      assertClaudeArgumentsUnmodified(trailingTokens.tokens)
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : CLAUDE_LOCAL_CONFIGURATION_MESSAGE
+      }
+    }
   }
   const resolvedOptions = resolveAgentSessionOptionLaunch(
     args.agent,

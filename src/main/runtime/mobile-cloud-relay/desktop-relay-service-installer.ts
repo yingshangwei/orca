@@ -21,6 +21,9 @@ export type DesktopRelayServiceInstaller = {
   // Sign-out: refuse installs, including one already waiting, until the next auth change.
   suspend(): void
   authChanged(): Promise<boolean>
+  // Backend switch: stop the installed service, fence any install still in flight
+  // (it must not land after the switch), then install for the new selection.
+  reconfigure(): Promise<boolean>
 }
 
 function pairingProviderFor(service: DesktopRelayService): MobileRelayPairingProvider {
@@ -42,8 +45,12 @@ export function createDesktopRelayServiceInstaller(
   let installed: DesktopRelayService | null = null
   let pending: Promise<boolean> | null = null
   let suspended = false
-  const install = async (): Promise<boolean> => {
+  let generation = 0
+  const install = async (installGeneration: number): Promise<boolean> => {
     await options.whenNetworkReady
+    if (installGeneration !== generation) {
+      return false
+    }
     if (installed || suspended || options.isFenced()) {
       return installed !== null
     }
@@ -69,9 +76,14 @@ export function createDesktopRelayServiceInstaller(
     if (installed) {
       return Promise.resolve(true)
     }
-    pending ??= install().finally(() => {
-      pending = null
-    })
+    if (!pending) {
+      const request = install(generation).finally(() => {
+        if (pending === request) {
+          pending = null
+        }
+      })
+      pending = request
+    }
     return pending
   }
   return {
@@ -80,6 +92,17 @@ export function createDesktopRelayServiceInstaller(
       suspended = true
     },
     authChanged: () => {
+      suspended = false
+      return ensure()
+    },
+    reconfigure: () => {
+      generation += 1
+      pending = null
+      const previous = installed
+      installed = null
+      options.runtimeRpc.setMobileRelayPairingProvider(null)
+      previous?.stop()
+      // Why unsuspend: a sign-out fence belongs to the backend it was raised for.
       suspended = false
       return ensure()
     }

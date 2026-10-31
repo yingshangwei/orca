@@ -1,3 +1,4 @@
+import { refuseClaudeConfigurationMutation } from '../../shared/claude-local-policy'
 import { spawnProcess } from '@orca/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
@@ -38,6 +39,9 @@ export function runClaudeCommandProcess(
   timeoutMs: number,
   options?: ClaudeCommandOptions
 ): Promise<string> {
+  if (args[0] === 'auth') {
+    refuseClaudeConfigurationMutation()
+  }
   return new Promise((resolvePromise, rejectPromise) => {
     const isWindowsHostInteractiveLogin =
       process.platform === 'win32' &&

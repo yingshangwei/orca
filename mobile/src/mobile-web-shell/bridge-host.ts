@@ -204,7 +204,10 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
     readClientIdentity: () => options.readClientIdentity(),
     serveNative: createNativeVerbServer({
       granted,
-      serveVerb: (verb, params) => options.serveNativeVerb(verb, params)
+      serveVerb: (verb, params) =>
+        verb === 'native.link.snapshot'
+          ? Promise.resolve({ heldOutputBytes: subscriptions.heldOutputBytes })
+          : options.serveNativeVerb(verb, params)
     })
   })
 

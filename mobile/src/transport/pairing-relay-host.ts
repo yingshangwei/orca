@@ -3,6 +3,7 @@ import type {
   MobileRelayEndpoint
 } from '../../../src/shared/mobile-relay-credential-contract'
 import type { MobileRelayPairingJournal } from './mobile-relay-pairing-journal'
+import { relayBackendOrigin } from './pairing-backend-scope'
 import type { HostProfile } from './types'
 
 export function relayHost(
@@ -11,6 +12,20 @@ export function relayHost(
 ): HostProfile {
   const host = journal.metadata.host
   return { ...host, deviceToken: journal.secrets.deviceToken, relay }
+}
+
+/** Why: the host id was chosen for the scanned backend; a desktop that switched provider must not repoint that card. */
+export function assertRelayEndpointMatchesJournal(
+  journal: MobileRelayPairingJournal,
+  relay: MobileRelayEndpoint
+): void {
+  const expected = journal.metadata.relay
+  if (
+    relay.relayHostId !== expected.relayHostId ||
+    relayBackendOrigin(relay.directorUrl) !== relayBackendOrigin(expected.directorUrl)
+  ) {
+    throw new Error('desktop relay endpoint does not match the scanned relay backend')
+  }
 }
 
 export function assertCommittedInstall(

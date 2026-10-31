@@ -57,6 +57,31 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
     void window.api.updater.quitAndInstall().catch(console.error)
   }
 
+  if (updateStatus.updatesDisabled) {
+    return (
+      <section className="space-y-4" data-testid="local-updates-disabled">
+        <SettingsSubsectionHeader
+          title={translate(
+            'auto.components.settings.GeneralUpdateSettingsSection.f2b1ccc12a',
+            'Updates'
+          )}
+          description={translate(
+            'auto.components.settings.GeneralUpdateSettingsSection.d91ebfb87e',
+            'Current version: {{value0}}',
+            { value0: appVersion ?? '...' }
+          )}
+        />
+        <p className="text-sm text-muted-foreground">
+          {translate(
+            'updates.localBuildDisabled',
+            'Official updates and update notifications are disabled for this local build.'
+          )}
+        </p>
+        <GeneralRemoteServerUpdates />
+      </section>
+    )
+  }
+
   return (
     <section key="updates" className="space-y-4">
       <div

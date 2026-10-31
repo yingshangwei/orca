@@ -240,6 +240,26 @@ describe('Store', () => {
     expect(persisted.workspaceLineageByChildKey).not.toHaveProperty('worktree:r1::/tmp/wt')
   })
 
+  it('retains imported folders after repairing an empty group path and reopening the store', async () => {
+    const store = await createStore()
+    const group = store.createProjectGroup({ name: 'Herdr import', createdFrom: 'manual' })
+    const workspace = store.createFolderWorkspace({
+      projectGroupId: group.id,
+      name: 'Existing terminal',
+      folderPath: '/workspace/project'
+    })
+    store.updateProjectGroup(group.id, { parentPath: '/workspace/project' })
+    store.updateProjectGroup(group.id, { parentPath: '/workspace/another' })
+    store.flush()
+    await closeTestStores()
+
+    const reopened = await createStore()
+    expect(reopened.getFolderWorkspaces().map((entry) => entry.id)).toContain(workspace.id)
+    expect(reopened.getProjectGroups().find((entry) => entry.id === group.id)?.parentPath).toBe(
+      '/workspace/project'
+    )
+  })
+
   it('creates and updates folder workspaces from folder-backed project groups', async () => {
     const store = await createStore()
     const group = store.createProjectGroup({

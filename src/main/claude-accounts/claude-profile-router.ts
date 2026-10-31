@@ -1,13 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { refuseClaudeConfigurationMutation } from '../../shared/claude-local-policy'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { isAgentStatusHooksEnabledForAgent } from '../../shared/agent-status-hooks-setting'
-import {
-  CLAUDE_INJECTED_CONFIG_DIR_ENV,
-  CLAUDE_PROFILE_POINTER_ENV,
-  CLAUDE_PROFILE_SETUP_FAILED_MESSAGE,
-  CLAUDE_USER_CONFIG_DIR_ENV
-} from '../../shared/claude-profile-routing'
 import { claudeProfileMissing, claudeProfileSetupFailed } from './claude-profile-launch-errors'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { probeRecentClaudeCliVersion } from '../claude/claude-hook-event-versions'
@@ -18,7 +13,6 @@ import {
   describeClaudeProfile,
   type ClaudeProfileDescriptor,
   readUserClaudeConfigDir,
-  readUserClaudeConfigDirAsSet,
   resolveClaudeDefaultHome
 } from './claude-profile-paths'
 import type { ClaudeProfileSetupReport } from './claude-profile-setup'
@@ -30,7 +24,6 @@ import {
   getSelectedClaudeAccountIdForTarget,
   type ClaudeAccountSelectionTarget
 } from './runtime-selection'
-import { wslClaudeProfilePointer } from './claude-profile-wsl-paths'
 import { isDirectory, listClaudeProfileHomes } from './claude-profile-installed-router'
 import {
   claudeStateFile,
@@ -61,7 +54,6 @@ export class ClaudeProfileRouter {
   private readonly setups = new Map<string, Promise<ClaudeProfileSetupReport>>()
   private env: NodeJS.ProcessEnv
   private readonly envReady: Promise<unknown>
-  private envResolved: boolean
   constructor(
     private readonly args: {
       getSettings: () => ClaudeProfileRouterSettings
@@ -78,12 +70,10 @@ export class ClaudeProfileRouter {
     this.pointerPath = join(args.dataRoot, 'claude-profiles', 'selected-host')
     this.env = args.env ?? process.env
     // Why the login shell's: a Dock launch lacks the CLAUDE_CONFIG_DIR an rc exports. Chats share it.
-    this.envResolved = Boolean(args.env)
     this.envReady = args.env
       ? Promise.resolve()
       : resolveLoginShellEnvironment().then((env) => {
           this.env = env
-          this.envResolved = true
           // Why: a pointer written before then compared against the wrong System default.
           try {
             this.writePointer()
@@ -99,6 +89,9 @@ export class ClaudeProfileRouter {
 
   private selectedProfile(): ClaudeProfileDescriptor | null {
     const id = getSelectedClaudeAccountIdForTarget(this.args.getSettings(), { runtime: 'host' })
+    if (id) {
+      refuseClaudeConfigurationMutation()
+    }
     return id ? this.describe(id) : null
   }
 
@@ -216,13 +209,8 @@ export class ClaudeProfileRouter {
   }
 
   /** Creates and sets up an account's folder for sign-in; the login itself is Claude's. */
-  async prepareAccount(accountId: string): Promise<string> {
-    const profile = this.describe(accountId)
-    const report = await this.setUp(profile).catch(() => null)
-    if (report?.outcome !== 'prepared') {
-      throw new Error(CLAUDE_PROFILE_SETUP_FAILED_MESSAGE)
-    }
-    return profile.home
+  async prepareAccount(_accountId: string): Promise<string> {
+    return refuseClaudeConfigurationMutation()
   }
 
   /** Deletes an account's folder after any setup running for it, which would otherwise recreate it. */
@@ -279,43 +267,11 @@ export class ClaudeProfileRouter {
 
   /** Env for a launch Orca makes itself. Throws like routedHome. */
   launchEnv(): ClaudeEnvPatch {
-    const home = this.routedHome()
-    return {
-      [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath,
-      // Why nothing for System default: the user's inherited CLAUDE_CONFIG_DIR must pass through.
-      ...(home ? { CLAUDE_CONFIG_DIR: home, [CLAUDE_INJECTED_CONFIG_DIR_ENV]: home } : {})
-    }
+    return {}
   }
 
-  /** A pane's spawn env. Never throws, so a broken selection cannot stop a terminal opening. */
-  terminalEnv(target?: ClaudeAccountSelectionTarget): ClaudeEnvPatch {
-    // Why only the pointer: the guest's `claude` reads it, so a pane never waits on the guest.
-    if (target?.runtime === 'wsl') {
-      return { [CLAUDE_PROFILE_POINTER_ENV]: `~/${wslClaudeProfilePointer(this.args.dataRoot)}` }
-    }
-    // Why the user's own value in every host pane: the claude function follows the selection over
-    // it (an rc export, or the inherited value) and restores it on System default.
-    const userConfigDir = readUserClaudeConfigDirAsSet(this.env)
-    const base: ClaudeEnvPatch = {
-      [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath,
-      ...(userConfigDir ? { [CLAUDE_USER_CONFIG_DIR_ENV]: userConfigDir } : {})
-    }
-    // Why only the pointer before the login shell's env: which home runs depends on its
-    // CLAUDE_CONFIG_DIR, and the pane's `claude` reads the pointer rewritten once it arrives.
-    if (!this.envResolved) {
-      return base
-    }
-    try {
-      this.writePointer()
-      // Why in the background: a pane never waits; its `claude` starts after the refresh, mostly.
-      const profile = this.routedProfile()
-      if (profile) {
-        this.setUpInBackground(profile)
-      }
-      return { ...base, ...this.launchEnv() }
-    } catch {
-      return base
-    }
+  terminalEnv(_target?: ClaudeAccountSelectionTarget): ClaudeEnvPatch {
+    return {}
   }
 
   preparation(): ClaudeRuntimeAuthPreparation {

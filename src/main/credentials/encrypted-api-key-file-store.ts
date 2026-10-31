@@ -1,4 +1,4 @@
-import { getSecretStore } from '../../shared/secret-store'
+import { assertPlaintextFallbackAllowed, getSecretStore } from '../../shared/secret-store'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -126,6 +126,7 @@ export function createEncryptedApiKeyFileStore({
       cachedApiKey = trimmed
       return
     }
+    assertPlaintextFallbackAllowed()
     console.warn(
       `[${logScope}] safeStorage encryption unavailable — storing ${providerLabel} API key in plaintext`
     )

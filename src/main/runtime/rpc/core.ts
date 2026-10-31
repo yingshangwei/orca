@@ -10,6 +10,7 @@ import type {
   PairingProvisionRelayParams
 } from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
+import type { MobileLinkOutboundEvidence } from '../../../shared/mobile-link-probe-contract'
 import type {
   MobileRelayHostsListResult,
   MobileRelayHostWorktreesResult
@@ -111,6 +112,8 @@ export type RpcContext = {
   clientCapabilities?: readonly RuntimeCapability[]
   // Why: mobile v2 auth is exact-key validated; capability upgrades must mutate only the authenticated socket after auth.
   updateClientCapabilities?: (capabilities: readonly RuntimeCapability[]) => void
+  // Why: the link probe reads its own socket's queues; undefined off an E2EE mobile socket.
+  mobileOutboundEvidence?: () => MobileLinkOutboundEvidence
   // Why: long-lived mutations such as ask can durably expose acceptance before their waiter settles.
   recordMutationReceipt?: (receipt: unknown) => void
   // Why: only local worker_done makes pending proof that its atomic settlement transaction never committed.

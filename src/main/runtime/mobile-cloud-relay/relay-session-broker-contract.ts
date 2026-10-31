@@ -1,5 +1,4 @@
 import type WebSocket from 'ws'
-import type { OrcaCloudAuthConfig } from '../../orca-profiles/profile-cloud-auth-config'
 import type { MobileRelayStatus } from '../../../shared/mobile-relay-status'
 import type { E2EEKeypair } from '../e2ee-keypair'
 import type { MobileSocketWiring } from '../rpc/mobile-socket-wiring'
@@ -21,8 +20,15 @@ export type RelayAccessTokenRefresh =
   | { accessToken: string }
   | { accessToken: null; hostCloseReason?: RelayHostCloseReason }
 
+// The only backend fields the broker reads; Orca's OAuth config satisfies it as-is.
+export type RelayBackendEndpoints = {
+  relayDirectorUrl: string
+  relayTokenEndpoint: string
+  relayCellOrigin?: string
+}
+
 export type RelaySessionBrokerOptions = {
-  authConfig: OrcaCloudAuthConfig
+  authConfig: RelayBackendEndpoints
   accessToken: string
   identity: RelayIdentity
   keypair: E2EEKeypair

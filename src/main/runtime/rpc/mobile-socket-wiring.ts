@@ -6,6 +6,7 @@ import { devicePrincipalOf } from '../device-principal'
 import type { E2EEKeypair } from '../e2ee-keypair'
 import { E2EEChannel, type E2EEAuthenticatedDevice } from './e2ee-channel'
 import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
+import type { MobileLinkOutboundEvidence } from '../../../shared/mobile-link-probe-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { RpcBinarySender } from './rpc-binary-sender'
 
@@ -44,6 +45,7 @@ export type AuthenticatedMobileSocket = {
   transcriptHashB64: string | null
   clientCapabilities: readonly RuntimeCapability[]
   transport: MobileSocketTransportMetadata
+  readOutboundEvidence?: () => MobileLinkOutboundEvidence
 }
 
 type MobileSocketWiringOptions = {
@@ -234,7 +236,8 @@ export class MobileSocketWiring {
             set clientCapabilities(next: readonly RuntimeCapability[]) {
               channel.clientCapabilities = next
             },
-            transport: metadata
+            transport: metadata,
+            readOutboundEvidence: () => channel.outboundEvidence()
           }
           this.authenticatedSockets.set(ws, socket)
           transport.setClientId(ws, device.deviceId)

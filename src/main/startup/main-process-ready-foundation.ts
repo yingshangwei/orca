@@ -19,6 +19,7 @@ import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { initializeBrowserClientHostId } from '../browser/browser-client-host-id'
 import { scheduleSecretProtectionGapReport } from '../host/deferred-secret-protection-report'
 import { withholdUnreachableKeychainForServe } from '../host/serve-keychain-guard'
+import { withholdKeychainForLocalDesktopBuild } from '../host/desktop-keychain-guard'
 import { initSshHostKeyStoreFile } from '../ssh/ssh-host-key-store'
 import { initOrcadHeldFenceTokenFile } from '../ssh/orcad-held-fence-tokens'
 import { neutralizeLegacyTerminalShimDir } from '../pty/legacy-terminal-shim-dir'
@@ -104,10 +105,17 @@ export async function initializeReadyFoundation(): Promise<void> {
   // existing post-ready rename, which lands after the Keychain name is already resolved.
   app.setName(identity.appName)
   updateGpuAccelerationAboutPanel()
+  // Why before the profile loads: loading can decrypt secrets, which is the call that hangs.
+  const usesMockKeychain = app.commandLine.hasSwitch('use-mock-keychain')
   if (state.isServeMode) {
-    // Why before the profile loads: loading can decrypt secrets, which is the call that hangs.
-    await withholdUnreachableKeychainForServe({
-      usesMockKeychain: app.commandLine.hasSwitch('use-mock-keychain')
+    await withholdUnreachableKeychainForServe({ usesMockKeychain })
+  } else {
+    // Why the desktop too: every rebuild of a local build is a stranger to the keychain item,
+    // and a dialog nobody answers must not cost the window or the retained terminals.
+    withholdKeychainForLocalDesktopBuild({
+      version: app.getVersion(),
+      isPackaged: app.isPackaged,
+      usesMockKeychain
     })
   }
   // Why: managed WSL launchers live outside the Windows app bundle, so keep their launcher/bridge contract synced across app updates.

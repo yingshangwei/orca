@@ -2,6 +2,7 @@
 // reader's existing exception, kept byte-for-byte so Claude's credential path and
 // its tests are unchanged. See the child_process import allowlist.
 import { execFile } from 'node:child_process'
+import { SafeStorageWithheldError, securityCommandsWithheldReason } from '../host/keychain-withhold'
 
 const KEYCHAIN_COMMAND_TIMEOUT_MS = 3_000
 
@@ -24,7 +25,13 @@ export function isKeychainNotFoundError(error: unknown): boolean {
   return code === 44 || message.includes('could not be found') || message.includes('not be found')
 }
 
+/** Every launch, account removal's delete included, honours a run's `security(1)` withhold. */
 export function execSecurityCommand(args: string[]): Promise<SecurityCommandResult> {
+  const withheld = securityCommandsWithheldReason()
+  if (withheld !== null) {
+    // Why a rejection: callers chain `.then(ok, fail)`, which a synchronous throw would skip.
+    return Promise.reject(new SafeStorageWithheldError(withheld))
+  }
   return new Promise((resolve, reject) => {
     let settled = false
     let child: ReturnType<typeof execFile> | undefined

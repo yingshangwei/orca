@@ -32,7 +32,7 @@ import { useReportedHostAreaServing } from './host-area-serving'
 import { isHostRouteOf } from './page-route-policy'
 import { PageRouteUnavailableScreen } from './PageRouteUnavailableScreen'
 import { useResponsiveLayout } from '../layout/responsive-layout'
-import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
+import { storageReadParamsSchema, type ScreenServedNativeVerb } from './bridge/bridge-native-verbs'
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { useReportedShellOverlayLoad, type ShellOverlayLoad } from './shell-overlay-load'
@@ -187,7 +187,7 @@ export function MobileWebShellScreen({
   // media verbs hold staged files, and a registry born after the host would outlive the page.
   const serveDeviceVerb = useNativeDeviceVerbs(state.kind === 'ready' ? state.sessionId : null)
   // The storage read is the shell's own store rather than the device's, scoped to this host.
-  const serveNativeVerb = (verb: BridgeNativeVerb, params: unknown): Promise<unknown> =>
+  const serveNativeVerb = (verb: ScreenServedNativeVerb, params: unknown): Promise<unknown> =>
     verb === 'native.storage.read'
       ? readWorkspaceKey(storageReadParamsSchema.parse(params).key).then((value) => ({ value }))
       : serveDeviceVerb(verb, params)

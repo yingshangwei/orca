@@ -1,3 +1,4 @@
+import { CLAUDE_DIRECT_REQUEST_MESSAGE } from '../../shared/claude-local-policy'
 import type { ProviderRateLimits, UsageRateLimitMetadata } from '../../shared/rate-limit-types'
 
 export function abortedClaudeRateLimitResult(): ProviderRateLimits {
@@ -31,6 +32,12 @@ export function makeClaudeUsageResult(
 export function claudeUsageUnavailable(): ProviderRateLimits {
   return makeClaudeUsageResult('error', 'Claude usage is unavailable right now.', {
     failureKind: 'usage-unavailable',
+    attemptedSources: []
+  })
+}
+
+export function disabledClaudeUsageResult(): ProviderRateLimits {
+  return makeClaudeUsageResult('unavailable', CLAUDE_DIRECT_REQUEST_MESSAGE, {
     attemptedSources: []
   })
 }

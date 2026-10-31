@@ -25,7 +25,7 @@ import {
 } from './mobile-relay-physical-client'
 import { isExplicitCredentialRejection } from './relay-credential-eligibility'
 import { createRecoveringPairingRelayCandidate } from './pairing-relay-candidate'
-import { relayHost } from './pairing-relay-host'
+import { assertRelayEndpointMatchesJournal, relayHost } from './pairing-relay-host'
 import {
   relayCredentialProvision,
   relayPairingEndpointsRead
@@ -277,6 +277,8 @@ async function publishCommitted(
   if (endpoints.installStatus?.state !== 'committed' || !endpoints.relay) {
     throw new Error('relay pairing recovery was not committed')
   }
+  // Why: throwing before the claim keeps the journal when the desktop switched provider after a crash.
+  assertRelayEndpointMatchesJournal(journal, endpoints.relay)
   const installed = endpoints.installStatus.result
   const release = await dependencies.claimJournal(journal.metadata.journalId)
   try {

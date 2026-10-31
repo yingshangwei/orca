@@ -10,6 +10,11 @@ import terminalNerdFontUrl from '../../assets/fonts/SymbolsNerdFontMono-Regular.
 import { terminalNerdFontCss } from './terminal-nerd-font-css.mjs'
 import { createTerminalDocument } from './document/create-terminal-document'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
+import {
+  meterTerminalWrites,
+  pageTerminalOutputMeter,
+  type TerminalDocumentOutputMeter
+} from './terminal-page-output-meter'
 
 /**
  * The terminal document, mounted in the page instead of in a WebView.
@@ -110,14 +115,35 @@ export function mountTerminalWebDocument(
   host.classList.add(HOST_CLASS)
   host.innerHTML = TERMINAL_DOCUMENT_MARKUP
   const viewport = pageViewport(host)
-  const started = startDocumentOrGiveTheHostBack(host, receive, start, viewport)
+  const meter = pageTerminalOutputMeter.attachDocument()
+  let started: ReturnType<typeof startDocumentOrGiveTheHostBack>
+  try {
+    started = startDocumentOrGiveTheHostBack(host, receive, start, viewport, meter)
+  } catch (error) {
+    meter.detach()
+    throw error
+  }
+  // Passive: a scroll sample must never delay the gesture it is measuring.
+  host.addEventListener('touchmove', meter.activity, { passive: true })
 
   return {
     send: (command) => {
+      if (command.type === 'write') {
+        meter.queued(command.data.length)
+      } else if (command.type === 'init') {
+        meter.reset()
+        if (command.initialData) {
+          meter.queued(command.initialData.length)
+        }
+      } else if (command.type === 'clear') {
+        meter.reset()
+      }
       started.send(command)
     },
     notifyViewport: viewport.notify,
     dispose: () => {
+      host.removeEventListener('touchmove', meter.activity)
+      meter.detach()
       started.stop()
       host.innerHTML = ''
       // The sheet stays in the head; the class does not, so every rule in it matches nothing
@@ -139,10 +165,11 @@ function startDocumentOrGiveTheHostBack(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void,
   start: TerminalDocumentStart,
-  viewport: PageViewport
+  viewport: PageViewport,
+  meter: TerminalDocumentOutputMeter
 ) {
   try {
-    return startPageDocument(host, receive, start, viewport)
+    return startPageDocument(host, receive, start, viewport, meter)
   } catch (error) {
     host.innerHTML = ''
     host.classList.remove(HOST_CLASS)
@@ -195,7 +222,8 @@ function startPageDocument(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void,
   start: TerminalDocumentStart,
-  viewport: PageViewport
+  viewport: PageViewport,
+  meter: TerminalDocumentOutputMeter
 ) {
   // Written by this document's own reporter: `startHostNotify` installs it through the seam below,
   // which here is a `window` error listener, and every error it forwards is appended before the
@@ -255,8 +283,12 @@ function startPageDocument(
     // The host resizes without the window, and RN layout is what says so: the component pushes it.
     observeViewport: viewport.observe,
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shape is xterm's own, except that `getCell` takes back the cell xterm allocated and the document declares only the members it reads on one.
-    createTerminal: (options) => new Terminal(options) as unknown as TerminalDocumentTerminal,
+    createTerminal: (options) =>
+      meterTerminalWrites(
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shape is xterm's own, except that `getCell` takes back the cell xterm allocated and the document declares only the members it reads on one.
+        new Terminal(options) as unknown as TerminalDocumentTerminal,
+        meter
+      ),
     createUnicode11Addon: () => new Unicode11Addon(),
     createWebglAddon: () =>
       createPageWebglAddon((reason) =>

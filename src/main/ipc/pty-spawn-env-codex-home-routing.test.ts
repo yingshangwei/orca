@@ -387,16 +387,16 @@ describe('registerPtyHandlers', () => {
       expect(env.CODEX_HOME).toBe(TEST_CODEX_HOME)
       expect(env.ORCA_CODEX_HOME).toBe(TEST_CODEX_HOME)
     })
-    it('injects explicit proxy settings into local PTY env', async () => {
+    it('keeps Orca HTTP proxy settings out of shells that may launch Claude', async () => {
       const env = await spawnAndGetEnv(undefined, undefined, undefined, () => ({
         httpProxyUrl: 'http://proxy.example:8080',
         httpProxyBypassRules: 'localhost,*.internal'
       }))
 
-      expect(env.HTTP_PROXY).toBe('http://proxy.example:8080')
-      expect(env.HTTPS_PROXY).toBe('http://proxy.example:8080')
-      expect(env.ALL_PROXY).toBe('http://proxy.example:8080')
-      expect(env.NO_PROXY).toBe('localhost,*.internal')
+      expect(env.HTTP_PROXY).not.toBe('http://proxy.example:8080')
+      expect(env.HTTPS_PROXY).not.toBe('http://proxy.example:8080')
+      expect(env.ALL_PROXY).not.toBe('http://proxy.example:8080')
+      expect(env.NO_PROXY).not.toBe('localhost,*.internal')
     })
   })
 })

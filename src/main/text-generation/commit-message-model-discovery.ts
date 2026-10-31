@@ -1,3 +1,5 @@
+import { CLAUDE_LOCAL_CONFIGURATION_MESSAGE } from '../../shared/claude-local-policy'
+import { assertLocalClaudeCommand } from '../claude/claude-local-launch-policy'
 import { isMissingProviderExecutable } from '../provider-process/provider-executable-missing'
 import { mergeCommandEnvironment } from '../../shared/command-environment'
 import type { CommandTemplateBackslash } from '../../shared/commit-message-prompt'
@@ -62,6 +64,21 @@ export async function discoverModelsLocal(
   if (!planned.ok) {
     return { success: false, error: planned.error }
   }
+  if (input.agentId === 'claude') {
+    try {
+      await assertLocalClaudeCommand({
+        ...planned.plan,
+        binary: input.binary ?? planned.plan.binary,
+        inheritedEnv: input.env,
+        ...input.options
+      })
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : CLAUDE_LOCAL_CONFIGURATION_MESSAGE
+      }
+    }
+  }
   const env = mergeCommandEnvironment(
     input.env,
     planned.plan.env,
@@ -115,7 +132,7 @@ async function discoverModelsOnce(
           commandEnv: plan.env,
           wslDistro: input.options.wslDistro,
           stdinMode: plan.stdinPayload === null ? 'ignore' : 'pipe',
-          useCwdForNative: false
+          useCwdForNative: input.agentId === 'claude'
         })
         if (plan.stdinPayload !== null) {
           child.stdin?.on?.('error', () => {})

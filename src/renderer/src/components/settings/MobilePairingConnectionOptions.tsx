@@ -11,6 +11,8 @@ import type {
 import type { MobilePairingConnectionMode } from '../../../../shared/mobile-pairing-connection-mode'
 import { MobilePairingPathOption } from './MobilePairingPathOption'
 import { MobileRelaySignInPanel } from './MobileRelaySignInPanel'
+import { MobileRelayBackendPanel } from './MobileRelayBackendPanel'
+import { useMobileRelayBackend } from '../mobile/use-mobile-relay-backend'
 
 function relayStatusLabel(status: MobileRelayStatus): string {
   if (status === 'registered') {
@@ -65,6 +67,7 @@ export function MobilePairingConnectionOptions({
   relayMintRetrying?: boolean
 }): React.JSX.Element {
   const authStatus = useAppStore((state) => state.orcaProfileAuthStatus)
+  const relayBackend = useMobileRelayBackend()
   const [relayStatus, setRelayStatus] = useState<MobileRelayStatus>('offline')
   const [relayCellUrl, setRelayCellUrl] = useState<string | undefined>(undefined)
   const signedIn = authStatus?.state === 'connected'
@@ -73,10 +76,18 @@ export function MobilePairingConnectionOptions({
   // CTA would be dead. Treat that case as unavailable (matching the prior UI)
   // and only offer Sign in when the build can actually reach Relay.
   const configured = authStatus?.configured !== false
-  const needsSignIn = value === 'automatic' && !signedIn && configured
+  // Sign-in applies to Orca's relay only; a self-hosted relay uses its access key.
+  const needsSignIn =
+    value === 'automatic' &&
+    !relayBackend.selfHosted &&
+    !relayBackend.config?.error &&
+    !signedIn &&
+    configured
   // Availability is a property of the build, not of the current selection.
-  const relayUnavailable = !signedIn && !configured
+  const relayUnavailable = !relayBackend.relayReady && !relayBackend.selfHosted && !configured
   const relayDisabled = relayMintRetrying || relayUnavailable
+  const canChooseBackend = relayBackend.config != null
+  const showBackendPanel = canChooseBackend && (value === 'automatic' || relayUnavailable)
   const optionRefs = useRef<Record<MobilePairingConnectionMode, HTMLDivElement | null>>({
     automatic: null,
     'local-only': null
@@ -162,14 +173,24 @@ export function MobilePairingConnectionOptions({
           )}
           description={
             relayUnavailable
-              ? translate(
-                  'auto.components.settings.MobilePairingConnectionOptions.relayUnavailable',
-                  'Orca Relay isn’t available in this build. Use LAN.'
-                )
-              : translate(
-                  'auto.components.settings.MobilePairingConnectionOptions.anywhereDescription',
-                  'Phone can be on cellular or any Wi‑Fi. Sign-in required for Relay only.'
-                )
+              ? canChooseBackend
+                ? translate(
+                    'auto.components.settings.MobilePairingConnectionOptions.relayUnavailableSelfHost',
+                    'Orca Relay isn’t available in this build. Use LAN or a self-hosted relay.'
+                  )
+                : translate(
+                    'auto.components.settings.MobilePairingConnectionOptions.relayUnavailable',
+                    'Orca Relay isn’t available in this build. Use LAN.'
+                  )
+              : relayBackend.selfHosted
+                ? translate(
+                    'auto.components.settings.MobilePairingConnectionOptions.selfHostedDescription',
+                    'Phone can be on cellular or any Wi‑Fi. Routed through your self-hosted relay.'
+                  )
+                : translate(
+                    'auto.components.settings.MobilePairingConnectionOptions.anywhereDescription',
+                    'Phone can be on cellular or any Wi‑Fi. Sign-in required for Relay only.'
+                  )
           }
           trailing={
             relayUnavailable ? (
@@ -179,7 +200,7 @@ export function MobilePairingConnectionOptions({
                   'Unavailable'
                 )}
               </Badge>
-            ) : signedIn && value === 'automatic' ? (
+            ) : relayBackend.relayReady && value === 'automatic' ? (
               <Badge variant="outline" className="text-[11px]">
                 {relayMintRetrying
                   ? translate(
@@ -196,6 +217,7 @@ export function MobilePairingConnectionOptions({
             ) : null
           }
         />
+        {showBackendPanel ? <MobileRelayBackendPanel /> : null}
         {needsSignIn ? <MobileRelaySignInPanel reconnectRequired={reconnectRequired} /> : null}
         {value === 'automatic' && relayCell ? (
           <p

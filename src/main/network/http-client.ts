@@ -1,4 +1,5 @@
 import type { Session } from 'electron'
+import { assertNoDirectClaudeRequest } from '../../shared/claude-local-policy'
 
 /**
  * Outbound HTTP for main-process integrations.
@@ -32,10 +33,20 @@ const nodeHttpClient: MainHttpClient = {
   proxySession: () => null
 }
 
-let current: MainHttpClient = nodeHttpClient
+function guardClaudeRequests(client: MainHttpClient): MainHttpClient {
+  return {
+    ...client,
+    fetch: async (url, init) => {
+      assertNoDirectClaudeRequest(url)
+      return client.fetch(url, init)
+    }
+  }
+}
+
+let current: MainHttpClient = guardClaudeRequests(nodeHttpClient)
 
 export function setMainHttpClient(client: MainHttpClient | null): void {
-  current = client ?? nodeHttpClient
+  current = guardClaudeRequests(client ?? nodeHttpClient)
 }
 
 export function getMainHttpClient(): MainHttpClient {

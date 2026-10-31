@@ -6,6 +6,7 @@ import { createAppIconImage } from '../app-icon'
 import { translateMain } from '../i18n/main-i18n'
 import { composeTrayAttentionIcon, tintTrayTemplateForAttention } from './tray-attention-icon'
 import { stampTrayDevBadge } from './tray-dev-badge'
+import { isAppUpdateEnabled } from '../app-update-policy'
 
 export type SystemTrayOptions = {
   /** App icon id from settings; the tray reuses the app icon image. */
@@ -292,6 +293,7 @@ function buildTrayMenu(opts: SystemTrayOptions): Menu {
           },
           {
             label: translateMain('menu.checkForUpdates', 'Check for Updates...'),
+            enabled: isAppUpdateEnabled(),
             click: safeMenuAction(() => opts.onCheckForUpdates())
           },
           { type: 'separator' }

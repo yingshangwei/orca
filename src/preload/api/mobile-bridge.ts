@@ -3,6 +3,11 @@ import type { MobileRelayStatusDetail } from '../../shared/mobile-relay-status'
 import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { MobileRelayMintFailure } from '../../shared/mobile-relay-mint-failure'
+import type {
+  MobileRelayBackendConfig,
+  MobileRelayBackendUpdate,
+  MobileRelayBackendUpdateResult
+} from '../../shared/mobile-relay-backend'
 import type { PreloadApi } from '../api-types'
 
 export const mobileApi = {
@@ -82,6 +87,21 @@ export const mobileApi = {
       callback(detail)
     ipcRenderer.on('mobile:relayStatusChanged', listener)
     return () => ipcRenderer.removeListener('mobile:relayStatusChanged', listener)
+  },
+
+  getRelayBackendConfig: (): Promise<MobileRelayBackendConfig | null> =>
+    ipcRenderer.invoke('mobile:getRelayBackendConfig'),
+
+  updateRelayBackend: (
+    input: MobileRelayBackendUpdate
+  ): Promise<MobileRelayBackendUpdateResult | null> =>
+    ipcRenderer.invoke('mobile:updateRelayBackend', input),
+
+  onRelayBackendChanged: (callback: (config: MobileRelayBackendConfig) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, config: MobileRelayBackendConfig) =>
+      callback(config)
+    ipcRenderer.on('mobile:relayBackendChanged', listener)
+    return () => ipcRenderer.removeListener('mobile:relayBackendChanged', listener)
   },
 
   consumePendingUnpairedDeviceAuthFailure: (): Promise<boolean> =>

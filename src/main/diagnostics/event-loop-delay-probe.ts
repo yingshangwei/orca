@@ -22,6 +22,11 @@ export type EventLoopDelayWindow = {
   samples: number
 }
 
+/** The histogram records the whole interval between samples; subtract it to get the delay. */
+export function eventLoopDelayMs(histogramNs: number, resolutionMs: number): number {
+  return Math.round(Math.max(0, histogramNs / 1e6 - resolutionMs) * 100) / 100
+}
+
 /** E2E runs (local and CI) or an explicit dev opt-in; a packaged build sets neither. */
 export function isEventLoopDelayProbeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.ORCA_E2E_USER_DATA_DIR) || env[EVENT_LOOP_DELAY_PROBE_ENV] === '1'
@@ -43,9 +48,7 @@ export function startEventLoopDelayProbe(
   const file = join(userDataPath, EVENT_LOOP_DELAY_REPORT_FILE)
   const histogram = monitorEventLoopDelay({ resolution: RESOLUTION_MS })
   histogram.enable()
-  // The histogram records the whole interval between samples; subtract it to get the delay.
-  const delayMs = (ns: number): number =>
-    Math.round(Math.max(0, ns / 1e6 - RESOLUTION_MS) * 100) / 100
+  const delayMs = (ns: number): number => eventLoopDelayMs(ns, RESOLUTION_MS)
   const timer = setInterval(() => {
     const report: EventLoopDelayWindow = {
       process: processKind,

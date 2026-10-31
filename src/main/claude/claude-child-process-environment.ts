@@ -1,4 +1,3 @@
-import { CLAUDE_AUTH_ENV_VARS, applyClaudeEnvPatch } from '../claude-accounts/environment'
 import {
   LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV,
   NATIVE_CHAT_SCRATCH_DIR_ENV
@@ -52,27 +51,7 @@ export function buildClaudeChildProcessEnv(
 ): Record<string, string> {
   const inheritedEnv = options.inheritedEnv ?? process.env
   const platform = options.platform ?? process.platform
-  const env = applyClaudeEnvPatch(
-    cloneProcessEnv(inheritedEnv),
-    {},
-    {
-      stripAuthEnv: true,
-      platform
-    }
-  )
-  if (platform === 'win32') {
-    const authKeys = new Set(CLAUDE_AUTH_ENV_VARS.map((key) => key.toUpperCase()))
-    for (const [key, value] of Object.entries(env)) {
-      const normalized = key.toUpperCase()
-      if (
-        authKeys.has(normalized) ||
-        (normalized === 'ANTHROPIC_CUSTOM_HEADERS' &&
-          /authorization|x-api-key|api-key|bearer/i.test(value))
-      ) {
-        delete env[key]
-      }
-    }
-  }
+  const env = cloneProcessEnv(inheritedEnv)
   // Only the launch names a chat's scratch folder: an inherited one belongs to another chat.
   stripEnvKeys(env, [NATIVE_CHAT_SCRATCH_DIR_ENV, LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV], platform)
   if (options.scrubConfiguredChildSessionStamps) {

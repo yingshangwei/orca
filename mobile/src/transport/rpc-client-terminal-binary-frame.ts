@@ -38,6 +38,13 @@ export function handleTerminalBinaryFrame(
     })
     return
   }
+  if (frame.opcode === TerminalStreamOpcode.OutputSpan) {
+    const span = decodeTerminalStreamJson<{ data?: unknown }>(frame.payload)
+    if (typeof span?.data === 'string' && span.data.length > 0) {
+      listener({ type: 'data', streamId: frame.streamId, chunk: span.data })
+    }
+    return
+  }
   if (frame.opcode === TerminalStreamOpcode.SnapshotStart) {
     const meta = decodeTerminalStreamJson<Record<string, unknown>>(frame.payload)
     if (!meta) {

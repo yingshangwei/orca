@@ -1,6 +1,12 @@
 import { ImeInput } from '@/lib/ime-text-field'
 import type { CSSProperties, RefObject } from 'react'
-import { MessageSquarePlus, SquareSplitVertical, SquareTerminal, X } from 'lucide-react'
+import {
+  MessageSquarePlus,
+  MessagesSquare,
+  SquareSplitVertical,
+  SquareTerminal,
+  X
+} from 'lucide-react'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -8,7 +14,6 @@ import { translate } from '@/i18n/i18n'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import type { PtyTransport } from './pty-transport-types'
 import { TerminalPaneHeaderDropSurface } from './TerminalPaneHeaderDropSurface'
-import { TerminalPaneResumeInChatButton } from './TerminalPaneResumeInChatButton'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 
 export type PaneTitleOverlayRect = {
@@ -39,13 +44,9 @@ type TerminalPaneHeaderOverlayProps = {
   hiddenStartupStyle: CSSProperties
   managerRef: RefObject<PaneManager | null>
   paneTransportsRef: RefObject<Map<number, PtyTransport>>
-  /** True when the active pane shows the native chat view; renders its way back to the terminal.
-   *  Switching into chat view is no longer offered here. */
-  canShowTerminal?: boolean
-  /** Flip the active pane from the native chat view back to the terminal. */
-  onShowTerminal?: () => void
-  /** Offers the tab menu's "Switch to Chat" for the active pane's own conversation. */
-  canResumeInNewNativeChat?: boolean
+  canToggleNativeChat?: boolean
+  isNativeChatView?: boolean
+  onToggleNativeChat?: () => void
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: (pane: ManagedPane) => void
   onSplitPane: (pane: ManagedPane, direction: 'vertical' | 'horizontal') => void
@@ -82,9 +83,9 @@ export default function TerminalPaneHeaderOverlay({
   hiddenStartupStyle,
   managerRef,
   paneTransportsRef,
-  canShowTerminal,
-  onShowTerminal,
-  canResumeInNewNativeChat,
+  canToggleNativeChat,
+  isNativeChatView,
+  onToggleNativeChat,
   canContinueAgentSessionInNewSession,
   onContinueAgentSessionInNewSession,
   onSplitPane,
@@ -103,6 +104,9 @@ export default function TerminalPaneHeaderOverlay({
     'auto.components.terminal.pane.TerminalContextMenu.20e565d865',
     'Split Terminal Right'
   )
+  const chatToggleLabel = isNativeChatView
+    ? translate('components.native-chat.toggle.showTerminal', 'Show terminal')
+    : translate('components.tab.bar.SortableTabContextMenu.switchToChatView', 'Continue in Chat UI')
 
   return (
     <div
@@ -246,7 +250,7 @@ export default function TerminalPaneHeaderOverlay({
                       </TooltipContent>
                     </Tooltip>
                   ) : null}
-                  {canShowTerminal && isActivePane ? (
+                  {canToggleNativeChat && isActivePane ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -255,28 +259,23 @@ export default function TerminalPaneHeaderOverlay({
                           size="icon-xs"
                           // Same class as split so it shares the hover/active reveal.
                           className="pane-title-split-trigger"
-                          aria-label={translate(
-                            'components.native-chat.toggle.showTerminal',
-                            'Show terminal'
-                          )}
+                          aria-label={chatToggleLabel}
                           onClick={(event) => {
                             event.stopPropagation()
-                            onShowTerminal?.()
+                            onToggleNativeChat?.()
                           }}
                         >
-                          <SquareTerminal className="size-3" />
+                          {isNativeChatView ? (
+                            <SquareTerminal className="size-3" />
+                          ) : (
+                            <MessagesSquare className="size-3" />
+                          )}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={4}>
-                        {translate('components.native-chat.toggle.showTerminal', 'Show terminal')}
+                        {chatToggleLabel}
                       </TooltipContent>
                     </Tooltip>
-                  ) : canResumeInNewNativeChat && isActivePane ? (
-                    <TerminalPaneResumeInChatButton
-                      tabId={tabId}
-                      worktreeId={worktreeId}
-                      paneKey={makePaneKey(tabId, pane.leafId)}
-                    />
                   ) : null}
                   {showAlwaysOnHeaders && showSplitButton ? (
                     <Tooltip>

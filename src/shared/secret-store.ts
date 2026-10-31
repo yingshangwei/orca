@@ -25,6 +25,20 @@ export type SecretStore = {
    * or sealing with a backend that does not meaningfully protect. Null means sealed.
    */
   describeProtectionGap(): string | null
+  /**
+   * Non-null while the host has deliberately set aside a keychain that may still hold the
+   * user's key. `isEncryptionAvailable()` is then false, but a writer must fail rather than
+   * take its plaintext fallback, which exists for hosts that have no keyring at all.
+   */
+  plaintextFallbackRefusal?(): string | null
+}
+
+/** Call before a secret writer's plaintext fallback; throws while the host forbids it. */
+export function assertPlaintextFallbackAllowed(store: SecretStore = getSecretStore()): void {
+  const refusal = store.plaintextFallbackRefusal?.() ?? null
+  if (refusal !== null) {
+    throw new Error(`secrets_unavailable: ${refusal}`)
+  }
 }
 
 /**

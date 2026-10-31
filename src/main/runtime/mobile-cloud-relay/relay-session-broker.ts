@@ -37,6 +37,7 @@ export class RelaySessionBroker {
     this.relayHostId = deriveRelayHostId(options.keypair.publicKey)
     this.originPool = new RelayOriginPool({
       directorUrl: options.authConfig.relayDirectorUrl,
+      allowedCellOrigin: options.authConfig.relayCellOrigin,
       relayHostId: this.relayHostId,
       identity: options.identity,
       keypair: options.keypair,

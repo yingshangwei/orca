@@ -6,7 +6,12 @@ import {
   resetMobileRelayPairingRecoveryForTests,
   settleMobileRelayPairingRecovery
 } from './mobile-relay-pairing-recovery'
-import { RelayOuterError, type PairingCandidateClient } from './mobile-relay-physical-client'
+import {
+  RelayOuterError,
+  type connectMobileRelayForPairing,
+  type PairingCandidateClient
+} from './mobile-relay-physical-client'
+import type { updateMobileRelayPairingJournal } from './mobile-relay-pairing-journal-store'
 import type { HostProfile, PairingOffer, RpcResponse } from './types'
 
 vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }))
@@ -36,10 +41,9 @@ function response(result: unknown): RpcResponse {
   return { id: 'rpc-1', ok: true, result, _meta: { runtimeId: 'runtime-1' } }
 }
 
-function installed(
-  journal: ReturnType<typeof journal>,
-  mode: 'authenticated-direct' | 'relay-basis'
-) {
+type RecoveryJournal = ReturnType<typeof journal>
+
+function installed(journal: RecoveryJournal, mode: 'authenticated-direct' | 'relay-basis') {
   return {
     v: 1 as const,
     reqId: journal.metadata.installReqId,
@@ -50,8 +54,14 @@ function installed(
 }
 
 function endpoints(
-  journal: ReturnType<typeof journal>,
-  state: { state: 'not-found' } | { state: 'committed'; result: ReturnType<typeof installed> }
+  journal: RecoveryJournal,
+  state: { state: 'not-found' } | { state: 'committed'; result: ReturnType<typeof installed> },
+  relay: Partial<{
+    directorUrl: string
+    cellUrl: string
+    assignmentEpoch: number
+    relayHostId: string
+  }> = {}
 ) {
   return {
     v: 1 as const,
@@ -61,7 +71,8 @@ function endpoints(
       cellUrl: offer.relay.cellUrl,
       assignmentEpoch: offer.relay.assignmentEpoch,
       relayHostId: offer.relay.relayHostId,
-      e2eeFraming: 2 as const
+      e2eeFraming: 2 as const,
+      ...relay
     },
     installStatus: { v: 1 as const, reqId: journal.metadata.installReqId, ...state }
   }
@@ -90,20 +101,22 @@ function client(handler: (method: string, params: unknown) => Promise<RpcRespons
 }
 
 function dependencies(args: {
-  journal: ReturnType<typeof journal>
-  connectRelay: ReturnType<typeof vi.fn>
+  journal: RecoveryJournal
+  connectRelay: typeof connectMobileRelayForPairing
   bundle?: MobileRelayCredentialBundle | null
   hosts?: HostProfile[]
 }) {
   return {
     loadJournal: vi.fn(async () => args.journal),
-    updateJournal: vi.fn(async (_id, update) => {
+    updateJournal: vi.fn<typeof updateMobileRelayPairingJournal>(async (_id, update) => {
       Object.assign(args.journal.metadata, update(args.journal.metadata))
     }),
     clearJournal: vi.fn(async () => {}),
     claimJournal: vi.fn(async () => () => {}),
     readCredentialBundle: vi.fn(async () => args.bundle ?? null),
-    writeCredentialBundle: vi.fn(async () => {}),
+    writeCredentialBundle: vi.fn<(bundle: MobileRelayCredentialBundle) => Promise<void>>(
+      async () => {}
+    ),
     loadHosts: vi.fn(async (): Promise<HostProfile[]> => args.hosts ?? []),
     savePairedHost: vi.fn(async () => {}),
     connectRelay: args.connectRelay,
@@ -148,7 +161,7 @@ describe('mobile relay pairing recovery', () => {
 
   it('clears a journal whose relay routing the host already carries, without dialing', async () => {
     const saved = journal()
-    const connectRelay = vi.fn()
+    const connectRelay = vi.fn<typeof connectMobileRelayForPairing>()
     const bundle: MobileRelayCredentialBundle = {
       v: 1,
       hostId: 'host-1',
@@ -198,7 +211,7 @@ describe('mobile relay pairing recovery', () => {
       return response(relayInstalled)
     })
     const seenCredentials: (string | undefined)[] = []
-    const connectRelay = vi.fn((args) => {
+    const connectRelay = vi.fn<typeof connectMobileRelayForPairing>((args) => {
       seenCredentials.push(args.credential)
       return args.credential ? failed() : invite
     })
@@ -299,6 +312,51 @@ describe('mobile relay pairing recovery', () => {
     await expect(recoverMobileRelayPairing(deps)).resolves.not.toBe('recovered')
     expect(deps.writeCredentialBundle).not.toHaveBeenCalled()
     expect(deps.savePairedHost).not.toHaveBeenCalled()
+  })
+
+  // Why: an app crash followed by a desktop provider switch must not publish the new backend's
+  // route onto the card chosen for the scanned one; the journal stays for a later reconcile.
+  it.each([
+    { directorUrl: 'https://relay.example.com', cellUrl: 'https://relay-cell.example.com' },
+    { relayHostId: 'ZyXwVu9876_-abC0' }
+  ])('keeps the journal when a committed install reports another backend (%o)', async (relay) => {
+    const saved = journal()
+    const committed = installed(saved, 'authenticated-direct')
+    const switched = client(async () =>
+      response(endpoints(saved, { state: 'committed', result: committed }, relay))
+    )
+    const deps = {
+      ...dependencies({ journal: saved, connectRelay: vi.fn(() => switched) }),
+      now: () => saved.metadata.relay.inviteExpiresAt + 10 * 60 * 1000 + 1
+    }
+
+    await expect(recoverMobileRelayPairing(deps)).resolves.toBe('deferred')
+    expect(deps.writeCredentialBundle).not.toHaveBeenCalled()
+    expect(deps.savePairedHost).not.toHaveBeenCalled()
+    expect(deps.clearJournal).not.toHaveBeenCalled()
+  })
+
+  it('publishes a committed install that moved cells within the same director', async () => {
+    const saved = journal()
+    const committed = installed(saved, 'authenticated-direct')
+    const moved = client(async () =>
+      response(
+        endpoints(
+          saved,
+          { state: 'committed', result: committed },
+          { cellUrl: 'https://relay-c2.onorca.dev', assignmentEpoch: 8 }
+        )
+      )
+    )
+    const deps = dependencies({ journal: saved, connectRelay: vi.fn(() => moved) })
+
+    await expect(recoverMobileRelayPairing(deps)).resolves.toBe('recovered')
+    expect(deps.savePairedHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relay: expect.objectContaining({ cellUrl: 'https://relay-c2.onorca.dev' })
+      })
+    )
+    expect(deps.clearJournal).toHaveBeenCalledOnce()
   })
 
   it('bounds how long a new scan waits for recovery', async () => {

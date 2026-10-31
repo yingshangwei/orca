@@ -17,6 +17,10 @@ import type { MobileRelayStatusDetail } from '../../shared/mobile-relay-status'
 import { encodeMobilePairingQr, type MobilePairingQrResult } from '../runtime/mobile-pairing-qr'
 import { getWindowsDefaultRouteInterfaceNames } from '../runtime/windows-default-route-interfaces'
 import {
+  registerMobileRelayBackendHandlers,
+  type MobileRelayBackendHandlerDependencies
+} from './mobile-relay-backend'
+import {
   getWebSocketPort,
   inspectWindowsMobileFirewall,
   repairWindowsMobileFirewall,
@@ -55,6 +59,7 @@ export type MobileHandlerDependencies = {
   consumePendingUnpairedDeviceAuthFailure?: (webContentsId: number) => boolean
   encodePairingQr?: (pairingUrl: string) => Promise<MobilePairingQrResult>
   getDefaultRouteInterfaceNames?: DefaultRouteInterfaceLookup
+  relayBackend?: MobileRelayBackendHandlerDependencies
 }
 
 export function registerMobileHandlers(
@@ -311,6 +316,10 @@ export function registerMobileHandlers(
     }
     return dependencies.consumePendingUnpairedDeviceAuthFailure?.(event.sender.id) ?? false
   })
+
+  if (dependencies.relayBackend) {
+    registerMobileRelayBackendHandlers(dependencies.relayBackend)
+  }
 }
 
 function isWindowRenderer(event: IpcMainInvokeEvent): boolean {

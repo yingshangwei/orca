@@ -27,7 +27,7 @@ function executable() {
 }
 
 describe('structured agent executable resolution', () => {
-  it.each(['claude', 'codex'] as const)(
+  it.each(['codex', 'opencode'] as const)(
     'uses the configured %s executable on the execution host',
     (agent) => {
       const { command } = executable()
@@ -44,7 +44,7 @@ describe('structured agent executable resolution', () => {
     expect(
       resolveStructuredAgentCommand(
         'opencode',
-        { agentCmdOverrides: { claude: `"${command}"` } },
+        { agentCmdOverrides: { codex: `"${command}"` } },
         { pathEnv: '/nowhere' },
         { command: 'opencode', resolve: (name) => `/stock/${name}` }
       )
@@ -64,9 +64,9 @@ describe('structured agent executable resolution', () => {
     ).toBe(basenameCommand)
     expect(
       resolveStructuredAgentCommand(
-        'claude',
+        'codex',
         {
-          agentCmdOverrides: { claude: '"~/agent custom"' }
+          agentCmdOverrides: { codex: '"~/agent custom"' }
         },
         { homePath: directory }
       )
@@ -76,15 +76,15 @@ describe('structured agent executable resolution', () => {
   it('rereads a changed override instead of storing another copy of the command', () => {
     const first = executable()
     const second = executable()
-    const settings = { agentCmdOverrides: { claude: `"${first.command}"` } }
-    expect(resolveStructuredAgentCommand('claude', settings)).toBe(first.command)
-    settings.agentCmdOverrides.claude = `"${second.command}"`
-    expect(resolveStructuredAgentCommand('claude', settings)).toBe(second.command)
+    const settings = { agentCmdOverrides: { codex: `"${first.command}"` } }
+    expect(resolveStructuredAgentCommand('codex', settings)).toBe(first.command)
+    settings.agentCmdOverrides.codex = `"${second.command}"`
+    expect(resolveStructuredAgentCommand('codex', settings)).toBe(second.command)
   })
 
   it.each(['', '   ', undefined])('uses the stock executable when the Command is %j', (command) => {
-    const settings = command === undefined ? {} : { agentCmdOverrides: { claude: command } }
-    expect(resolveStructuredAgentCommand('claude', settings)).toBe(resolveCliCommand('claude'))
+    const settings = command === undefined ? {} : { agentCmdOverrides: { codex: command } }
+    expect(resolveStructuredAgentCommand('codex', settings)).toBe(resolveCliCommand('codex'))
   })
 
   it('refuses missing files, directories, relative paths and command lines instead of the stock executable', () => {
@@ -100,8 +100,8 @@ describe('structured agent executable resolution', () => {
       'FOO=1 claude',
       '$HOME/bin/claude'
     ]) {
-      const settings = { agentCmdOverrides: { claude: command } }
-      expect(() => resolveStructuredAgentCommand('claude', settings)).toThrow(NOT_RUNNABLE)
+      const settings = { agentCmdOverrides: { codex: command } }
+      expect(() => resolveStructuredAgentCommand('codex', settings)).toThrow(NOT_RUNNABLE)
     }
   })
 
@@ -109,7 +109,7 @@ describe('structured agent executable resolution', () => {
     const { command } = executable()
     chmodSync(command, 0o644)
     expect(() =>
-      resolveStructuredAgentCommand('claude', { agentCmdOverrides: { claude: `"${command}"` } })
+      resolveStructuredAgentCommand('codex', { agentCmdOverrides: { codex: `"${command}"` } })
     ).toThrow(NOT_RUNNABLE)
   })
 
@@ -130,12 +130,12 @@ describe('structured agent executable resolution', () => {
 
     it('refuses an extensionless path, which Windows cannot spawn', () => {
       const { directory } = executable()
-      const command = fileIn(directory, 'claude')
+      const command = fileIn(directory, 'codex')
       fileIn(directory, 'claude.cmd')
       expect(() =>
         resolveStructuredAgentCommand(
-          'claude',
-          { agentCmdOverrides: { claude: command } },
+          'codex',
+          { agentCmdOverrides: { codex: command } },
           { platform: 'win32' }
         )
       ).toThrow(NOT_RUNNABLE)
@@ -146,8 +146,8 @@ describe('structured agent executable resolution', () => {
       fileIn(directory, 'my-claude')
       expect(() =>
         resolveStructuredAgentCommand(
-          'claude',
-          { agentCmdOverrides: { claude: 'my-claude' } },
+          'codex',
+          { agentCmdOverrides: { codex: 'my-claude' } },
           { platform: 'win32', pathEnv: directory, homePath: directory }
         )
       ).toThrow(NOT_RUNNABLE)
@@ -160,8 +160,8 @@ describe('structured agent executable resolution', () => {
         const command = fileIn(directory, name)
         expect(
           resolveStructuredAgentCommand(
-            'claude',
-            { agentCmdOverrides: { claude: `"${command}"` } },
+            'codex',
+            { agentCmdOverrides: { codex: `"${command}"` } },
             { platform: 'win32' }
           )
         ).toBe(command)
@@ -174,11 +174,26 @@ describe('structured agent executable resolution', () => {
       const shim = fileIn(directory, 'my-claude.cmd')
       expect(
         resolveStructuredAgentCommand(
-          'claude',
-          { agentCmdOverrides: { claude: 'my-claude' } },
+          'codex',
+          { agentCmdOverrides: { codex: 'my-claude' } },
           { platform: 'win32', pathEnv: directory, homePath: directory }
         )
       ).toBe(shim)
     })
   })
 })
+
+it.each(['darwin', 'linux', 'win32'] as const)(
+  'refuses Claude command overrides on %s',
+  (platform) => {
+    expect(() =>
+      resolveStructuredAgentCommand(
+        'claude',
+        {
+          agentCmdOverrides: { claude: '/synthetic/other-claude' }
+        },
+        { platform }
+      )
+    ).toThrow('cannot override the connection')
+  }
+)

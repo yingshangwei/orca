@@ -28,12 +28,25 @@ function createSession() {
   }
   return {
     proxySession,
-    request: (callback: (result: { cancel?: boolean }) => void) => listener?.({}, callback)
+    request: (callback: (result: { cancel?: boolean }) => void, url = 'https://example.test') =>
+      listener?.({ url }, callback)
   }
 }
 
 describe('default-session proxy request guard', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it.each(['https://api.anthropic.com/api/oauth/usage', 'https://claude.ai/login'])(
+    'cancels %s even before a proxy transition finishes',
+    (url) => {
+      const { proxySession, request } = createSession()
+      resetSessionProxyApplicationForTests(proxySession)
+      installElectronProxyRequestGuard(proxySession as never)
+      const callback = vi.fn()
+      request(callback, url)
+      expect(callback).toHaveBeenCalledWith({ cancel: true })
+    }
+  )
 
   it('holds renderer requests until a delayed proxy transition settles', async () => {
     const { proxySession, request } = createSession()

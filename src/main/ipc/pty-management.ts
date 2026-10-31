@@ -26,6 +26,7 @@ import type { MacDaemonTccAttributionHealth } from '../daemon/daemon-tcc-attribu
 import type { DaemonEndpointIdentity } from '../daemon/daemon-hello-protocol'
 import type { DaemonSessionInfo } from '../daemon/types'
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import { sameEndpointIdentity } from '../daemon/daemon-endpoint-incarnation'
 
 // Why: poll past the daemon's 5s SIGTERM→SIGKILL ladder (KILL_TIMEOUT_MS in session.ts), else slow-exiting shells falsely look "refused".
 const MAX_POLL_ATTEMPTS = 65
@@ -85,13 +86,25 @@ export function registerDaemonManagementHandlers(): void {
     if (!provider) {
       return { state: 'unverifiable' }
     }
-    const adapter = getCurrentDaemonAdapter(provider)
-    const identity = adapter.getDaemonIdentity()
-    const health = await adapter.getAsyncIoHealth()
-    // A result from a replaced endpoint cannot diagnose its successor.
-    return identity && adapter.getDaemonIdentity() === identity && getDaemonProvider() === provider
-      ? health
-      : { state: 'unverifiable' }
+    const checks = await Promise.all(
+      getAllDaemonAdapters(provider).map(async (adapter): Promise<DaemonAsyncIoStatus> => {
+        const identity = adapter.getDaemonIdentity()
+        const health = await adapter.getAsyncIoHealth()
+        const current = adapter.getDaemonIdentity()
+        return identity && current && sameEndpointIdentity(identity, current)
+          ? health
+          : { state: 'unverifiable' }
+      })
+    )
+    if (getDaemonProvider() !== provider) {
+      return { state: 'unverifiable' }
+    }
+    return (
+      checks.find((health) => health.state === 'stalled') ??
+      (checks.length > 0 && checks.every((health) => health.state === 'healthy')
+        ? { state: 'healthy', pendingMs: 0 }
+        : { state: 'unverifiable' })
+    )
   })
 
   // Why: a Linux AppImage daemon kept for its live terminals after its files vanished; the

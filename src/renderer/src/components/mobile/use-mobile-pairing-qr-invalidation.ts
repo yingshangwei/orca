@@ -16,6 +16,8 @@ type MutableRef<T> = { current: T }
 export function useMobilePairingQrInvalidation(params: {
   connectionMode: MobilePairingConnectionMode
   signedIn: boolean
+  /** Changes on a Relay backend switch; treated like a sign-in edge even when signedIn holds. */
+  relayBackendKey?: string
   pairLoading: boolean
   hasGeneratedRef: MutableRef<boolean>
   pairingRequestIdRef: MutableRef<number>
@@ -30,6 +32,7 @@ export function useMobilePairingQrInvalidation(params: {
   const {
     connectionMode,
     signedIn,
+    relayBackendKey,
     pairLoading,
     hasGeneratedRef,
     pairingRequestIdRef,
@@ -42,6 +45,7 @@ export function useMobilePairingQrInvalidation(params: {
     regenerate
   } = params
   const wasSignedInRef = useRef(signedIn)
+  const wasRelayBackendKeyRef = useRef(relayBackendKey)
   // Tracks the mode we last acted on so the mode effect can tell a cross-window
   // preference sync apart from an already-handled change.
   const handledModeRef = useRef(connectionMode)
@@ -52,8 +56,14 @@ export function useMobilePairingQrInvalidation(params: {
   // loading too so a superseded in-flight generate can't leave a stuck spinner.
   useEffect(() => {
     const wasSignedIn = wasSignedInRef.current
+    const wasRelayBackendKey = wasRelayBackendKeyRef.current
     wasSignedInRef.current = signedIn
-    if (connectionMode !== 'automatic' || !hasGeneratedRef.current || wasSignedIn === signedIn) {
+    wasRelayBackendKeyRef.current = relayBackendKey
+    if (
+      connectionMode !== 'automatic' ||
+      !hasGeneratedRef.current ||
+      (wasSignedIn === signedIn && wasRelayBackendKey === relayBackendKey)
+    ) {
       return
     }
     pairingRequestIdRef.current += 1
@@ -73,6 +83,7 @@ export function useMobilePairingQrInvalidation(params: {
   }, [
     connectionMode,
     signedIn,
+    relayBackendKey,
     hasGeneratedRef,
     pairingRequestIdRef,
     setPairQrDataUrl,

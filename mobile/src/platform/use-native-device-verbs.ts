@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import type { BridgeNativeVerb } from '../mobile-web-shell/bridge/bridge-native-verbs'
+import type { ScreenServedNativeVerb } from '../mobile-web-shell/bridge/bridge-native-verbs'
 import { useMediaHandleRegistry } from '../mobile-web-shell/use-media-handle-registry'
 import { createNativeAudioCapture } from './native-audio'
 import { nativeAudioDeviceEngine } from './native-audio-device'
@@ -8,7 +8,7 @@ import { createNativeMediaVerbServer } from './native-media'
 import { discardStagedMedia, nativeMediaDeviceDeps } from './native-media-device'
 
 /** The storage read is the shell's own store, answered before this dispatcher is reached. */
-export type NativeDeviceVerb = Exclude<BridgeNativeVerb, 'native.storage.read'>
+export type NativeDeviceVerb = Exclude<ScreenServedNativeVerb, 'native.storage.read'>
 
 /**
  * Every `native.` verb this device serves, behind the one function the host dispatches to.

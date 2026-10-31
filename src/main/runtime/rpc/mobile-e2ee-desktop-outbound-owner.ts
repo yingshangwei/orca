@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws'
+import type { MobileLinkOutboundEvidence } from '../../../shared/mobile-link-probe-contract'
 import type { WsOutboundBackpressureQueue } from '../../../shared/ws-outbound-backpressure-queue'
 import { createLegacyMobileE2EEReplyQueue } from './mobile-e2ee-outbound-admission'
 import { encryptBytes } from '../../../shared/e2ee-crypto'
@@ -84,6 +85,18 @@ export class MobileE2EEDesktopOutboundOwner {
       return 'backlogged'
     }
     return this.v2Queue.enqueue(item)
+  }
+
+  /** Everything this socket still holds; TCP and the relay's own buffers are not visible here. */
+  evidence(): MobileLinkOutboundEvidence {
+    const legacy = this.legacyQueue?.evidence()
+    const v2 = this.v2Queue?.evidence()
+    const buffered = this.ws.bufferedAmount
+    return {
+      queuedBytes: (legacy?.queuedBytes ?? 0) + (v2?.queuedBytes ?? 0),
+      queuedFrames: (legacy?.queuedFrames ?? 0) + (v2?.queuedFrames ?? 0),
+      socketBufferedBytes: Number.isFinite(buffered) ? buffered : 0
+    }
   }
 
   private legacy(): WsOutboundBackpressureQueue<string | Buffer> | null {

@@ -35,6 +35,33 @@ function createController(
 }
 
 describe('RuntimeProjectGroupController.deleteFolderWorkspace', () => {
+  it('retains the catalog and PTYs when the source terminal cannot be closed', async () => {
+    const deps = createController(() => null)
+    deps.controller.setBeforeFolderWorkspaceDelete(async () => {
+      throw new Error('Herdr did not close this terminal')
+    })
+    await expect(deps.controller.deleteFolderWorkspace('ws-1')).rejects.toThrow(
+      'Herdr did not close'
+    )
+    expect(deps.removeFolderWorkspace).not.toHaveBeenCalled()
+    expect(deps.teardownFolderWorkspacePtys).not.toHaveBeenCalled()
+    expect(deps.cleanupRemovedFolderWorkspaceState).not.toHaveBeenCalled()
+    expect(deps.notifyReposChanged).not.toHaveBeenCalled()
+  })
+
+  it('closes the source terminal before tearing down its Orca attachment', async () => {
+    const deps = createController(() => null)
+    const beforeDelete = vi.fn(async () => undefined)
+    deps.controller.setBeforeFolderWorkspaceDelete(beforeDelete)
+
+    await expect(deps.controller.deleteFolderWorkspace('ws-1')).resolves.toEqual({ deleted: true })
+
+    expect(beforeDelete).toHaveBeenCalledWith(workspace)
+    expect(beforeDelete.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.teardownFolderWorkspacePtys.mock.invocationCallOrder[0]!
+    )
+  })
+
   it('tears down PTYs and runtime state before removing the catalog row', async () => {
     const deps = createController(() => 'ssh-1')
 

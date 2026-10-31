@@ -63,7 +63,9 @@ export class ProjectGroupPersistenceOperations {
 
   updateProjectGroup(
     groupId: string,
-    updates: Partial<Pick<ProjectGroup, 'name' | 'isCollapsed' | 'tabOrder' | 'color'>>
+    updates: Partial<
+      Pick<ProjectGroup, 'name' | 'parentPath' | 'isCollapsed' | 'tabOrder' | 'color'>
+    >
   ): ProjectGroup | null {
     const group = (this.state.projectGroups ?? []).find((entry) => entry.id === groupId)
     if (!group) {
@@ -71,6 +73,9 @@ export class ProjectGroupPersistenceOperations {
     }
     if (updates.name !== undefined) {
       group.name = normalizeProjectGroupName(updates.name, group.name)
+    }
+    if (!group.parentPath && updates.parentPath?.trim()) {
+      group.parentPath = updates.parentPath.trim()
     }
     if (updates.isCollapsed !== undefined) {
       group.isCollapsed = updates.isCollapsed

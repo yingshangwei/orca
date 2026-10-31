@@ -24,6 +24,7 @@ import type {
   RpcBinarySendResult,
   RpcBinarySender
 } from './rpc-binary-sender'
+import type { MobileLinkOutboundEvidence } from '../../../shared/mobile-link-probe-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { EventProps } from '../../../shared/telemetry-events'
 import { track } from '../../telemetry/client'
@@ -119,6 +120,10 @@ export class E2EEChannel {
 
   onBinaryMessage(handler: (plaintext: Uint8Array<ArrayBufferLike>) => void): void {
     this.binaryMessageHandler = handler
+  }
+
+  outboundEvidence(): MobileLinkOutboundEvidence {
+    return this.outbound.evidence()
   }
 
   handleRawMessage(raw: string | Uint8Array<ArrayBufferLike>): void {

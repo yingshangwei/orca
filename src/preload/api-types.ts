@@ -56,6 +56,7 @@ import type { RuntimeApi } from './api/runtime-api'
 import type { WslMoveApi } from './api/wsl-move-bridge'
 import type { KeybindingsApi, SettingsApi } from './api/settings-api'
 import type { ShellApi } from './api/shell-api'
+import type { HerdrApi } from '../shared/herdr-types'
 import type { SpeechApi } from './api/speech-api'
 import type { SshApi } from './api/ssh-api'
 import type { PlainSshTerminalApi } from './api/plain-ssh-terminal-bridge'
@@ -73,6 +74,7 @@ import type { FolderWorkspacesApi, SparsePresetsApi, WorktreeApi } from './api/w
 type Merged<T> = { [K in keyof T]: T[K] }
 
 export type PreloadApi = {
+  herdr?: HerdrApi
   app: AppApi
   orcaProfiles: OrcaProfileApi
   platform: PlatformApi

@@ -21,6 +21,7 @@ import {
 } from './codex-session-resume-launch'
 import { isRecoveryReloadInFlight } from './main-window-lifecycle-flags'
 import { RELAY_HOST_CLOSE_REASON } from '../../shared/relay-host-close-reason'
+import { shouldPreserveRelayOnOrcaSignOut } from './main-process-relay-backend-store'
 
 export function attachMainWindowCoreServices(
   window: BrowserWindow,
@@ -104,6 +105,10 @@ export function attachMainWindowCoreServices(
       // Sign-out is the one fence a paired phone can be told about; quit and
       // relaunch above stay reasonless so a restart never reads as signed out.
       onBeforeOrcaProfileSignOut: () => {
+        // Why: a self-hosted relay never used the Orca account being signed out.
+        if (shouldPreserveRelayOnOrcaSignOut()) {
+          return
+        }
         state.desktopRelayInstaller?.suspend()
         state.desktopRelayService?.fenceAndCloseNow(RELAY_HOST_CLOSE_REASON.SIGNED_OUT)
       }

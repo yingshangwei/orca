@@ -1,4 +1,5 @@
 import { net, session, type Session } from 'electron'
+import { assertNoDirectClaudeRequest } from '../../shared/claude-local-policy'
 import type { MainHttpClient } from '../network/http-client'
 import { hasElectronProxyCredentialsForSession } from '../network/electron-proxy-credentials'
 import { getProxySessionApplicationReadiness } from '../network/proxy-settings'
@@ -26,6 +27,7 @@ async function hasConfiguredProxyCredentials(
 }
 
 async function fetchFromDefaultSession(url: string, init?: RequestInit): Promise<Response> {
+  assertNoDirectClaudeRequest(url)
   const proxySession = session.defaultSession
   if (
     isHttpUrl(url) &&

@@ -3,8 +3,8 @@ import type { DesktopRelayService } from './desktop-relay-service'
 import { createDesktopRelayServiceInstaller } from './desktop-relay-service-installer'
 
 function fakeService(): DesktopRelayService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the installer only calls start() and wraps the provider methods.
-  return { start: vi.fn() } as unknown as DesktopRelayService
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the installer only calls start()/stop() and wraps the provider methods.
+  return { start: vi.fn(), stop: vi.fn() } as unknown as DesktopRelayService
 }
 
 function installerWith(overrides: {
@@ -76,6 +76,54 @@ describe('createDesktopRelayServiceInstaller', () => {
     expect(create).not.toHaveBeenCalled()
     await expect(installer.authChanged()).resolves.toBe(true)
     expect(create).toHaveBeenCalledOnce()
+  })
+
+  it('replaces the installed service on a backend switch, stopping the old one first', async () => {
+    const official = fakeService()
+    const selfHosted = fakeService()
+    const create = vi
+      .fn<() => DesktopRelayService | null>()
+      .mockReturnValueOnce(official)
+      .mockReturnValueOnce(selfHosted)
+    const { installer, runtimeRpc, onInstalled } = installerWith({ create })
+
+    await expect(installer.ensure()).resolves.toBe(true)
+    await expect(installer.reconfigure()).resolves.toBe(true)
+
+    expect(official.stop).toHaveBeenCalledOnce()
+    expect(runtimeRpc.setMobileRelayPairingProvider.mock.calls.map(([p]) => p === null)).toEqual([
+      false,
+      true,
+      false
+    ])
+    expect(onInstalled).toHaveBeenLastCalledWith(selfHosted)
+    expect(selfHosted.start).toHaveBeenCalledOnce()
+  })
+
+  it('never lets an install started before a switch land after it', async () => {
+    let ready!: () => void
+    const whenNetworkReady = new Promise<void>((resolve) => (ready = resolve))
+    const service = fakeService()
+    const create = vi.fn(() => service)
+    const { installer, onInstalled } = installerWith({ create, whenNetworkReady })
+
+    const stale = installer.ensure()
+    const current = installer.reconfigure()
+    ready()
+
+    await expect(stale).resolves.toBe(false)
+    await expect(current).resolves.toBe(true)
+    expect(create).toHaveBeenCalledOnce()
+    expect(onInstalled).toHaveBeenCalledOnce()
+  })
+
+  it('lifts a sign-out suspension when the backend changes', async () => {
+    const create = vi.fn(() => fakeService())
+    const { installer } = installerWith({ create })
+
+    installer.suspend()
+    await expect(installer.ensure()).resolves.toBe(false)
+    await expect(installer.reconfigure()).resolves.toBe(true)
   })
 
   it('never installs once quit or relaunch fenced the host', async () => {

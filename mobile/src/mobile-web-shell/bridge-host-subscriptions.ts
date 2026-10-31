@@ -106,6 +106,15 @@ export class BridgeHostSubscriptions {
     return this.droppedTotal
   }
 
+  /** Terminal output the page has not made room for yet, across every open stream. */
+  get heldOutputBytes(): number {
+    let held = 0
+    for (const record of this.open.values()) {
+      held += record.backlog?.pendingBytes ?? 0
+    }
+    return held
+  }
+
   has(id: string): boolean {
     return this.open.has(id)
   }

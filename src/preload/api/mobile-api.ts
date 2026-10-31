@@ -3,6 +3,11 @@ import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-co
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { MobileRelayMintFailure } from '../../shared/mobile-relay-mint-failure'
 import type { RuntimeAccessGrant } from '../../shared/runtime-access-grants'
+import type {
+  MobileRelayBackendConfig,
+  MobileRelayBackendUpdate,
+  MobileRelayBackendUpdateResult
+} from '../../shared/mobile-relay-backend'
 
 export type MobileApi = {
   listNetworkInterfaces: () => Promise<{
@@ -81,6 +86,12 @@ export type MobileApi = {
   isWebSocketReady: () => Promise<{ ready: boolean; endpoint: string | null }>
   getRelayStatus: () => Promise<MobileRelayStatusDetail>
   onRelayStatusChanged: (callback: (detail: MobileRelayStatusDetail) => void) => () => void
+  /** Redacted: reports `hasAccessKey`, never the key. Absent outside the desktop app. */
+  getRelayBackendConfig?: () => Promise<MobileRelayBackendConfig | null>
+  updateRelayBackend?: (
+    input: MobileRelayBackendUpdate
+  ) => Promise<MobileRelayBackendUpdateResult | null>
+  onRelayBackendChanged?: (callback: (config: MobileRelayBackendConfig) => void) => () => void
   /** Consumes an auth-failure notification that arrived before the renderer listener mounted. */
   consumePendingUnpairedDeviceAuthFailure?: () => Promise<boolean>
   /** Fires (throttled, once per session) when an unpaired phone repeatedly fails direct-transport auth. */

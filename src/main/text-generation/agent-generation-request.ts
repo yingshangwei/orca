@@ -1,3 +1,5 @@
+import { CLAUDE_LOCAL_CONFIGURATION_MESSAGE } from '../../shared/claude-local-policy'
+import { assertLocalClaudeCommand } from '../claude/claude-local-launch-policy'
 import { runClaudeBackgroundAttempts } from '../../shared/claude-background-run-isolation'
 import {
   cleanGeneratedCommitMessage,
@@ -43,6 +45,24 @@ export async function runGenerationRequest(input: {
     return { success: false, error: planned.error }
   }
   const plan = planned.plan
+  if (input.params.agentId === 'claude') {
+    if (input.target.kind !== 'local') {
+      return { success: false, error: CLAUDE_LOCAL_CONFIGURATION_MESSAGE }
+    }
+    try {
+      await assertLocalClaudeCommand({
+        ...plan,
+        inheritedEnv: input.target.env,
+        cwd: input.target.cwd,
+        wslDistro: input.target.wslDistro
+      })
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : CLAUDE_LOCAL_CONFIGURATION_MESSAGE
+      }
+    }
+  }
   const execute = (plan: CommitMessagePlan): Promise<InternalTextGenerationResult> =>
     input.target.kind === 'remote'
       ? runRemoteSourceControlPlan({

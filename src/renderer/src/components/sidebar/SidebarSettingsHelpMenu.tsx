@@ -328,7 +328,11 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
+              disabled={
+                updateStatus.updatesDisabled ||
+                updateStatus.state === 'checking' ||
+                updateStatus.state === 'downloading'
+              }
               onPointerDown={handleCheckForUpdatesPointerDown}
               onSelect={handleCheckForUpdates}
               title={updateCheckHint}

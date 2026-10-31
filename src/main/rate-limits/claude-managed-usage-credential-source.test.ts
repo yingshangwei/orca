@@ -33,7 +33,6 @@ vi.mock('../wsl-running-path-filter', () => ({
 vi.mock('./claude-oauth-usage-request', () => ({ fetchClaudeOAuthUsage: fixture.fetchUsage }))
 
 import { fetchInactiveClaudeAccountUsage } from './claude-managed-account-usage'
-import { OAuthUsageError } from './claude-oauth-usage-error'
 
 const configDir = join(tmpdir(), 'synthetic-claude-profile-A')
 const now = 1800000000000
@@ -46,7 +45,7 @@ beforeEach(() => {
     hasRefreshableCredentials: false,
     source: fixture.source
   }))
-  fixture.fetchUsage.mockRejectedValue(new OAuthUsageError('Synthetic wait', 429, true, 3600000))
+  fixture.fetchUsage.mockRejectedValue(new Error('Network forbidden'))
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -55,7 +54,7 @@ it.each([
   ['host', 'scoped-keychain'],
   ['host', 'credentials-file'],
   ['wsl', 'credentials-file']
-] as const)('keeps %s profile 429 metadata from %s', async (runtime, source) => {
+] as const)('does not read %s profile credentials from %s', async (runtime, source) => {
   fixture.source = source
   const provenance = runtime === 'wsl' ? 'wsl:SyntheticDistro:profile:A' : 'profile:A'
   const preparation = {
@@ -71,23 +70,9 @@ it.each([
     wslDistro: runtime === 'wsl' ? 'SyntheticDistro' : null
   })
 
-  expect(result.usageMetadata).toMatchObject({
-    credentialSource: source,
-    authProvenance: provenance,
-    failureKind: 'rate-limited',
-    retryAtMs: now + 3600000
-  })
-  expect(fixture.readCredentials).toHaveBeenCalledWith({
-    credentialsFileConfigDir: configDir,
-    keychainConfigDir: configDir,
-    unsuffixedKeychainFallback: false
-  })
-  expect(fixture.fetchUsage).toHaveBeenCalledWith('synthetic-token', undefined)
-  if (runtime === 'wsl') {
-    expect(fixture.wslPreparation).toHaveBeenCalledWith('SyntheticDistro', 'A')
-    expect(fixture.hostPreparation).not.toHaveBeenCalled()
-  } else {
-    expect(fixture.hostPreparation).toHaveBeenCalledWith('A')
-    expect(fixture.wslPreparation).not.toHaveBeenCalled()
-  }
+  expect(result).toMatchObject({ status: 'unavailable', usageMetadata: { attemptedSources: [] } })
+  expect(fixture.readCredentials).not.toHaveBeenCalled()
+  expect(fixture.fetchUsage).not.toHaveBeenCalled()
+  expect(fixture.hostPreparation).not.toHaveBeenCalled()
+  expect(fixture.wslPreparation).not.toHaveBeenCalled()
 })

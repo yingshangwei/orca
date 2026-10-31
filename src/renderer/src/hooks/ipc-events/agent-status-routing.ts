@@ -33,7 +33,7 @@ export function isAgentStatusForRecentlyClosedTab(
 export function isSeenHostReplay(
   data: Pick<
     AgentStatusIpcPayload,
-    'isReplay' | 'stateStartedAt' | 'turnCompletedAt' | 'turnEndedAt'
+    'isReplay' | 'stateStartedAt' | 'turnCompletedAt' | 'turnEndedAt' | 'observation'
   >,
   state: string,
   existing:
@@ -42,6 +42,9 @@ export function isSeenHostReplay(
 ): boolean {
   if (data.isReplay !== true) {
     return false
+  }
+  if (data.observation?.origin === 'herdr') {
+    return true
   }
   // Why: with no row there is no proof the turn was unseen, so keep seeding (no reload re-fires).
   if (existing === undefined) {

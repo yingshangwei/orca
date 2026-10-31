@@ -83,6 +83,7 @@ function parseObservation(value: unknown): Record<string, unknown> | null {
       value.origin !== 'osc' &&
       value.origin !== 'title' &&
       value.origin !== 'process' &&
+      value.origin !== 'herdr' &&
       value.origin !== 'launch' &&
       value.origin !== 'orchestration' &&
       value.origin !== 'structured') ||

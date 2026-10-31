@@ -42,9 +42,6 @@ vi.mock('@/store', () => ({
   }
 }))
 vi.mock('./terminal-input-activity', () => ({ recordTerminalUserInputForLeaf: vi.fn() }))
-vi.mock('./TerminalPaneResumeInChatButton', () => ({
-  TerminalPaneResumeInChatButton: () => <button type="button">Continue in Chat UI</button>
-}))
 
 const mounted: { container: HTMLDivElement; root: Root }[] = []
 
@@ -78,8 +75,9 @@ function renderOverlay({
   onRenameSubmit = vi.fn(),
   canContinueAgentSessionInNewSession = false,
   onContinueAgentSessionInNewSession = vi.fn(),
-  canShowTerminal = false,
-  canResumeInNewNativeChat = false,
+  canToggleNativeChat = false,
+  isNativeChatView = false,
+  onToggleNativeChat = vi.fn(),
   renameValue = '',
   renamingPaneId = null,
   dropSetup
@@ -94,8 +92,9 @@ function renderOverlay({
   onRenameSubmit?: ReturnType<typeof vi.fn>
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: ReturnType<typeof vi.fn>
-  canShowTerminal?: boolean
-  canResumeInNewNativeChat?: boolean
+  canToggleNativeChat?: boolean
+  isNativeChatView?: boolean
+  onToggleNativeChat?: () => void
   renameValue?: string
   renamingPaneId?: number | null
   dropSetup?: {
@@ -144,9 +143,9 @@ function renderOverlay({
         onContinueAgentSessionInNewSession={
           onContinueAgentSessionInNewSession as (pane: ManagedPane) => void
         }
-        canShowTerminal={canShowTerminal}
-        onShowTerminal={vi.fn()}
-        canResumeInNewNativeChat={canResumeInNewNativeChat}
+        canToggleNativeChat={canToggleNativeChat}
+        isNativeChatView={isNativeChatView}
+        onToggleNativeChat={onToggleNativeChat}
         onSplitPane={vi.fn()}
         onBeginPaneDrag={vi.fn()}
         onActivatePaneTitleInteraction={dropSetup?.activate ?? vi.fn()}
@@ -191,28 +190,45 @@ afterEach(() => {
 })
 
 describe('TerminalPaneHeaderOverlay', () => {
-  it('offers Continue in Chat UI instead of a chat view switch, on the active pane only', () => {
-    const { container } = renderOverlay({ paneTitles: {}, canResumeInNewNativeChat: true })
+  it('switches the active pane through the existing chat-view callback', () => {
+    const onToggleNativeChat = vi.fn()
+    const { container } = renderOverlay({
+      paneTitles: {},
+      canToggleNativeChat: true,
+      onToggleNativeChat
+    })
 
     const resumeButtons = [...container.querySelectorAll('button')].filter(
-      (button) => button.textContent === 'Continue in Chat UI'
+      (button) => button.getAttribute('aria-label') === 'Continue in Chat UI'
     )
     expect(resumeButtons).toHaveLength(1)
     expect(resumeButtons[0]?.closest('.pane-title-bar')?.hasAttribute('data-active-pane')).toBe(
       true
     )
-    expect(container.querySelector('button[aria-label="Show chat view"]')).toBeNull()
+    act(() => resumeButtons[0]?.click())
+    expect(onToggleNativeChat).toHaveBeenCalledTimes(1)
   })
 
   it('keeps Show terminal as the way back from chat view', () => {
+    const onToggleNativeChat = vi.fn()
     const { container } = renderOverlay({
       paneTitles: {},
-      canShowTerminal: true,
-      canResumeInNewNativeChat: true
+      canToggleNativeChat: true,
+      isNativeChatView: true,
+      onToggleNativeChat
     })
 
     expect(container.querySelector('button[aria-label="Show terminal"]')).not.toBeNull()
     expect(container.textContent).not.toContain('Continue in Chat UI')
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Show terminal"]')?.click()
+    )
+    expect(onToggleNativeChat).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer a chat switch for an unsupported active pane', () => {
+    const { container } = renderOverlay({ paneTitles: {} })
+    expect(container.querySelector('button[aria-label="Continue in Chat UI"]')).toBeNull()
   })
 
   it('keeps the titled split-pane X as remove-title only', () => {

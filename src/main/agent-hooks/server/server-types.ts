@@ -4,8 +4,10 @@ import type { PersistedAgentExitEvidence } from './agent-exit-evidence'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import type {
   AgentStatusClearIpcPayload,
-  AgentStatusState
+  AgentStatusState,
+  ParsedAgentStatusPayload
 } from '../../../shared/agent-status-types'
+import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import type { AgentStatusObservation } from '../../../shared/agent-status-observation'
 import type { AgentKind } from '../../../shared/telemetry-events'
 import type { LegacyPaneKeyAliasEntry } from '../../../shared/persisted-state-types'
@@ -154,3 +156,26 @@ export type NormalizedLocalHook = {
 
 export type ServerStatusLineListener = ((event: ClaudeStatusLineRateLimits) => void) | null
 export type ServerAgentStatusListener = ((payload: EnrichedAgentHookEventPayload) => void) | null
+
+export type TerminalAgentStatusEvent = {
+  ptyId?: string
+  paneKey: string
+  tabId?: string
+  worktreeId?: string
+  connectionId?: string | null
+  terminalHandle?: string
+  payload: ParsedAgentStatusPayload
+  /** `process`: foreground process evidence; `herdr`: a linked terminal's live status. */
+  origin?: 'process' | 'herdr'
+  providerSession?: AgentProviderSessionMetadata
+  /** Initial/reconnected snapshots establish a baseline, not a fresh completion. */
+  isReplay?: true
+  /** Drop this write when a hook has reported the pane since then. */
+  yieldsToHookSince?: number
+  /** Projected from OSC 7501: yields to the pane's hook row. */
+  fromProgramStatus?: true
+  /** The program left no records: a row only OSC wrote is removed instead. */
+  removesProgramStatusRow?: true
+  /** A repeat that renews a live program row's freshness; the window must see it too. */
+  renewsProgramStatusLease?: true
+}

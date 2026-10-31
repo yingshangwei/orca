@@ -1,4 +1,5 @@
 import type { SleepingAgentLaunchConfig } from './agent-session-resume'
+import { assertClaudeEnvironmentUnmodified } from './claude-local-policy'
 import type { GlobalSettings } from './global-settings-types'
 import { isTuiAgent } from './tui-agent-config'
 import { YOLO_TUI_AGENT_ARGS, YOLO_TUI_AGENT_ENV } from './tui-agent-permissions'
@@ -165,6 +166,9 @@ export function resolveTuiAgentLaunchEnv(
   agent: string,
   configuredEnv: Partial<Record<string, Record<string, string>>> | null | undefined
 ): Record<string, string> {
+  if (agent === 'claude') {
+    assertClaudeEnvironmentUnmodified(configuredEnv?.[agent])
+  }
   if (configuredEnv && Object.hasOwn(configuredEnv, agent)) {
     return { ...configuredEnv[agent] }
   }

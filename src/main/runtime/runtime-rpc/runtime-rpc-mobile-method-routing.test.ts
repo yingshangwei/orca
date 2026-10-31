@@ -22,6 +22,10 @@ describe('mobile RPC method routing census', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('paired-desktop')
   })
 
+  it('keeps the link probe on the paired desktop, whose link it measures', () => {
+    expect(MOBILE_RPC_METHOD_ROUTES.get('mobile.linkProbe')).toBe('paired-desktop')
+  })
+
   it('routes no per-section collapse write while the sidebar-inputs switch is off', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.has('ui.setCollapsed')).toBe(false)
   })

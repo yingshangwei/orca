@@ -6,10 +6,7 @@ import { getDefaultSettings } from '../../shared/constants'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { ClaudeManagedAccount } from '../../shared/managed-account-types'
 import { CLAUDE_SIGN_IN_NOT_FINISHED_MESSAGE } from './claude-account-registration'
-import {
-  CLAUDE_ACCOUNT_FOLDER_IN_USE_MESSAGE,
-  CLAUDE_ACCOUNT_NEEDS_SIGN_IN_MESSAGE
-} from './claude-account-selection'
+import { CLAUDE_ACCOUNT_FOLDER_IN_USE_MESSAGE } from './claude-account-selection'
 import type { ClaudeCommandConfig, ClaudeCommandOptions } from './claude-command-process'
 import { describeClaudeProfile } from './claude-profile-paths'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
@@ -131,13 +128,13 @@ describe('ClaudeAccountService', () => {
     expect(byId.get('new-wsl')?.needsSignIn).toBeUndefined()
   })
 
-  it('asks no sign-in of an account System default runs, and lets it be selected', async () => {
+  it('keeps account labels readable but refuses a managed selection', async () => {
     const f = fixture()
     f.covered.add('b')
     const row = f.service.listAccounts().accounts.find((candidate) => candidate.id === 'b')
     expect(row?.needsSignIn).toBeUndefined()
     expect(row?.runsOnSystemDefault).toBe(true)
-    await expect(f.service.selectAccount('b')).resolves.toMatchObject({ activeAccountId: 'b' })
+    await expect(f.service.selectAccount('b')).rejects.toThrow('cannot override the connection')
   })
 
   it("reports System default's login from the user's own folder", () => {
@@ -517,22 +514,22 @@ describe('ClaudeAccountService', () => {
     expect(f.settings().activeClaudeManagedAccountIdsByRuntime?.host).toBeNull()
   })
 
-  it('puts the previous account back when publishing a new selection fails', async () => {
+  it('refuses a managed selection before changing or publishing it', async () => {
     const f = fixture()
     f.signIn('b', 'b@example.test')
     f.runtimeAuth.syncForCurrentSelection.mockRejectedValueOnce(new Error('publish failed'))
-    await expect(f.service.selectAccount('b')).rejects.toThrow('publish failed')
+    await expect(f.service.selectAccount('b')).rejects.toThrow('cannot override the connection')
     expect(f.settings().activeClaudeManagedAccountIdsByRuntime?.host).toBe('a')
-    expect(f.runtimeAuth.publishAll).toHaveBeenCalled()
+    expect(f.runtimeAuth.publishAll).not.toHaveBeenCalled()
   })
 
   it('refuses to select an account whose folder holds no login', async () => {
     const f = fixture()
-    await expect(f.service.selectAccount('b')).rejects.toThrow(CLAUDE_ACCOUNT_NEEDS_SIGN_IN_MESSAGE)
+    await expect(f.service.selectAccount('b')).rejects.toThrow('cannot override the connection')
     expect(f.settings().activeClaudeManagedAccountIdsByRuntime?.host).toBe('a')
     f.signIn('b', 'b@example.test')
-    await f.service.selectAccount('b')
-    expect(f.settings().activeClaudeManagedAccountIdsByRuntime?.host).toBe('b')
+    await expect(f.service.selectAccount('b')).rejects.toThrow('cannot override the connection')
+    expect(f.settings().activeClaudeManagedAccountIdsByRuntime?.host).toBe('a')
   })
 
   it('refuses to select a WSL account for the host', async () => {
@@ -541,7 +538,7 @@ describe('ClaudeAccountService', () => {
       account('w', { managedAuthRuntime: 'wsl', wslDistro: 'Ubuntu' })
     ])
     await expect(f.service.selectAccountForTarget('w', { runtime: 'host' })).rejects.toThrow(
-      'That Claude account belongs to a different runtime.'
+      'cannot override the connection'
     )
   })
 })

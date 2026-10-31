@@ -11,8 +11,21 @@
 const APS_ENVIRONMENT =
   process.env.ORCA_IOS_APS_ENVIRONMENT === 'production' ? 'production' : 'development'
 
+function selfHostedAndroidConfig(config) {
+  if (process.env.EXPO_PUBLIC_ORCA_SELF_HOSTED_BUILD !== '1') {
+    throw new Error('Self-hosted mobile builds require EXPO_PUBLIC_ORCA_SELF_HOSTED_BUILD=1.')
+  }
+  const { googleServicesFile: _googleServicesFile, ...android } = config.android
+  return {
+    name: 'Orca Selfhost',
+    scheme: 'orca-selfhost',
+    android: { ...android, package: 'com.stably.orca.mobile.selfhost' }
+  }
+}
+
 module.exports = ({ config }) => ({
   ...config,
+  ...(process.env.ORCA_MOBILE_SELF_HOSTED_BUILD === '1' ? selfHostedAndroidConfig(config) : {}),
   ios: {
     ...config.ios,
     entitlements: { ...config.ios?.entitlements, 'aps-environment': APS_ENVIRONMENT }

@@ -47,13 +47,18 @@ function failure(code: string): RpcResponse {
 }
 
 function fakeClient(responses: RpcResponse[]) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pairing only calls sendRequest and close on this test client.
   return {
     sendRequest: vi.fn().mockImplementation(async () => responses.shift()!),
     close: vi.fn()
   } as unknown as RpcClient
 }
 
-function relayProvisioningClient(getJournal: () => MobileRelayPairingJournal) {
+function relayProvisioningClient(
+  getJournal: () => MobileRelayPairingJournal,
+  endpoint: Record<string, unknown> = {}
+) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the provisioning flow only calls sendRequest and close on this test client.
   return {
     sendRequest: vi.fn(async (method: string) => {
       if (method === 'status.get') {
@@ -77,7 +82,8 @@ function relayProvisioningClient(getJournal: () => MobileRelayPairingJournal) {
           cellUrl: relayOffer.relay!.cellUrl,
           assignmentEpoch: 7,
           relayHostId: relayOffer.relay!.relayHostId,
-          e2eeFraming: 2
+          e2eeFraming: 2,
+          ...endpoint
         },
         installStatus: {
           v: 1,
@@ -211,6 +217,96 @@ describe('pre-profile pairing coordinator', () => {
       publicKeyB64: directOffer.publicKeyB64,
       lastConnected: now
     })
+  })
+
+  it('scopes host identity to the offer relay backend and publishes under that id', async () => {
+    const direct = fakeClient([])
+    ;(direct.sendRequest as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('LAN down'))
+    let journal: MobileRelayPairingJournal | null = null
+    const deps = dependencies(direct, [])
+    deps.connectRelay.mockReturnValue(relayProvisioningClient(() => journal!))
+    deps.saveJournal.mockImplementation(async (value) => {
+      journal = value
+    })
+    deps.resolveHostIdentity = vi.fn(
+      async (_publicKeyB64: string, _newHostId: string, relayDirectorUrl?: string) => ({
+        id: relayDirectorUrl === relayOffer.relay!.directorUrl ? 'host-official' : 'host-other',
+        name: 'Studio Mac'
+      })
+    )
+
+    const attempt = startPreProfilePairing({
+      offer: relayOffer,
+      timeoutMs: 5_000,
+      dependencies: deps
+    })
+
+    await expect(attempt.result).resolves.toEqual({ hostId: 'host-official' })
+    expect(journal!.metadata.host.id).toBe('host-official')
+    expect(deps.savePairedHost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'host-official' })
+    )
+  })
+
+  // Why: the host id was chosen for the scanned backend; a desktop that switched provider mid-pair
+  // must not land another backend's route on that card.
+  it.each([
+    { directorUrl: 'https://relay.example.com', cellUrl: 'https://relay-cell.example.com' },
+    { relayHostId: 'ZyXwVu9876_-abC0' }
+  ])(
+    'retains the journal when the committed endpoint belongs to another backend (%o)',
+    async (endpoint) => {
+      const direct = fakeClient([])
+      ;(direct.sendRequest as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('LAN down'))
+      let journal: MobileRelayPairingJournal | null = null
+      const deps = dependencies(direct, [])
+      deps.connectRelay.mockReturnValue(relayProvisioningClient(() => journal!, endpoint))
+      deps.saveJournal.mockImplementation(async (value) => {
+        journal = value
+      })
+
+      const attempt = startPreProfilePairing({
+        offer: relayOffer,
+        timeoutMs: 5_000,
+        dependencies: deps
+      })
+
+      await expect(attempt.result).rejects.toThrow(/does not match the scanned relay backend/)
+      expect(deps.writeCredentialBundle).not.toHaveBeenCalled()
+      expect(deps.savePairedHost).not.toHaveBeenCalled()
+      expect(deps.clearJournal).not.toHaveBeenCalled()
+      expect(deps.releaseJournal).toHaveBeenCalledWith(journal!.metadata.journalId)
+    }
+  )
+
+  it('publishes a committed endpoint that moved cells within the scanned director', async () => {
+    const direct = fakeClient([])
+    ;(direct.sendRequest as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('LAN down'))
+    let journal: MobileRelayPairingJournal | null = null
+    const deps = dependencies(direct, [])
+    deps.connectRelay.mockReturnValue(
+      relayProvisioningClient(() => journal!, {
+        cellUrl: 'https://relay-c2.onorca.dev',
+        assignmentEpoch: 8
+      })
+    )
+    deps.saveJournal.mockImplementation(async (value) => {
+      journal = value
+    })
+
+    const attempt = startPreProfilePairing({
+      offer: relayOffer,
+      timeoutMs: 5_000,
+      dependencies: deps
+    })
+
+    await expect(attempt.result).resolves.toEqual({ hostId: `host-${now}` })
+    expect(deps.savePairedHost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relay: expect.objectContaining({ cellUrl: 'https://relay-c2.onorca.dev' })
+      })
+    )
+    expect(deps.clearJournal).toHaveBeenCalledOnce()
   })
 
   it('hands the winning status to the descriptor recorder only after the host is saved', async () => {

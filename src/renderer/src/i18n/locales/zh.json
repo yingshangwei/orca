@@ -1,4 +1,11 @@
 {
+  "herdr": {
+    "open": "打开 Herdr 终端",
+    "sync": "同步 Herdr 窗口",
+    "syncing": "正在同步 Herdr…",
+    "synced": "已连接 {{count}} 个 Herdr 终端，新增 {{added}} 个入口。",
+    "failed": "Herdr 操作失败"
+  },
   "app": {
     "saving": {
       "delayedTitle": "配置存储操作耗时比平时更长",
@@ -20638,7 +20645,8 @@
       "waitingAriaLabel": "更新正在等待其他 Orca 实例。点击展开。",
       "preparingLabel": "正在准备更新",
       "preparingAriaLabel": "正在准备更新。点击展开。"
-    }
+    },
+    "localBuildDisabled": "此本地版本已禁用官方更新和更新通知。"
   },
   "onboarding": {
     "language": {

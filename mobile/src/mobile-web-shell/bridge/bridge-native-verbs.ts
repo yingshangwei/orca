@@ -47,10 +47,14 @@ export const BRIDGE_NATIVE_VERB_NAMES = [
   'native.audio.start',
   'native.audio.read',
   'native.audio.stop',
-  'native.storage.read'
+  'native.storage.read',
+  'native.link.snapshot'
 ] as const
 
 export type BridgeNativeVerb = (typeof BRIDGE_NATIVE_VERB_NAMES)[number]
+
+/** Answered by the bridge host, which owns the backlog this verb reads. */
+export type ScreenServedNativeVerb = Exclude<BridgeNativeVerb, 'native.link.snapshot'>
 
 /**
  * Text, and only text: an image on the pasteboard is `native.media.pick { source: 'clipboard' }`.
@@ -99,6 +103,13 @@ export const storageReadParamsSchema = z.strictObject({
 })
 export const storageReadResultSchema = z.strictObject({ value: z.string().nullable() })
 
+// Read-only and numbers only: the round trip is the page's measure of the page-to-shell hop, and
+// this is the terminal output the shell is still holding because the page has not acked it.
+export const linkSnapshotParamsSchema = z.strictObject({})
+export const linkSnapshotResultSchema = z.strictObject({
+  heldOutputBytes: z.number().nonnegative()
+})
+
 export const BRIDGE_NATIVE_VERBS: Readonly<Record<BridgeNativeVerb, BridgeNativeVerbSpec>> = {
   'native.clipboard.write': {
     params: clipboardWriteParamsSchema,
@@ -144,6 +155,10 @@ export const BRIDGE_NATIVE_VERBS: Readonly<Record<BridgeNativeVerb, BridgeNative
   'native.storage.read': {
     params: storageReadParamsSchema,
     result: storageReadResultSchema
+  },
+  'native.link.snapshot': {
+    params: linkSnapshotParamsSchema,
+    result: linkSnapshotResultSchema
   }
 }
 

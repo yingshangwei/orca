@@ -194,23 +194,34 @@ describe('buildMobileAiVaultResumeLaunch', () => {
       }),
       hostPlatform: 'darwin',
       settings: {
-        agentCmdOverrides: { claude: 'claude-dev' },
         agentDefaultArgs: { claude: '--model opus' },
-        agentDefaultEnv: { claude: { ANTHROPIC_BASE_URL: 'http://localhost:3000' } }
+        agentDefaultEnv: { claude: { CLAUDE_CODE_EFFORT_LEVEL: 'high' } }
       }
     })
     expect(launch.command).toBe(
-      "cd '/Users/ada/repo' && claude-dev '--model' 'opus' '--resume' 'abc 123'"
+      "cd '/Users/ada/repo' && claude '--model' 'opus' '--resume' 'abc 123'"
     )
-    expect(launch.env).toEqual({ ANTHROPIC_BASE_URL: 'http://localhost:3000' })
+    expect(launch.env).toEqual({ CLAUDE_CODE_EFFORT_LEVEL: 'high' })
     expect(launch.launchAgent).toBe('claude')
     expect(launch.launchConfig).toEqual({
-      agentCommand: "claude-dev '--model' 'opus'",
+      agentCommand: "claude '--model' 'opus'",
       agentArgs: '--model opus',
-      agentEnv: { ANTHROPIC_BASE_URL: 'http://localhost:3000' }
+      agentEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' }
     })
     // Only bare real-home Codex resumes request env deletion.
     expect(launch.envToDelete).toBeUndefined()
+  })
+
+  it('rejects Claude connection overrides when resuming a mobile vault session', () => {
+    expect(() =>
+      buildMobileAiVaultResumeLaunch({
+        session: session(),
+        hostPlatform: 'darwin',
+        settings: {
+          agentDefaultEnv: { claude: { ANTHROPIC_BASE_URL: 'https://override.invalid' } }
+        }
+      })
+    ).toThrow('Blocked environment key: ANTHROPIC_BASE_URL')
   })
 
   it('deletes inherited Codex homes when resuming a real-home session like desktop', () => {

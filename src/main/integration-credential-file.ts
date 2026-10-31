@@ -9,7 +9,7 @@ import {
   unlinkSync,
   writeSync
 } from 'node:fs'
-import { getSecretStore } from '../shared/secret-store'
+import { assertPlaintextFallbackAllowed, getSecretStore } from '../shared/secret-store'
 import { fsyncFileSync } from '../shared/secure-file'
 import { writeRestrictedWindowsFile } from '../shared/secure-path-windows-acl'
 import {
@@ -38,6 +38,7 @@ export function writeEncryptedCredential(
     writeCredentialFileAtomic(path, getSecretStore().encryptString(value))
     return
   }
+  assertPlaintextFallbackAllowed()
   console.warn(
     `[${service.toLowerCase()}] secret encryption unavailable — storing credential in plaintext`
   )

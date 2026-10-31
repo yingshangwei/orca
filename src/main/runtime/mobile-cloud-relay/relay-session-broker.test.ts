@@ -94,6 +94,7 @@ import { RelayHttpError } from './relay-http-client'
 import { RelayAuthCoordinator } from './relay-auth-coordinator'
 import type { RelayAuthContext } from './relay-auth-identity'
 import { RELAY_HOST_CLOSE_REASON } from '../../../shared/relay-host-close-reason'
+import { selfHostedRelayEndpoints } from './self-hosted-relay-backend'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -116,7 +117,55 @@ describe('RelaySessionBroker lifecycle ownership', () => {
     })
   })
 
-  it('publishes the assigned cell with the status and drops it on close', async () => {
+  it.each(['official', 'self-hosted'] as const)(
+    'publishes the %s assigned cell with the status and drops it on close',
+    async (provider) => {
+      fakes.controlConnect.mockResolvedValue({
+        type: 'host-hello-ack',
+        v: 1,
+        generation: 1,
+        controlResumeSecret: 'A'.repeat(43),
+        leaseExpiresAt: 1_000_000,
+        activeConnIds: [],
+        pendingConns: []
+      } satisfies RelayHostHelloAckMessage)
+      const onStatus = vi.fn()
+
+      const options = brokerOptions({ onStatus })
+      if (provider === 'self-hosted') {
+        options.authConfig = selfHostedRelayEndpoints('https://relay.example.test')
+      }
+      const broker = await RelaySessionBroker.connect(options)
+
+      expect(onStatus.mock.calls).toContainEqual(['connecting', undefined])
+      expect(onStatus).toHaveBeenLastCalledWith('registered', 'https://relay.example.test')
+
+      // Why: the pool publishes offline while it still holds the assignment it is
+      // about to rotate; forwarding that cell leaves the UI naming a dead one.
+      fakes.controls[0]!.options.onClose(1006)
+      expect(onStatus.mock.calls).toContainEqual(['offline', undefined])
+      expect(onStatus.mock.calls).toContainEqual(['draining', 'https://relay.example.test'])
+
+      broker.closeNow()
+      expect(onStatus).toHaveBeenLastCalledWith('offline')
+    }
+  )
+
+  it.each(['https://10.0.0.1', 'http://127.0.0.1:9222', 'https://relay.example.test:8443'])(
+    'refuses a self-hosted assignment to %s before opening any socket',
+    async (cellUrl) => {
+      fakes.assign.mockResolvedValue({ cellUrl, assignmentEpoch: 1, leaseExpiresAt: 60_000 })
+      const options = brokerOptions()
+      options.authConfig = selfHostedRelayEndpoints('https://relay.example.test')
+      await expect(RelaySessionBroker.connect(options)).rejects.toThrow(
+        'relay_cell_origin_not_allowed'
+      )
+      expect(fakes.controls).toHaveLength(0)
+      expect(fakes.transports).toHaveLength(0)
+    }
+  )
+
+  it('refuses a self-hosted migration outside its configured origin', async () => {
     fakes.controlConnect.mockResolvedValue({
       type: 'host-hello-ack',
       v: 1,
@@ -126,21 +175,34 @@ describe('RelaySessionBroker lifecycle ownership', () => {
       activeConnIds: [],
       pendingConns: []
     } satisfies RelayHostHelloAckMessage)
-    const onStatus = vi.fn()
-
-    const broker = await RelaySessionBroker.connect(brokerOptions({ onStatus }))
-
-    expect(onStatus.mock.calls).toContainEqual(['connecting', undefined])
-    expect(onStatus).toHaveBeenLastCalledWith('registered', 'https://relay.example.test')
-
-    // Why: the pool publishes offline while it still holds the assignment it is
-    // about to rotate; forwarding that cell leaves the UI naming a dead one.
-    fakes.controls[0]!.options.onClose(1006)
-    expect(onStatus.mock.calls).toContainEqual(['offline', undefined])
-    expect(onStatus.mock.calls).toContainEqual(['draining', 'https://relay.example.test'])
-
-    broker.closeNow()
-    expect(onStatus).toHaveBeenLastCalledWith('offline')
+    const options = brokerOptions()
+    options.authConfig = selfHostedRelayEndpoints('https://relay.example.test')
+    const broker = await RelaySessionBroker.connect(options)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      fakes.assign.mockResolvedValue({
+        cellUrl: 'https://10.0.0.1',
+        assignmentEpoch: 2,
+        leaseExpiresAt: 60_000
+      })
+      fakes.controls[0]!.options.onDrain({
+        type: 'drain',
+        graceMs: 60_000,
+        recovery: 'resolve-director'
+      })
+      await vi.waitFor(() =>
+        expect(warning).toHaveBeenCalledWith(
+          '[relay] control recovery attempt failed:',
+          'relay_cell_origin_not_allowed'
+        )
+      )
+      expect(fakes.controls).toHaveLength(1)
+      expect(fakes.transports).toHaveLength(1)
+      expect(broker.currentAssignment?.cellUrl).toBe('https://relay.example.test')
+    } finally {
+      broker.closeNow()
+      warning.mockRestore()
+    }
   })
 
   it('closes partially opened resources without publishing stale state', async () => {

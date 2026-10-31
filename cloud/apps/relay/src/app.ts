@@ -80,6 +80,7 @@ import {
   probeRegionalRehomeTrust
 } from './regional-rehome-trust-probe.js'
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
+import type { SelfHostedRelayAuth } from './self-hosted-relay-auth.js'
 import type { RelayJWKSet } from './stale-if-error-jwks.js'
 import { stagingAsiaProofMembership } from './staging-asia-proof-admission.js'
 import {
@@ -159,6 +160,7 @@ export function createRelayApp(
     readinessLocal?: () => boolean
     localReadiness?: () => RelayLocalReadinessVerdict
     relayJwks?: RelayJWKSet
+    selfHostedAuth?: SelfHostedRelayAuth
     recordAssignmentAdmission?: (outcome: AssignmentAdmissionOutcome) => void
     recordAssignmentRejectionReason?: (
       lane: AssignmentAdmissionLane,
@@ -184,6 +186,11 @@ export function createRelayApp(
   }
 ): Hono {
   const app = new Hono()
+  if (config.selfHostedAuthFile) {
+    if (!operations.selfHostedAuth) throw new Error('Self-hosted relay authentication is unavailable')
+    operations.selfHostedAuth.register(app)
+    app.use('/v1/admin/*', async (context) => context.json({ error: 'not_found' }, 404))
+  }
   let regionCatalogCache:
     | { expiresAt: number; value: Awaited<ReturnType<RelayAssignmentStore['regionCatalog']>> }
     | undefined

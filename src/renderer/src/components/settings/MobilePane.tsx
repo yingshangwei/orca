@@ -24,6 +24,7 @@ import {
 } from '../../../../shared/mobile-pairing-connection-mode'
 import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
 import { useMobilePairingConnectionMode } from '../mobile/use-mobile-pairing-connection-mode'
+import { useMobileRelayBackend } from '../mobile/use-mobile-relay-backend'
 import { useMobilePairingAddressPreference } from '../mobile/use-mobile-pairing-address-preference'
 import { shouldOpenMobilePairingAddress } from './mobile-pane-search'
 export { getMobilePaneSearchEntries } from './mobile-pane-search'
@@ -43,7 +44,9 @@ export function MobilePane(): React.JSX.Element {
   const [refreshingNetworkInterfaces, setRefreshingNetworkInterfaces] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [deviceCountAtQr, setDeviceCountAtQr] = useState<number | null>(null)
-  const signedIn = useAppStore((state) => state.orcaProfileAuthStatus?.state === 'connected')
+  // Why named signedIn: these gates predate self-hosted Relay; a configured
+  // self-hosted backend is as ready as a signed-in official one.
+  const { relayReady: signedIn, relayBackendKey } = useMobileRelayBackend()
   const settingsSearchQuery = useAppStore((state) => state.settingsSearchQuery)
   const [connectionMode, setConnectionMode] = useMobilePairingConnectionMode()
   const [rotateNextQr, setRotateNextQr] = useState(false)
@@ -126,6 +129,19 @@ export function MobilePane(): React.JSX.Element {
       invalidatePairing()
     }
   }, [signedIn, connectionMode, invalidatePairing])
+
+  // Why: a QR names the Relay backend that minted it; switching between two
+  // ready backends leaves signedIn unchanged but the displayed code stale.
+  const relayBackendKeyRef = useRef(relayBackendKey)
+  useEffect(() => {
+    if (relayBackendKeyRef.current === relayBackendKey) {
+      return
+    }
+    relayBackendKeyRef.current = relayBackendKey
+    if (connectionMode === 'automatic') {
+      invalidatePairing()
+    }
+  }, [relayBackendKey, connectionMode, invalidatePairing])
 
   const clearCodeCopiedResetTimer = useCallback((): void => {
     if (codeCopiedResetTimerRef.current !== null) {

@@ -2,12 +2,11 @@ import { track } from '../../telemetry/client'
 import { MAX_PANE_KEY_LEN } from '../../../shared/agent-hook-listener/listener-limits'
 import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import { terminalStatusPayloadMatchesHook } from '../../../shared/agent-terminal-status-equivalence'
-import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
 import {
   agentProviderSessionsEqual,
   type AgentProviderSessionMetadata
 } from '../../../shared/agent-session-resume'
-import type { EnrichedAgentHookEventPayload } from './server-types'
+import type { EnrichedAgentHookEventPayload, TerminalAgentStatusEvent } from './server-types'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import { agentSubagentsEqual } from '../../../shared/agent-status-subagent-snapshot'
 import { isAgentStatusHeldOpenByChildWork } from '../../../shared/agent-lead-status-fold'
@@ -94,25 +93,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     this.republishProgramStatusFacet(paneKey)
   }
 
-  ingestTerminalStatus(event: {
-    ptyId?: string
-    paneKey: string
-    tabId?: string
-    worktreeId?: string
-    connectionId?: string | null
-    terminalHandle?: string
-    payload: ParsedAgentStatusPayload
-    /** `process`: derived from the pane's foreground process rather than parsed from its bytes. */
-    origin?: 'process'
-    /** Drop this write when a hook has reported the pane since then (the hook owns that command). */
-    yieldsToHookSince?: number
-    /** Projected from OSC 7501: yields to the pane's hook row (programStatusYieldsToHookRow). */
-    fromProgramStatus?: true
-    /** The program left no records: a row only OSC wrote is removed instead. */
-    removesProgramStatusRow?: true
-    /** A repeat that renews a live program row's freshness; the window must see it too. */
-    renewsProgramStatusLease?: true
-  }): void {
+  ingestTerminalStatus(event: TerminalAgentStatusEvent): void {
     const physicalPaneKey = event.paneKey.trim()
     let paneKey = this.resolvePaneKeyAlias(physicalPaneKey)
     const parsedPaneKey = parsePaneKey(paneKey)
@@ -195,6 +176,15 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     const previous = this.state.lastStatusByPaneKey.get(paneKey) as
       | EnrichedAgentHookEventPayload
       | undefined
+    if (
+      event.origin === 'herdr' &&
+      previous &&
+      !previous.providerSessionOnly &&
+      !previous.restoredUnconfirmed &&
+      (previous.observation?.origin === 'hook' || previous.observation?.origin === 'structured')
+    ) {
+      return
+    }
     // Why: a hook that reported during this command owns it (OpenCode 1 `run` loads its plugin in-process).
     const hookOwnsCommand =
       event.yieldsToHookSince !== undefined &&
@@ -261,6 +251,14 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       previous.payload.turnCompletedAt === this.activeHookTurnCompletedAtByPaneKey.get(paneKey)
     if (
       !previous?.restoredUnconfirmed &&
+      !previous?.providerSessionOnly &&
+      event.isReplay !== true &&
+      (!event.providerSession ||
+        agentProviderSessionsEqual(
+          event.payload.agentType,
+          previous?.providerSession,
+          event.providerSession
+        )) &&
       previous?.connectionId === connectionId &&
       previous.tabId === tabId &&
       previous.worktreeId === worktreeId &&
@@ -277,8 +275,11 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       this.refreshTerminalStatusEvidence(
         previous,
         mutationBefore,
-        mutationBefore !== undefined || event.renewsProgramStatusLease === true,
-        newRun
+        mutationBefore !== undefined ||
+          event.renewsProgramStatusLease === true ||
+          event.origin === 'herdr',
+        newRun,
+        event.origin ?? 'osc'
       )
       return
     }
@@ -295,7 +296,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
         ? event.payload.agentType
         : undefined
     // A launch seed's `done` is a placeholder, not a finished turn, so its session carries over.
-    const preservedProviderSession =
+    const inheritedProviderSession =
       previous?.providerSession &&
       (claimedAgentType === undefined || claimedAgentType === previous.payload.agentType) &&
       (previous.payload.state !== 'done' ||
@@ -303,6 +304,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
         previous.observation?.origin === 'launch')
         ? previous.providerSession
         : undefined
+    const preservedProviderSession = event.providerSession ?? inheritedProviderSession
     // Why: OSC carries no main agent fact. While it repaints the state the hook row already holds, the
     // main agent behind that state is unchanged too; a different state is a turn edge OSC cannot date.
     const preservedMainAgent =
@@ -319,6 +321,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
         tabId,
         worktreeId,
         connectionId,
+        ...(event.isReplay ? { isReplay: true } : {}),
         ...(preservedProviderSession ? { providerSession: preservedProviderSession } : {}),
         ...(terminalHandle ? { terminalHandle } : {}),
         payload: preservedMainAgent

@@ -1,4 +1,5 @@
 import { createAdaptorServer } from '@hono/node-server'
+import { relayAdmissionSource } from './relay-admission-source.js'
 import {
   hasAdmissionCapacity,
   HostDataAuthSchema,
@@ -45,6 +46,7 @@ import { createRelayLocalReadiness } from './relay-local-readiness.js'
 import { createRelayReadiness } from './relay-readiness.js'
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
 import { createStaleIfErrorJWKSet } from './stale-if-error-jwks.js'
+import { loadSelfHostedRelayAuth } from './self-hosted-relay-auth.js'
 import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ShadowDirectoryCompare } from './shadow-directory-compare.js'
 import { type ShadowSeatPoller, startShadowSeatPoller } from './shadow-seat-directory.js'
@@ -112,17 +114,6 @@ function firstHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
 
-function admissionSource(request: IncomingMessage): string {
-  const forwarded = request.headers['x-forwarded-for']
-  const chain = (Array.isArray(forwarded) ? forwarded.join(',') : (forwarded ?? ''))
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-  // Google Front End appends client and load-balancer addresses after any
-  // caller-supplied values, so only the penultimate hop is trustworthy.
-  return chain.length >= 2 ? chain.at(-2)! : (request.socket.remoteAddress ?? 'unknown')
-}
-
 function firstPayload(raw: RawData, expectedType: string): unknown {
   try {
     const parsed = JSON.parse(raw.toString()) as Record<string, unknown>
@@ -158,7 +149,10 @@ export function createRelayServer(
     perMessageDeflate: false,
     maxPayload: 1024 * 1024
   })
-  const relayJwks = createStaleIfErrorJWKSet(new URL(config.jwksUrl))
+  const selfHostedAuth = config.selfHostedAuthFile
+    ? loadSelfHostedRelayAuth(config.selfHostedAuthFile, config.authIssuer)
+    : undefined
+  const relayJwks = selfHostedAuth?.keys ?? createStaleIfErrorJWKSet(new URL(config.jwksUrl))
   const verifyRelayToken = createRelayTokenVerifier(config, relayJwks)
   const store = new RelayCredentialStore(observedDatabase, options.now)
   // Bound once the poller below exists; without one, no poll ever reads as dead.
@@ -174,7 +168,7 @@ export function createRelayServer(
       observability.recordControlRenewal?.(durationMs, outcome),
     deadCellVerdict: (cellId, now) => pollEvidence.deadCellVerdict?.(cellId, now) ?? null
   })
-  const readiness = createRelayReadiness(observedDatabase, config.jwksUrl, {
+  const readiness = createRelayReadiness(observedDatabase, selfHostedAuth ? null : config.jwksUrl, {
     jwksGraceMs: config.readinessJwksGraceMs,
     sqlGraceMs: config.readinessSqlGraceMs,
     observe: (observation) => observability.recordReadiness(observation),
@@ -461,6 +455,7 @@ export function createRelayServer(
     readinessDegradation: () => readiness.degradedDependencies(),
     readinessLocal: () => options.cellFlags?.().flags.readinessLocal ?? false,
     relayJwks,
+    selfHostedAuth,
     localReadiness: createRelayLocalReadiness({
       listening: () => server.listening,
       keys: relayJwks,
@@ -615,7 +610,12 @@ export function createRelayServer(
 
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', config.publicUrl)
-    const source = admissionSource(request)
+    const source = relayAdmissionSource({
+      forwardedFor: request.headers['x-forwarded-for'],
+      remoteAddress: request.socket.remoteAddress,
+      selfHosted: config.selfHostedAuthFile !== undefined,
+      trustPrivateProxy: config.selfHostedTrustPrivateProxy
+    })
     if (url.search) {
       rejectUpgrade(socket, 400, 'Bad Request')
       return

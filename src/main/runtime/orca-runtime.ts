@@ -37,6 +37,7 @@ import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-l
 import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import {
   installStructuredAgentAvailability,
   type StructuredAgentAvailabilityReader
@@ -60,6 +61,10 @@ const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithAgentTransitions = ORCA_SIDE
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
+  setBeforeFolderWorkspaceDelete(handler: (workspace: FolderWorkspace) => Promise<void>): void {
+    this.projectGroups.setBeforeFolderWorkspaceDelete(handler)
+  }
+
   /** This runtime as its sidebar facts layer; null unless built with ORCA_SIDEBAR_INPUTS=main. */
   get sidebarFacts() {
     return sidebarFactsRuntime(this)

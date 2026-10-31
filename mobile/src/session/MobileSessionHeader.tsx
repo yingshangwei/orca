@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ChevronLeft, Folder, GitBranch, MoreHorizontal, PanelLeftOpen } from 'lucide-react-native'
 import { MobileSessionHeaderIconButton } from './MobileSessionHeaderIconButton'
+import { MobileSessionLinkMeta } from './MobileSessionLinkMeta'
+import { MobileSessionLinkSheet } from './MobileSessionLinkSheet'
 import { MobileSessionTabStrip } from './MobileSessionTabStrip'
 import { StatusDot } from '../components/StatusDot'
 import { styles } from './mobile-session-styles'
@@ -24,8 +27,11 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     showConnectionRetry,
     terminalSummary,
     handlePanelTap,
-    showHeaderMoreButton
+    showHeaderMoreButton,
+    linkMonitor
   } = controller
+  const [showLinkDetails, setShowLinkDetails] = useState(false)
+  const canOpenLinkDetails = !showConnectionRetry && connState === 'connected'
   const revealSidebar = useHostSidebarReveal()
   // Why: a sideways phone is ~390pt tall, so the tabs share the top bar instead of taking a second row.
   const hasTabs = visibleTabs.length > 0
@@ -57,19 +63,28 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
           </Text>
           <Pressable
             style={styles.sessionMetaRow}
-            disabled={!showConnectionRetry}
+            disabled={!showConnectionRetry && !canOpenLinkDetails}
             onPress={() => {
-              if (hostId && forceReconnectHost) {
+              if (canOpenLinkDetails) {
+                setShowLinkDetails(true)
+              } else if (hostId && forceReconnectHost) {
                 void forceReconnectHost(hostId)
               }
             }}
-            accessibilityRole={showConnectionRetry ? 'button' : undefined}
-            accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
+            accessibilityRole={showConnectionRetry || canOpenLinkDetails ? 'button' : undefined}
+            accessibilityLabel={
+              showConnectionRetry
+                ? 'Reconnect to desktop'
+                : canOpenLinkDetails
+                  ? 'Connection details'
+                  : undefined
+            }
           >
             <StatusDot state={connState} />
             <Text style={styles.sessionMetaText} numberOfLines={1}>
               {terminalSummary}
             </Text>
+            <MobileSessionLinkMeta monitor={linkMonitor} />
           </Pressable>
         </View>
         {tabsInTopBar ? tabStrip : null}
@@ -100,6 +115,11 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
       </View>
 
       {tabsInTopBar ? null : tabStrip}
+      <MobileSessionLinkSheet
+        monitor={linkMonitor}
+        visible={showLinkDetails}
+        onClose={() => setShowLinkDetails(false)}
+      />
     </SafeAreaView>
   )
 }

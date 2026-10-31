@@ -1,0 +1,5 @@
+{$ORCA_RELAY_PUBLIC_URL} {
+  reverse_proxy relay:8080 {
+    header_up X-Forwarded-For {http.request.remote.host}
+  }
+}

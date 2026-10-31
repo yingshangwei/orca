@@ -16,6 +16,9 @@ export function isUpdateCardVisible({
   autoDismissed?: boolean
   collapsed?: boolean
 }): boolean {
+  if (status.updatesDisabled) {
+    return false
+  }
   const isUserInitiated = 'userInitiated' in status && Boolean(status.userInitiated)
 
   if (status.state === 'checking' && !isUserInitiated) {

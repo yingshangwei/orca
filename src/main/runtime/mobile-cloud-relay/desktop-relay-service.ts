@@ -1,4 +1,3 @@
-import type { OrcaCloudAuthConfig } from '../../orca-profiles/profile-cloud-auth-config'
 import type { MobilePairingConnectionContext } from '../runtime-rpc/runtime-rpc-pairing-types'
 import type { OrcaRuntimeRpcServer } from '../runtime-rpc'
 import type {
@@ -8,8 +7,8 @@ import type {
   PairingProvisionRelayParams
 } from '../../../shared/mobile-relay-credential-contract'
 import type { RelayHostCloseReason } from '../../../shared/relay-host-close-reason'
-import { readRelayAuthContext } from './relay-auth-context'
-import { relayIdentityKey } from './relay-auth-identity'
+import type { MobileRelayBackendProvider } from '../../../shared/mobile-relay-backend'
+import { relayBackendOwnsBinding, relayIdentityKey } from './relay-auth-identity'
 import { RelayAuthCoordinator } from './relay-auth-coordinator'
 import { RelayUnavailableError } from './relay-readiness'
 import { RelaySessionBroker } from './relay-session-broker'
@@ -24,9 +23,13 @@ import { pairingAuthorizationForContext } from './relay-pairing-authorization'
 import { deriveRelayHostId } from './relay-http-client'
 import { RelayDemandLedger } from './relay-demand-ledger'
 import { createRelayRegionPreferenceReader } from './relay-region-preference-reader'
+import type { DesktopRelayBackend } from './desktop-relay-backend'
+import { assertRelayHost } from './stale-relay-connection'
+
+export { officialRelayBackend, type DesktopRelayBackend } from './desktop-relay-backend'
 
 type DesktopRelayServiceOptions = {
-  authConfig: OrcaCloudAuthConfig
+  backend: DesktopRelayBackend
   userDataPath: string
   appVersion: string
   runtimeRpc: OrcaRuntimeRpcServer
@@ -43,6 +46,7 @@ const PAIRING_MINT_READINESS_WAIT_MS = 20_000
 const PHONE_REQUEST_READINESS_WAIT_MS = 10_000
 
 export class DesktopRelayService {
+  readonly provider: MobileRelayBackendProvider
   private readonly coordinator: RelayAuthCoordinator
   private readonly revokeOutbox: RelayRevokeOutbox
   private readonly runtimeRpc: OrcaRuntimeRpcServer
@@ -52,6 +56,7 @@ export class DesktopRelayService {
   private stopped = false
 
   constructor(options: DesktopRelayServiceOptions) {
+    this.provider = options.backend.provider
     const keypair = options.runtimeRpc.getE2EEKeypair()
     const mobileSocketWiring = options.runtimeRpc.getMobileSocketWiring()
     if (!keypair || !mobileSocketWiring) {
@@ -64,13 +69,19 @@ export class DesktopRelayService {
       revokeOutbox: this.revokeOutbox,
       relayHostId: deriveRelayHostId(keypair.publicKey)
     })
-    const regionPreference = createRelayRegionPreferenceReader(options)
+    const { backend } = options
+    const regionPreference = backend.regionPreference
+      ? createRelayRegionPreferenceReader({
+          authConfig: backend.endpoints,
+          userDataPath: options.userDataPath
+        })
+      : null
     this.coordinator = new RelayAuthCoordinator({
-      readContext: () => readRelayAuthContext(options.authConfig, options.userDataPath),
+      readContext: backend.readContext,
       hasDemand: ({ identity }) => this.demandLedger.hasDemand(relayIdentityKey(identity)),
       openBroker: async ({ context, isCurrent, refreshAccessToken }) => {
         const broker = await RelaySessionBroker.connect({
-          authConfig: options.authConfig,
+          authConfig: backend.endpoints,
           accessToken: context.accessToken,
           identity: context.identity,
           keypair,
@@ -78,10 +89,11 @@ export class DesktopRelayService {
           mobileSocketWiring,
           isCurrent,
           refreshAccessToken,
-          resolvePreferredRegion: regionPreference.resolvePreferredRegion,
-          measureRegionDecision: regionPreference.measureRegionDecision,
-          onAssignedCellActive: regionPreference.noteAssignedCell,
-          onStatus: options.onStatus
+          resolvePreferredRegion: regionPreference?.resolvePreferredRegion,
+          measureRegionDecision: regionPreference?.measureRegionDecision,
+          onAssignedCellActive: regionPreference?.noteAssignedCell,
+          onStatus: options.onStatus,
+          ...(backend.fetch ? { fetch: backend.fetch } : {})
         })
         void this.flushRevokeOutbox(broker)
         return broker
@@ -161,10 +173,10 @@ export class DesktopRelayService {
       const broker = await this.requireActiveBroker(PHONE_REQUEST_READINESS_WAIT_MS).catch(
         () => null
       )
-      if (!broker?.endpoint) {
+      if (!broker?.endpoint || !this.servesDevice(context.deviceId, broker)) {
         return { v: 1, relay: null }
       }
-      this.assertRelayHost(context, broker)
+      assertRelayHost(context, broker)
       const result: PairingGetEndpointsResult = { v: 1, relay: broker.endpoint }
       if (params.installReqId) {
         result.installStatus = await broker.credentialInstallStatus(
@@ -204,7 +216,12 @@ export class DesktopRelayService {
       if (!broker.endpoint) {
         throw new Error('relay_control_not_active')
       }
-      this.assertRelayHost(context, broker)
+      if (!this.servesDevice(context.deviceId, broker)) {
+        // Why: a LAN connection must not move a phone paired on another relay
+        // backend; its binding stays so switching back resumes that pairing.
+        throw new Error('relay_backend_mismatch')
+      }
+      assertRelayHost(context, broker)
       const authorization = pairingAuthorizationForContext(context, broker.hostId)
       if (!authorization) {
         // Why: a resume splice proves renewal through confirmation; it cannot be
@@ -254,16 +271,9 @@ export class DesktopRelayService {
     }
   }
 
-  private assertRelayHost(
-    context: MobilePairingConnectionContext,
-    broker: RelaySessionBroker
-  ): void {
-    if (
-      context.transport.transport === 'relay' &&
-      context.transport.relayHostId !== broker.hostId
-    ) {
-      throw new Error('stale_relay_connection')
-    }
+  private servesDevice(deviceId: string, broker: RelaySessionBroker): boolean {
+    const binding = this.runtimeRpc.getDeviceRegistry()?.getDevice(deviceId)?.relayBinding
+    return !binding || relayBackendOwnsBinding(binding.ownerIdentityKey, broker.ownerIdentityKey)
   }
 
   private async flushRevoke(

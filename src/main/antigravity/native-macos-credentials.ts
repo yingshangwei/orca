@@ -1,4 +1,5 @@
 import { runProcess } from '@orca/process-host'
+import { throwIfSecurityCommandsWithheld } from '../host/keychain-withhold'
 import {
   decodeAntigravityKeychainValue,
   encodeAntigravityKeychainValue,
@@ -13,6 +14,7 @@ function requireMacOS(): void {
 }
 
 async function runSecurity(args: string[], input?: string) {
+  throwIfSecurityCommandsWithheld()
   try {
     return await runProcess({
       program: '/usr/bin/security',

@@ -14,7 +14,7 @@ import type { BridgeHapticsKind } from './bridge/bridge-haptics-notify'
 import { createBridgeHost, type BridgeHost } from './bridge-host'
 import type { BridgeSessionBack } from './bridge-host-back'
 import type { BridgeNavigateBackOutcome } from './bridge-host-contract'
-import type { BridgeNativeVerb } from './bridge/bridge-native-verbs'
+import type { ScreenServedNativeVerb } from './bridge/bridge-native-verbs'
 import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import type { PageHostSnapshot } from './use-page-host-snapshot'
@@ -103,7 +103,7 @@ export type MobileWebShellBridgeArgs = {
   /** Plays one haptic on this device, on the page's behalf. */
   onHaptic: (kind: BridgeHapticsKind) => void
   /** Serves one `native.` verb on this device, for a page that was granted it. */
-  serveNativeVerb: (verb: BridgeNativeVerb, params: unknown) => Promise<unknown>
+  serveNativeVerb: (verb: ScreenServedNativeVerb, params: unknown) => Promise<unknown>
   /** Pops the stack this page was pushed onto, and says so when it did not. */
   onNavigateBack: () => BridgeNavigateBackOutcome
   /**

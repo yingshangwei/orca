@@ -1,3 +1,4 @@
+import { assertLocalClaudeConfiguration } from './claude-local-configuration'
 import {
   buildClaudeModelListArgs,
   CLAUDE_MODEL_LIST_STDIN
@@ -14,7 +15,6 @@ import { claudeFastModeSupport, wireClaudeModels } from './claude-structured-cat
 import { readClaudeSettingsApplied } from './claude-structured-session-options'
 import { claudeStructuredLaunchArgs } from './claude-structured-launch-args'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
-import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
 import {
   CLAUDE_DEFAULT_SETTING_SOURCES,
   resolveClaudeStructuredInvocation,
@@ -52,12 +52,12 @@ export async function runClaudeListing(
     isCurrent?: () => boolean
   }
 ): Promise<string> {
-  // Same pin rule as the session spawn: naming the CLI's default dir would move
-  // it off the default Keychain item and list under another identity.
-  const { command, env } = await resolveClaudeStructuredInvocation(deps, (base) => ({
-    ...base,
-    ...claudeConfigDirEnvPatch(request.accountHomePath, { env: base })
-  }))
+  const { command, env } = await resolveClaudeStructuredInvocation(deps)
+  await assertLocalClaudeConfiguration({
+    env,
+    cwd: request.cwd,
+    configDir: request.accountHomePath
+  })
   const run = (args: readonly string[]) => {
     if (request.isCurrent && !request.isCurrent()) {
       throw new Error('Listing context retired')
@@ -133,14 +133,14 @@ export function createClaudeModelCatalogProbe(
     const sources = await resolveClaudeChildEnvSources(launchDeps)
     const { command, env } = await resolveClaudeStructuredInvocation(
       launchDeps,
-      (base) => ({
-        ...base,
-        ...claudeConfigDirEnvPatch(requireLegacyAgentSessionAccountHome(accountHome).path, {
-          env: base
-        })
-      }),
+      (base) => base,
       sources
     )
+    await assertLocalClaudeConfiguration({
+      env,
+      cwd,
+      configDir: requireLegacyAgentSessionAccountHome(accountHome).path
+    })
     return {
       identity: { command, args, cwd, overlay: Object.entries(sources.overlay ?? {}).sort() },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {

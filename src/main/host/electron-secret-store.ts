@@ -1,5 +1,9 @@
 import { safeStorage } from 'electron'
-import { guardedSafeStorage, safeStorageWithheldReason } from './safe-storage-availability'
+import {
+  guardedSafeStorage,
+  safeStoragePlaintextFallbackRefusal,
+  safeStorageWithheldReason
+} from './safe-storage-availability'
 import type { SecretStore } from '../../shared/secret-store'
 
 /**
@@ -19,8 +23,15 @@ export class ElectronSecretStore implements SecretStore {
     return guardedSafeStorage.decryptString(cipher)
   }
 
+  plaintextFallbackRefusal(): string | null {
+    return safeStoragePlaintextFallbackRefusal()
+  }
+
   describeProtectionGap(): string | null {
     const withheld = safeStorageWithheldReason()
+    if (withheld !== null && safeStoragePlaintextFallbackRefusal() !== null) {
+      return `Orca is not using the OS keychain in this run (${withheld}). Saved secrets are unavailable but kept on disk unchanged, and new secrets cannot be saved.`
+    }
     if (withheld !== null) {
       return `The OS keychain is unavailable for this run (${withheld}), so secrets are stored unencrypted. Start orca serve from a logged-in desktop session, or unlock the login keychain, to seal them.`
     }

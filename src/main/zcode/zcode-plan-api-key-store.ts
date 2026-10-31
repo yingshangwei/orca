@@ -1,4 +1,4 @@
-import { getSecretStore } from '../../shared/secret-store'
+import { assertPlaintextFallbackAllowed, getSecretStore } from '../../shared/secret-store'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -131,6 +131,7 @@ export function saveZcodePlanApiKey(key: string): void {
     cachedZcodePlanApiKey = trimmed
     return
   }
+  assertPlaintextFallbackAllowed()
   console.warn(
     '[zcode] safeStorage encryption unavailable — storing GLM Coding Plan API key in plaintext'
   )

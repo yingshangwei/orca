@@ -4,6 +4,7 @@ import {
   type MobileRelayEndpoint
 } from '../../../src/shared/mobile-relay-credential-contract'
 import { MobileRelayE2eeLink } from './mobile-relay-e2ee-link'
+import { isAllowedSelfHostedRelayCell } from './self-hosted-relay-origin'
 import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import { MobileE2EEAuthenticationError } from './mobile-e2ee-v2-physical-channel'
 import { markRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
@@ -55,6 +56,9 @@ export function connectMobileRelayRpcSession(args: {
   onHostCloseReason?: (reason: RelayHostCloseReason) => void
   onLog?: ConnectionLogSink
 }): MobileRelayRpcSession {
+  if (!isAllowedSelfHostedRelayCell(args.relay.directorUrl, args.relay.cellUrl)) {
+    throw new Error('relay_cell_origin_not_allowed')
+  }
   const requestTimeoutMs = args.requestTimeoutMs ?? 30_000
   const pending = new RelayPendingRequests()
   const stateListeners = new Set<(state: ConnectionState) => void>()

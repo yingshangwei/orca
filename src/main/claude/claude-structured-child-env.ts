@@ -2,10 +2,10 @@
 // `--version` probe that runs the same binary.
 
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
+import { assertClaudeEnvironmentUnmodified } from '../../shared/claude-local-policy'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
 import { resolveClaudeCommand } from '../codex-cli/command'
 import { resolveAgainAfterRefreshOnMissingProgram } from '../native-chat/structured-agent-command-resolution'
-import { withoutInheritedClaudeConfigDir } from './claude-config-dir-pin'
 
 function cloneDefinedEnv(env: NodeJS.ProcessEnv | Record<string, string>): Record<string, string> {
   const next: Record<string, string> = {}
@@ -54,6 +54,7 @@ async function readClaudeChildEnvSources(deps: ClaudeEnvDeps): Promise<ClaudeChi
   const inheritedEnv = deps.resolveInheritedEnv
     ? await deps.resolveInheritedEnv()
     : cloneDefinedEnv(process.env)
+  assertClaudeEnvironmentUnmodified(overlay, inheritedEnv)
   const effectiveEnv = { ...inheritedEnv, ...overlay }
   const command = (deps.resolveCommand ?? resolveClaudeCommand)({
     pathEnv: effectiveEnv.PATH ?? effectiveEnv.Path ?? null,
@@ -72,10 +73,13 @@ export function claudeChildEnv(
   /** False when the session's seal pairs the CLI runtime itself, after the session's identity. */
   { runtimeOnPath = true }: { runtimeOnPath?: boolean } = {}
 ): Record<string, string> {
-  const env = decorateEnv({
-    ...withoutInheritedClaudeConfigDir(sources.inheritedEnv, process.platform),
+  const base = {
+    ...sources.inheritedEnv,
     ...sources.overlay
-  })
+  }
+  const env = decorateEnv({ ...base })
+  assertClaudeEnvironmentUnmodified(env, base)
+  assertClaudeEnvironmentUnmodified(base, env)
   return runtimeOnPath
     ? withCliRuntimeOnPath(sources.command, env, { platform: process.platform })
     : env

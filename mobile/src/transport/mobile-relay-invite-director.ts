@@ -1,6 +1,7 @@
 import type { PairingRelay } from '../../../src/shared/mobile-relay-pairing-offer'
 import { relayConnectWebSocketUrl } from './mobile-relay-connect-url'
 import { RelayMovedSchema } from '../../../src/shared/mobile-relay-phone-protocol'
+import { isAllowedSelfHostedRelayCell } from './self-hosted-relay-origin'
 
 export class RelayDirectorMoveNotNewerError extends Error {
   readonly cellUrl: string
@@ -62,6 +63,10 @@ export function resolvePairingInviteThroughDirector(args: {
       const moved = RelayMovedSchema.safeParse(value)
       if (!moved.success) {
         finish(new Error('invalid relay director move'))
+        return
+      }
+      if (!isAllowedSelfHostedRelayCell(args.relay.directorUrl, moved.data.cellUrl)) {
+        finish(new Error('relay_cell_origin_not_allowed'))
         return
       }
       if (moved.data.assignmentEpoch <= args.relay.assignmentEpoch) {

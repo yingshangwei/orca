@@ -9,7 +9,10 @@ import {
 const OVERLAY_STORAGE_KEY = 'orca:mobile-relay:host-overlays:v2'
 let overlayMutation: Promise<void> = Promise.resolve()
 
-function parseOverlays(raw: string | null): MobileRelayHostOverlay[] | null {
+function parseOverlays(
+  raw: string | null,
+  requireValidEntries = false
+): MobileRelayHostOverlay[] | null {
   if (raw === null) {
     return []
   }
@@ -18,10 +21,23 @@ function parseOverlays(raw: string | null): MobileRelayHostOverlay[] | null {
     if (!Array.isArray(value)) {
       return null
     }
-    return value.flatMap((item) => {
+    const overlays: MobileRelayHostOverlay[] = []
+    const hostIds = new Set<string>()
+    for (const item of value) {
       const result = MobileRelayHostOverlaySchema.safeParse(item)
-      return result.success ? [result.data] : []
-    })
+      if (!result.success) {
+        if (requireValidEntries) {
+          return null
+        }
+        continue
+      }
+      if (requireValidEntries && hostIds.has(result.data.hostId)) {
+        return null
+      }
+      hostIds.add(result.data.hostId)
+      overlays.push(result.data)
+    }
+    return overlays
   } catch {
     return null
   }
@@ -74,6 +90,20 @@ export async function loadMobileRelayHostRoutingState(
     }
   }
   return { relays, orphanHostIds }
+}
+
+/** Relay director URLs by host id; rejects when unreadable so callers never mistake it for none. */
+export async function readMobileRelayHostDirectorUrls(): Promise<Map<string, string>> {
+  await overlayMutation
+  const overlays = parseOverlays(await AsyncStorage.getItem(OVERLAY_STORAGE_KEY), true)
+  if (!overlays) {
+    throw new Error('mobile relay host overlay storage unreadable')
+  }
+  return new Map(
+    overlays.flatMap((overlay) =>
+      overlay.relay ? [[overlay.hostId, overlay.relay.directorUrl] as const] : []
+    )
+  )
 }
 
 /** Resolves whether storage changed. */

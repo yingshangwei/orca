@@ -19,6 +19,8 @@ export function MobileHostCard(props: {
   // Why: the card owns the fresh/stale/unavailable wording so no caller can re-gate the counts
   // away (STA-3123 shipped that bug once already).
   worktreeInfo?: HostWorktreeInfo
+  // Why: tells apart cards that pair one desktop through different relay backends.
+  backendLabel?: string
   onPress: () => void
   onLongPress: () => void
   onOpenActions: () => void
@@ -40,7 +42,8 @@ export function MobileHostCard(props: {
       : props.verdict
   const worktreeSummary = homeHostWorktreeSummary(props.worktreeInfo)
   const display = useHostDisplay(props.host)
-  const descriptorText = display.descriptorLine
+  const descriptorText =
+    [display.descriptorLine, props.backendLabel].filter(Boolean).join(' · ') || null
   const connectionPathLabel =
     !credentialMissing && !credentialUnavailable && connected
       ? mobileConnectionPathLabel(props.path)

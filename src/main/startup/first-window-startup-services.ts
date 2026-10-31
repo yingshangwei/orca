@@ -23,6 +23,43 @@ export const FIRST_WINDOW_STARTUP_SERVICE_TIMEOUT_MS = 12_000
 // waits for the daemon attempt itself and only fail-opens at a hard cap that
 // exists solely as a deadlock backstop.
 export const LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS = 60_000
+const STARTUP_BUDGET_TICK_MS = 1_000
+
+/**
+ * Calls `onExpire` once `budgetMs` of running event-loop time has passed.
+ *
+ * Why not one setTimeout: after a synchronous main-thread stall (a native Keychain dialog,
+ * say) an overdue timer fires in the loop turn that unblocks, ahead of that turn's I/O
+ * callbacks — so a daemon whose handshake already arrived would still be aborted for
+ * fallback PTYs. Each tick credits at most two ticks, so a stall of any length costs about
+ * two seconds.
+ */
+function startStartupBudget(budgetMs: number, onExpire: () => void): () => void {
+  let consumed = 0
+  let last = Date.now()
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const schedule = (): void => {
+    timer = setTimeout(tick, Math.min(STARTUP_BUDGET_TICK_MS, budgetMs - consumed))
+  }
+  const tick = (): void => {
+    const now = Date.now()
+    consumed += Math.min(Math.max(now - last, 0), STARTUP_BUDGET_TICK_MS * 2)
+    last = now
+    if (consumed >= budgetMs) {
+      timer = null
+      onExpire()
+      return
+    }
+    schedule()
+  }
+  schedule()
+  return () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+}
 
 function startService(
   label: string,
@@ -75,27 +112,23 @@ export function startFirstWindowStartupServices({
   const daemon = startService('daemon PTY provider', startDaemonPtyProvider, onDaemonError)
   const hooks = startService('agent hook server', startAgentHookServer, onAgentHookServerError)
   const allServicesReady = Promise.all([daemon.ready, hooks.ready]).then(() => undefined)
-  let windowTimeout: ReturnType<typeof setTimeout> | null = null
-  let failOpenTimeout: ReturnType<typeof setTimeout> | null = null
+  let cancelWindowBudget: (() => void) | null = null
+  let cancelFailOpenBudget: (() => void) | null = null
   const servicesSettled = allServicesReady.finally(() => {
-    if (windowTimeout) {
-      clearTimeout(windowTimeout)
-    }
-    if (failOpenTimeout) {
-      clearTimeout(failOpenTimeout)
-    }
+    cancelWindowBudget?.()
+    cancelFailOpenBudget?.()
   })
   const failOpenReady = new Promise<void>((resolve) => {
-    failOpenTimeout = setTimeout(() => {
+    cancelFailOpenBudget = startStartupBudget(LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS, () => {
       daemon.reportTimeout()
       hooks.reportTimeout()
       resolve()
-    }, LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS)
+    })
   })
   const firstWindowReady = Promise.race([
     servicesSettled,
     new Promise<void>((resolve) => {
-      windowTimeout = setTimeout(resolve, FIRST_WINDOW_STARTUP_SERVICE_TIMEOUT_MS)
+      cancelWindowBudget = startStartupBudget(FIRST_WINDOW_STARTUP_SERVICE_TIMEOUT_MS, resolve)
     })
   ])
   const localPtyReady = Promise.race([servicesSettled, failOpenReady])

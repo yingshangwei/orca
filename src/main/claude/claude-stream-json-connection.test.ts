@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { providerDiagnosticOf } from '../../shared/agent-session-failure'
@@ -63,9 +63,21 @@ function scriptScenario(
   const scenarioPath = join(dir, 'scenario.json')
   const reportPath = join(dir, 'report.json')
   writeFileSync(scenarioPath, JSON.stringify({ steps, controlResponses }))
+  mkdirSync(join(dir, '.claude'))
+  writeFileSync(
+    join(dir, '.claude', 'settings.json'),
+    JSON.stringify({
+      env: {
+        ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425',
+        HTTPS_PROXY: 'http://127.0.0.1:6155',
+        NO_PROXY: 'localhost,127.0.0.1,::1'
+      }
+    })
+  )
   return {
     cwd: dir,
     env: {
+      HOME: dir,
       PATH: process.env.PATH ?? '',
       ORCA_SDK_CONTRACT_SCENARIO_PATH: scenarioPath,
       ORCA_SDK_CONTRACT_REPORT_PATH: reportPath
@@ -171,7 +183,6 @@ describe('Claude stream-json connection', () => {
   it('hands the child a derived environment, the resolved CLI path, and keeps the pid', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-SHELL-LEAK')
     vi.stubEnv('CLAUDE_CODE_CHILD_SESSION', '1')
-    vi.stubEnv('NODE_OPTIONS', '--require=/tmp/inject.js')
     // An inherited value wins over the SDK's default, so clear it to pin the default.
     vi.stubEnv('CLAUDE_CODE_ENTRYPOINT', undefined)
     vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
@@ -181,7 +192,7 @@ describe('Claude stream-json connection', () => {
     const connection = await open(
       launchFor(scenario, {
         ORCA_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666',
-        CLAUDE_CONFIG_DIR: '/accounts/managed/home',
+        CLAUDE_CONFIG_DIR: join(scenario.cwd, '.claude'),
         ANTHROPIC_AUTH_TOKEN: 'configured-token',
         ORCA_AGENT_SESSION_SPAWN_TOKEN: 'spawn-9',
         CLAUDE_CODE_CHILD_SESSION: 'configured-child-session',
@@ -195,13 +206,13 @@ describe('Claude stream-json connection', () => {
     expect(() => process.kill(connection.pid as number, 0)).not.toThrow()
     const env = childEnv()
     // The managed home is pinned verbatim: the CLI keys credential lookup on the literal string.
-    expect(env.CLAUDE_CONFIG_DIR).toBe('/accounts/managed/home')
+    expect(env.CLAUDE_CONFIG_DIR).toBe(join(scenario.cwd, '.claude'))
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe('configured-token')
     expect(env.ORCA_AGENT_SESSION_SPAWN_TOKEN).toBe('spawn-9')
     expect(env.ORCA_CONNECTION_MARKER).toBe('inherited')
     // The session's own id reaches the spawned child over the inherited one.
     expect(env.ORCA_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-SHELL-LEAK')
     expect(env.CLAUDE_CODE_CHILD_SESSION).toBeUndefined()
     expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined()
     expect(env.CLAUDE_CODE_BRIDGE_SESSION_ID).toBeUndefined()
@@ -246,18 +257,45 @@ describe('Claude stream-json connection', () => {
     expect(childEnv().CLAUDE_CONFIG_DIR).toBeUndefined()
   })
 
-  it("drops a CLAUDE_CONFIG_DIR from Orca's own process env: only the launch may name a home", async () => {
-    vi.stubEnv('CLAUDE_CONFIG_DIR', '/orca/process/claude')
-    vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
+  it("preserves the user's inherited CLAUDE_CONFIG_DIR", async () => {
     const scenario = scriptScenario([HOLD_OPEN])
+    vi.stubEnv('CLAUDE_CONFIG_DIR', join(scenario.cwd, '.claude'))
     await open(launchFor(scenario))
-
     await until(() => readReportSafely(scenario), 'the scripted CLI report')
-    expect(childEnv().CLAUDE_CONFIG_DIR).toBeUndefined()
-    expect(childEnv().ORCA_CONNECTION_MARKER).toBe('inherited')
+    expect(childEnv().CLAUDE_CONFIG_DIR).toBe(join(scenario.cwd, '.claude'))
+    await expect(
+      open(launchFor(scenario, { CLAUDE_CONFIG_DIR: join(scenario.cwd, 'missing') }))
+    ).rejects.toThrow('local ANTHROPIC_BASE_URL')
+  })
 
-    await open(launchFor(scenario, { CLAUDE_CONFIG_DIR: '/accounts/managed/home' }))
-    expect(childEnv().CLAUDE_CONFIG_DIR).toBe('/accounts/managed/home')
+  it('passes model and effort to the local CLI while keeping its connection environment', async () => {
+    const scenario = scriptScenario([HOLD_OPEN])
+    const launch = launchFor(scenario, {
+      ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425',
+      ANTHROPIC_AUTH_TOKEN: 'synthetic-token',
+      HTTPS_PROXY: 'http://127.0.0.1:6155',
+      NO_PROXY: 'localhost,127.0.0.1,::1'
+    })
+    launch.options = { ...launch.options, model: 'opus', effort: 'high' }
+    await open(launch)
+    const report = await until(() => readReportSafely(scenario), 'the scripted CLI report')
+    expect(report.argv).toEqual(expect.arrayContaining(['--model', 'opus', '--effort', 'high']))
+    expect(report.argv).toContain('--setting-sources=user,project,local')
+    expect(childEnv()).toMatchObject({
+      ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425',
+      ANTHROPIC_AUTH_TOKEN: 'synthetic-token',
+      HTTPS_PROXY: 'http://127.0.0.1:6155',
+      NO_PROXY: 'localhost,127.0.0.1,::1'
+    })
+  })
+
+  it('refuses a changed SDK connection environment before spawning', async () => {
+    const scenario = scriptScenario([HOLD_OPEN])
+    vi.stubEnv('NODE_OPTIONS', '--require=/synthetic/proxy.cjs')
+    await expect(open(launchFor(scenario))).rejects.toThrow(
+      'SDK changed environment key: NODE_OPTIONS'
+    )
+    expect(spawned).toHaveLength(0)
   })
 
   it('settles a send only once the frame reached the child, and replays reach onMessage', async () => {

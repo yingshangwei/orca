@@ -6,6 +6,7 @@ import { createFakeBridgePortPair } from '../mobile-web-shell/bridge/bridge-port
 import { RpcClientProvider } from '../transport/client-context.web'
 import type { MobileSessionController } from '../session/use-mobile-session-controller'
 import { MobileSessionHeader } from '../session/MobileSessionHeader'
+import { MOBILE_LINK_OFF } from '../session/mobile-link-sampler'
 import HostGroupLayout from '../../app/h/_layout'
 
 vi.mock('react-native', () => ({
@@ -60,6 +61,7 @@ vi.mock('../host-screen/HostScreen', () => ({
 vi.mock('../navigation/host-stack', () => ({
   HostStack: () => createElement(MobileSessionHeader, { controller: headerController() })
 }))
+vi.mock('../session/MobileSessionLinkSheet', () => ({ MobileSessionLinkSheet: () => null }))
 vi.mock('../components/MobileAgentIcon', () => ({ MobileAgentIcon: () => null }))
 vi.mock('../platform/haptics', () => ({ triggerMediumImpact: () => {} }))
 vi.mock('../transport/host-client-hooks', () => ({
@@ -87,6 +89,11 @@ function headerController(): MobileSessionController {
     showConnectionRetry: false,
     terminalSummary: 'Claude',
     showHeaderMoreButton: false,
+    linkMonitor: {
+      subscribe: () => () => {},
+      getSnapshot: () => MOBILE_LINK_OFF,
+      setDetailed: () => {}
+    },
     requestLeaveSession: vi.fn()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This header fixture supplies every rendered field; no tab or panel actions are exercised.

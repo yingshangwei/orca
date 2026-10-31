@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process'
 import type * as ChildProcess from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { discoverCommitMessageModelsLocal } from './commit-message-text-generation'
 import { PROVIDER_SPAWN_FAILURE_MARKER } from '../provider-process/provider-spawn-failure-report'
@@ -28,6 +31,17 @@ vi.mock('child_process', async (importOriginal) => {
 
 const spawnMock = vi.mocked(spawn)
 
+async function waitForDiscoverySpawn(
+  pending: ReturnType<typeof discoverCommitMessageModelsLocal>
+): Promise<void> {
+  await Promise.race([
+    vi.waitFor(() => expect(spawnMock).toHaveBeenCalledOnce()),
+    pending.then((result) => {
+      throw new Error(`Discovery finished before spawning: ${JSON.stringify(result)}`)
+    })
+  ])
+}
+
 function spawnError(errno: string): Error {
   return Object.assign(new Error(`spawn claude ${errno}`), { code: errno })
 }
@@ -38,16 +52,28 @@ const expectChildTerminated = createChildTerminationExpectation(terminateWindows
 // supervised stop with the Codex home lock (generation: timeout, cancel, output limit; discovery:
 // timeout, output limit) is in source-control-local-process.test.ts.
 const hostPlatform = process.platform
+let localClaudeHome = ''
 
-afterEach(() => {
+afterEach(async () => {
   Object.defineProperty(process, 'platform', {
     configurable: true,
     value: hostPlatform
   })
   vi.unstubAllEnvs()
+  await rm(localClaudeHome, { recursive: true, force: true })
 })
 
-beforeEach(() => {
+beforeEach(async () => {
+  localClaudeHome = await mkdtemp(join(tmpdir(), 'orca-claude-discovery-'))
+  await mkdir(join(localClaudeHome, '.claude'))
+  await writeFile(
+    join(localClaudeHome, '.claude', 'settings.json'),
+    JSON.stringify({
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:3425', HTTPS_PROXY: 'http://127.0.0.1:6155' }
+    })
+  )
+  vi.stubEnv('HOME', localClaudeHome)
+  vi.stubEnv('CLAUDE_CONFIG_DIR', '')
   Object.defineProperty(process, 'platform', {
     configurable: true,
     value: 'win32'
@@ -130,7 +156,10 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
     }
     spawnMock.mockReturnValue(child as never)
 
-    const pending = discoverCommitMessageModelsLocal('claude', undefined)
+    const pending = discoverCommitMessageModelsLocal('claude', undefined, undefined, {
+      cwd: localClaudeHome
+    })
+    await waitForDiscoverySpawn(pending)
 
     listeners.get('stdout:data')?.(
       Buffer.from(
@@ -176,9 +205,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
       '--output-format',
       'stream-json',
       '--verbose',
-      '--strict-mcp-config',
-      '--settings',
-      '{"disableAllHooks":true}'
+      '--strict-mcp-config'
     ])
     expect(spawnMock.mock.calls[0]![2]).toMatchObject({
       windowsHide: true,
@@ -203,7 +230,10 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
     }
     spawnMock.mockReturnValue(child as never)
 
-    const pending = discoverCommitMessageModelsLocal('claude', undefined)
+    const pending = discoverCommitMessageModelsLocal('claude', undefined, undefined, {
+      cwd: localClaudeHome
+    })
+    await waitForDiscoverySpawn(pending)
 
     // Captured from claude 2.1.100: the unsupported subtype still exits 0.
     listeners.get('stdout:data')?.(
@@ -423,7 +453,10 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
       const child = createMockDiscoveryChild()
       spawnMock.mockReturnValue(child as never)
 
-      const pending = discoverCommitMessageModelsLocal('claude', undefined)
+      const pending = discoverCommitMessageModelsLocal('claude', undefined, undefined, {
+        cwd: localClaudeHome
+      })
+      await waitForDiscoverySpawn(pending)
       child.stderr.emit(
         'data',
         Buffer.from(
@@ -452,7 +485,10 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
     const child = createMockDiscoveryChild()
     spawnMock.mockReturnValue(child as never)
 
-    const pending = discoverCommitMessageModelsLocal('claude', undefined)
+    const pending = discoverCommitMessageModelsLocal('claude', undefined, undefined, {
+      cwd: localClaudeHome
+    })
+    await waitForDiscoverySpawn(pending)
     child.emit('error', spawnError(errno))
 
     await expect(pending).resolves.toEqual({

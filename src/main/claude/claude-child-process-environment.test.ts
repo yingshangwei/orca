@@ -17,7 +17,7 @@ describe('Claude child process environment', () => {
     ).toEqual({ SAFE_VALUE: 'preserved' })
   })
 
-  it('strips case-insensitive inherited auth and session stamps on Windows', () => {
+  it('preserves inherited auth while clearing session stamps on Windows', () => {
     const env = buildClaudeChildProcessEnv(
       {
         ANTHROPIC_AUTH_TOKEN: 'configured-token',
@@ -36,6 +36,8 @@ describe('Claude child process environment', () => {
     )
 
     expect(env).toEqual({
+      anthropic_api_key: 'inherited-key',
+      Anthropic_Custom_Headers: 'Authorization: inherited',
       ANTHROPIC_AUTH_TOKEN: 'configured-token',
       Claude_Code_Session_Id: 'configured-session',
       SAFE_VALUE: 'preserved'

@@ -9,6 +9,7 @@ import { redactSocketEndpoint } from './socket-event-debug'
 import type { ConnectionLogSink, RpcResponse } from './types'
 import { websocketPayloadToUint8 } from './websocket-payload-bytes'
 import { relayConnectWebSocketUrl } from './mobile-relay-connect-url'
+import { isAllowedSelfHostedRelayCell } from './self-hosted-relay-origin'
 export { RelayOuterError } from './mobile-relay-e2ee-link'
 import { RelayOuterError } from './mobile-relay-e2ee-link'
 
@@ -35,6 +36,9 @@ export function connectMobileRelayForPairing(args: {
   createSocket?: (url: string) => WebSocket
   onLog?: ConnectionLogSink
 }): PairingCandidateClient {
+  if (!isAllowedSelfHostedRelayCell(args.relay.directorUrl, args.relay.cellUrl)) {
+    throw new Error('relay_cell_origin_not_allowed')
+  }
   const requestTimeoutMs = args.requestTimeoutMs ?? 30_000
   const socketUrl = relayConnectWebSocketUrl(args.relay.cellUrl, args.relay.relayHostId)
   const log = createPairingRelayLogger(args.onLog)

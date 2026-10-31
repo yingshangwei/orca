@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { parseRetryAfterHeaderMs } from '../../../src/shared/retry-after-header'
 import { MOBILE_RELAY_RETRY_AFTER_MAX_MS } from './mobile-relay-retry-delays'
+import { isAllowedSelfHostedRelayCell } from './self-hosted-relay-origin'
 import type { MobileRelayEndpoint } from '../../../src/shared/mobile-relay-credential-contract'
 
 const MAX_RESPONSE_BYTES = 16 * 1024
@@ -70,6 +71,9 @@ export async function resolveMobileRelayEndpoint(args: {
       throw new Error('relay director resolve response too large')
     }
     const resolved = ResolveResponseSchema.parse(JSON.parse(raw) as unknown)
+    if (!isAllowedSelfHostedRelayCell(args.relay.directorUrl, resolved.cellUrl)) {
+      throw new Error('relay_cell_origin_not_allowed')
+    }
     return {
       ...args.relay,
       cellUrl: resolved.cellUrl,

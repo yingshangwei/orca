@@ -41,8 +41,6 @@ describe('Claude structured launch arguments', () => {
         'other',
         '--replay-user-messages',
         '--include-partial-messages',
-        '--setting-sources',
-        'none',
         '--system-prompt',
         'replacement',
         '--append-system-prompt-file=other.txt',
@@ -88,3 +86,10 @@ describe('Claude structured launch arguments', () => {
     expect(() => claudeStructuredLaunchArgs(args)).toThrow(/Arguments/)
   })
 })
+
+it.each(['--setting-sources=none', '--settings', '--config-dir', '--env', '--api-key'])(
+  'rejects a connection override through %s',
+  (flag) => {
+    expect(() => claudeStructuredLaunchArgs([flag, 'synthetic-value'])).toThrow('Blocked argument')
+  }
+)
