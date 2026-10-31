@@ -28,6 +28,7 @@ import type { MobileAiVaultResumeTargetStatus } from '../agent-history/agent-his
 import { QODER_OWNED_TERMINAL_CREATE_CAPABILITY } from '../../../src/shared/qoder-terminal-create-capability'
 import { agentHistoryHostStatusSchema } from '../agent-history/agent-history-reply-schema'
 import { readMobileRuntimeHostPlatform } from '../transport/mobile-runtime-host-platform'
+import { CLAUDE_LOCAL_CONFIGURATION_MESSAGE } from '../../../src/shared/claude-local-policy'
 
 export function readMobileAiVaultResumeHost(statusResult: unknown) {
   const status = agentHistoryHostStatusSchema.safeParse(statusResult)
@@ -84,9 +85,13 @@ export function buildMobileAiVaultResumeLaunch(args: {
   session: Pick<AiVaultSession, 'agent' | 'sessionId' | 'cwd' | 'codexHome'> &
     Partial<Pick<AiVaultSession, 'filePath'>>
   hostPlatform: NodeJS.Platform
+  isRemote?: boolean
   hostTerminalWindowsShell?: string | null
   settings?: MobileAiVaultResumeSettings | null
 }): MobileAiVaultResumeLaunch {
+  if (args.session.agent === 'claude' && args.isRemote) {
+    throw new Error(CLAUDE_LOCAL_CONFIGURATION_MESSAGE)
+  }
   const shell =
     args.hostPlatform === 'win32'
       ? resolveWindowsShellStartupFamily(args.hostTerminalWindowsShell)

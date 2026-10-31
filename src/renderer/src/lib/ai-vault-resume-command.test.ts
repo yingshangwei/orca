@@ -74,6 +74,104 @@ function buildQueuedAiVaultResumeCommand(
 }
 
 describe('ai vault resume command runtime', () => {
+  it.each(["claude --resume 'ssh-session'", undefined])(
+    'refuses SSH Claude history before using a stored command or rebuilding it: %s',
+    (resumeCommand) => {
+      const args = {
+        state: makeState({ worktreePath: '/home/alice/repo' }),
+        session: {
+          agent: 'claude' as const,
+          sessionId: 'ssh-session',
+          cwd: '/home/alice/repo',
+          codexHome: null,
+          executionHostId: 'ssh:dev-box' as const,
+          resumeCommand
+        }
+      }
+      expect(() => buildAiVaultResumeStartupForWorktree(args)).toThrow(
+        'cannot override the connection'
+      )
+      expect(() => buildAiVaultResumeCopyCommandForWorktree(args)).toThrow(
+        'cannot override the connection'
+      )
+    }
+  )
+
+  it.each(['worktree', 'folder', 'nested-runtime'] as const)(
+    'refuses a local WSL Claude transcript when the selected %s executes over SSH',
+    (target) => {
+      const state = makeState({ worktreePath: '/home/alice/repo' })
+      state.repos = state.repos.map((repo) => ({
+        ...repo,
+        connectionId: 'dev-box',
+        ...(target === 'nested-runtime' ? { executionHostId: 'runtime:paired-host' as const } : {})
+      }))
+      if (target === 'folder') {
+        state.folderWorkspaces = [
+          {
+            id: 'ssh-folder',
+            projectGroupId: 'ssh-group',
+            name: 'SSH folder',
+            folderPath: '/home/alice/repo',
+            connectionId: 'dev-box',
+            linkedTask: null,
+            comment: '',
+            isArchived: false,
+            isUnread: false,
+            isPinned: false,
+            sortOrder: 0,
+            lastActivityAt: 0,
+            createdAt: 0,
+            updatedAt: 0
+          }
+        ]
+        state.activeWorktreeId = 'folder:ssh-folder'
+      }
+      const args = {
+        state,
+        session: {
+          agent: 'claude' as const,
+          sessionId: 'wsl-session',
+          cwd: '/home/alice/repo',
+          codexHome: null,
+          executionHostId: 'local' as const,
+          filePath: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.claude\\session.jsonl'
+        }
+      }
+      expect(() => buildAiVaultResumeStartupForWorktree(args)).toThrow(
+        'cannot override the connection'
+      )
+      expect(() => buildAiVaultResumeCopyCommandForWorktree(args)).toThrow(
+        'cannot override the connection'
+      )
+    }
+  )
+
+  it.each(["claude --resume 'paired-session'", undefined])(
+    'allows Claude resume on a paired runtime host with no SSH target: %s',
+    (resumeCommand) => {
+      const state = makeState({ worktreePath: '/home/alice/repo' })
+      state.repos = state.repos.map((repo) => ({
+        ...repo,
+        executionHostId: 'runtime:paired-host' as const
+      }))
+      const args = {
+        state,
+        session: {
+          agent: 'claude' as const,
+          sessionId: 'paired-session',
+          cwd: '/home/alice/repo',
+          codexHome: null,
+          executionHostId: 'runtime:paired-host' as const,
+          executionHostPlatform: 'linux' as const,
+          resumeCommand
+        }
+      }
+      expect(buildAiVaultResumeStartupForWorktree(args).command).toContain('paired-session')
+      expect(buildAiVaultResumeCopyCommandForWorktree(args)).toContain('paired-session')
+    }
+  )
+
   it.each(['local', 'ssh:reference-host'] as const)(
     'starts a fresh IDE reference on %s with model and environment preserved',
     (executionHostId) => {
@@ -376,16 +474,16 @@ describe('ai vault resume command runtime', () => {
     expect(command).not.toContain('unset CODEX_HOME')
   })
 
-  it('uses configured agent defaults for resumable session history entries', () => {
+  it('preserves allowed model and effort defaults for local Claude resume', () => {
     const state = makeState({
       worktreePath: 'C:\\Users\\alice\\repo',
       localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
     })
-    state.settings = {
-      ...state.settings,
-      agentDefaultArgs: { claude: '--dangerously-skip-permissions --effort max' },
-      agentDefaultEnv: { claude: { ANTHROPIC_BASE_URL: 'https://claude.example.test' } }
-    } as never
+    if (!state.settings) {
+      throw new Error('Missing fixture settings')
+    }
+    state.settings.agentDefaultArgs = { claude: '--model opus' }
+    state.settings.agentDefaultEnv = { claude: { CLAUDE_CODE_EFFORT_LEVEL: 'high' } }
 
     expect(
       buildAiVaultResumeStartupForWorktree({
@@ -399,16 +497,37 @@ describe('ai vault resume command runtime', () => {
         }
       })
     ).toEqual({
-      command: "claude '--dangerously-skip-permissions' '--effort' 'max' '--resume' 'session-1'",
+      command: "claude '--model' 'opus' '--resume' 'session-1'",
       cwd: '/home/alice/repo',
-      env: { ANTHROPIC_BASE_URL: 'https://claude.example.test' },
+      env: { CLAUDE_CODE_EFFORT_LEVEL: 'high' },
       launchConfig: {
-        agentCommand: "claude '--dangerously-skip-permissions' '--effort' 'max'",
-        agentArgs: '--dangerously-skip-permissions --effort max',
-        agentEnv: { ANTHROPIC_BASE_URL: 'https://claude.example.test' }
+        agentCommand: "claude '--model' 'opus'",
+        agentArgs: '--model opus',
+        agentEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' }
       },
       providerSession: { key: 'session_id', id: 'session-1' }
     })
+  })
+
+  it('refuses connection environment overrides when rebuilding a local Claude resume', () => {
+    const state = makeState({ worktreePath: 'C:\\Users\\alice\\repo' })
+    if (!state.settings) {
+      throw new Error('Missing fixture settings')
+    }
+    state.settings.agentDefaultEnv = {
+      claude: { ANTHROPIC_BASE_URL: 'https://claude.example.test' }
+    }
+    expect(() =>
+      buildAiVaultResumeStartupForWorktree({
+        state,
+        session: {
+          agent: 'claude',
+          sessionId: 'session-1',
+          cwd: 'C:\\Users\\alice\\repo',
+          codexHome: null
+        }
+      })
+    ).toThrow('Blocked environment key: ANTHROPIC_BASE_URL')
   })
 
   it('converts WSL UNC Codex homes before building Linux resume commands', () => {

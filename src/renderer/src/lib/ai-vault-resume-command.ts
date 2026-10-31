@@ -8,7 +8,9 @@ import { normalizeAiVaultResumeFilePath } from '../../../shared/ai-vault-resume-
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 import type { AppState } from '@/store/types'
 import type { AiVaultSessionDragPayload } from '@/lib/ai-vault-session-drag'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../shared/execution-host'
+import { CLAUDE_LOCAL_CONFIGURATION_MESSAGE } from '../../../shared/claude-local-policy'
+import { getConnectionIdFromState } from './connection-owner-resolution'
 import { resolveAiVaultResumeStartupShell } from '@/lib/ai-vault-resume-shell'
 import { getAiVaultResumePlatform } from '@/lib/ai-vault-resume-platform'
 import {
@@ -107,6 +109,13 @@ function buildAiVaultResumeForWorktree(
    *  Spawned startups drop them through `envToDelete` instead. */
   clearEnvNames?: readonly string[]
 ): AiVaultResumeStartup {
+  if (
+    args.session.agent === 'claude' &&
+    (parseExecutionHostId(args.session.executionHostId)?.kind === 'ssh' ||
+      getConnectionIdFromState(args.state, args.worktreeId ?? args.state.activeWorktreeId))
+  ) {
+    throw new Error(CLAUDE_LOCAL_CONFIGURATION_MESSAGE)
+  }
   assertAntigravityReferenceTarget(args)
   const providerSession = getAiVaultAgentProviderSession(args.session)
   if (

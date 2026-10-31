@@ -348,3 +348,131 @@ it.each([
     await act(async () => rendered.tree?.unmount())
   }
 })
+
+it.each([
+  { agent: 'claude', target: 'ssh', wslTranscript: false, blocked: true },
+  { agent: 'claude', target: 'ssh', wslTranscript: true, blocked: true },
+  { agent: 'claude', target: 'local', wslTranscript: false, blocked: false },
+  { agent: 'codex', target: 'ssh', wslTranscript: false, blocked: false }
+] as const)(
+  'checks the execution target before terminal creation: $agent on $target, WSL $wslTranscript',
+  async ({ agent, target, wslTranscript, blocked }) => {
+    notifications.error.mockClear()
+    notifications.success.mockClear()
+    notifications.push.mockClear()
+    state.generation = 1
+    state.connection = 'connected'
+    state.legacy = false
+    state.completedBoundary = false
+    state.session = {
+      id: `${agent}:policy-session`,
+      executionHostId: target === 'ssh' && !wslTranscript ? 'ssh:dev-box' : 'local',
+      agent,
+      sessionId: 'policy-session',
+      title: 'Policy session',
+      cwd: '/owned/workspace',
+      branch: null,
+      model: null,
+      filePath: wslTranscript
+        ? '\\\\wsl.localhost\\Ubuntu\\home\\ada\\.claude\\session.jsonl'
+        : `/owned/${agent}-session.jsonl`,
+      codexHome: null,
+      createdAt: null,
+      updatedAt: null,
+      modifiedAt: '2026-10-04T00:00:00.000Z',
+      messageCount: 2,
+      totalTokens: 10,
+      previewMessages: [],
+      queuedMessageCount: 0,
+      subagentTranscriptCount: 0,
+      resumeCommand: '',
+      subagent: null
+    }
+    const worktrees = [
+      {
+        worktreeId: 'owned-worktree',
+        repoId: 'owned-repo',
+        repo: 'Owned',
+        path: '/owned/workspace',
+        branch: 'main',
+        displayName: 'Owned',
+        liveTerminalCount: 0,
+        hasAttachedPty: false,
+        preview: '',
+        unread: false,
+        isPinned: false,
+        linkedPR: null
+      }
+    ]
+    const sendRequest = vi.fn<RpcClient['sendRequest']>(async (method) => {
+      const replies: Record<string, unknown> = {
+        'repo.list': {
+          repos: [
+            {
+              id: 'owned-repo',
+              path: '/owned/workspace',
+              connectionId: target === 'ssh' ? 'dev-box' : null
+            }
+          ]
+        },
+        'worktree.ps': { worktrees },
+        'folderWorkspace.list': { workspaces: [] },
+        'projectGroup.list': { groups: [] },
+        'settings.get': {},
+        'session.tabs.createTerminal': {
+          tab: { type: 'terminal', id: 'owned-tab', terminal: 'owned-pty', title: 'Terminal' }
+        },
+        'terminal.send': { send: { accepted: true } }
+      }
+      if (!(method in replies)) {
+        throw new Error(`Unexpected method ${method}`)
+      }
+      return { id: 'policy-reply', ok: true, result: replies[method] }
+    })
+    state.client = { ...createFakeRpcClient(), sendRequest }
+    const rendered: { tree: ReactTestRenderer | null } = { tree: null }
+    await act(async () => {
+      rendered.tree = create(
+        React.createElement(MobileAgentSessionHistoryPanel, {
+          hostId: 'paired-host',
+          worktreeId: 'owned-worktree'
+        })
+      )
+    })
+    try {
+      await act(async () => {
+        if (!state.session || !state.onResume) {
+          throw new Error('missing resume callback')
+        }
+        await state.onResume(state.session)
+      })
+      const terminalCalls = sendRequest.mock.calls.filter(
+        ([method]) => method === 'session.tabs.createTerminal' || method === 'terminal.send'
+      )
+      if (blocked) {
+        expect(terminalCalls).toEqual([])
+        expect(JSON.stringify(rendered.tree?.toJSON())).toContain('cannot override the connection')
+        expect(notifications.error).toHaveBeenCalledOnce()
+        expect(notifications.success).not.toHaveBeenCalled()
+        expect(notifications.push).not.toHaveBeenCalled()
+      } else {
+        expect(terminalCalls.map(([method]) => method)).toEqual([
+          'session.tabs.createTerminal',
+          'terminal.send'
+        ])
+        expect(terminalCalls[1][1]).toMatchObject({
+          text: expect.stringContaining(agent),
+          enter: true
+        })
+        expect(terminalCalls[1][1]).toMatchObject({
+          text: expect.stringContaining('policy-session')
+        })
+        expect(notifications.error).not.toHaveBeenCalled()
+        expect(notifications.success).toHaveBeenCalledOnce()
+        expect(notifications.push).toHaveBeenCalledOnce()
+      }
+    } finally {
+      await act(async () => rendered.tree?.unmount())
+    }
+  }
+)

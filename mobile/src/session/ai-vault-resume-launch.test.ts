@@ -122,6 +122,16 @@ describe('buildMobileAiVaultResumeCommand', () => {
 })
 
 describe('buildMobileAiVaultResumeLaunch', () => {
+  it('refuses SSH Claude resume before startup planning can fall back to a plain command', () => {
+    expect(() =>
+      buildMobileAiVaultResumeLaunch({
+        session: session(),
+        hostPlatform: 'linux',
+        isRemote: true
+      })
+    ).toThrow('cannot override the connection')
+  })
+
   it('routes Kimi through the resumable-agent startup plan', () => {
     // Why: kimi joining RESUMABLE_TUI_AGENTS moves it off the plain command fallback, so the
     // cd prefix Kimi needs (sessions are work-dir-scoped) must survive the new branch.
