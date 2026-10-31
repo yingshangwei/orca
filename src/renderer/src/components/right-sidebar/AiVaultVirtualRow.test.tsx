@@ -7,6 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AiVaultSearchHit } from '../../../../shared/ai-vault-search-types'
 import { AiVaultVirtualRow } from './AiVaultVirtualRow'
+import { buildAiVaultResumeCommand } from '../../../../shared/ai-vault-resume-command'
 
 const cliSession: AiVaultSession = {
   id: 'local:codex:session-1:/tmp/session-1.jsonl',
@@ -39,9 +40,10 @@ function renderSession(
   session: AiVaultSession,
   blocked = false,
   searchHit?: AiVaultSearchHit,
-  searchHitHostLabels?: ReadonlyMap<string, string>
+  searchHitHostLabels?: ReadonlyMap<string, string>,
+  resumeBuilder?: () => { command: string }
 ) {
-  const buildResumeStartup = vi.fn(() => ({ command: session.resumeCommand }))
+  const buildResumeStartup = vi.fn(resumeBuilder ?? (() => ({ command: session.resumeCommand })))
   const onCopyResume = vi.fn()
   const onResume = vi.fn()
   const onResumeInNewCli = vi.fn()
@@ -109,6 +111,28 @@ describe('AiVaultVirtualRow search hit source host', () => {
 })
 
 describe('AiVaultVirtualRow resume command actions', () => {
+  it('keeps a Claude row readable when saved command overrides refuse resume', async () => {
+    const session = { ...cliSession, agent: 'claude' as const, title: 'Claude history' }
+    const { onResume, onCopyResume } = renderSession(session, false, undefined, undefined, () => ({
+      command: buildAiVaultResumeCommand({
+        agent: 'claude',
+        sessionId: session.sessionId,
+        cwd: session.cwd,
+        platform: 'darwin',
+        commandOverride: 'claude-dev'
+      })
+    }))
+    expect(screen.getByText('Claude history')).toBeTruthy()
+    expect(document.querySelector('[draggable="true"]')).toBeNull()
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId('ai-vault-session-more-actions'))
+    expect(screen.queryByRole('menuitem', { name: 'Copy Resume Command' })).toBeNull()
+    const resume = screen.queryByRole('menuitem', { name: 'Resume in New Tab' })
+    expect(resume === null || resume.getAttribute('data-disabled') !== null).toBe(true)
+    expect(onResume).not.toHaveBeenCalled()
+    expect(onCopyResume).not.toHaveBeenCalled()
+  })
+
   it('renders blocked IDE references without preparing an unsafe startup command', () => {
     const { buildResumeStartup } = renderSession(
       {

@@ -220,10 +220,8 @@ async function buildRuntimeAgentTerminalStartupOptions(
   if (!startupPlan) {
     // Why: an explicit agent that yields no plan would otherwise spawn a bare
     // shell that never reaches agent readiness.
-    if (opts.startupAgent) {
-      throw new AgentLaunchUnbuildableError(
-        `Could not build launch command for ${opts.startupAgent}.`
-      )
+    if (opts.startupAgent || (agent === 'claude' && isRemote)) {
+      throw new AgentLaunchUnbuildableError(`Could not build launch command for ${agent}.`)
     }
     return opts
   }
