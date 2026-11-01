@@ -57,12 +57,11 @@ export function stripInlineMarkdownForToc(text: string): string {
     .replace(/\[\[([^\]]+)\]\]/g, '$1')
     .replace(/<[^>]+>/g, '')
     .replace(/[*_`~]/g, '')
-  return foldMarkdownTocWhitespace(stripped)
+  return normalizeMarkdownTocTitle(stripped)
 }
 
-// Why: headings can come from large pasted markdown; TOC labels only need
-// collapsed display whitespace, not a whole-string whitespace regex pass.
-function foldMarkdownTocWhitespace(value: string): string {
+// Collapse display whitespace without another full-string regex pass over large pasted headings.
+export function normalizeMarkdownTocTitle(value: string): string {
   let normalized = ''
   let pendingWhitespace = false
   for (let index = 0; index < value.length; index += 1) {
@@ -153,7 +152,7 @@ export function buildMarkdownTableOfContents(markdown: string): MarkdownTocItem[
       typeof node.depth === 'number' &&
       isMarkdownTocLevel(node.depth)
     ) {
-      const title = foldMarkdownTocWhitespace(markdownAstNodeToText(node))
+      const title = normalizeMarkdownTocTitle(markdownAstNodeToText(node))
       if (title) {
         appendTocItem(stack, {
           children: [],

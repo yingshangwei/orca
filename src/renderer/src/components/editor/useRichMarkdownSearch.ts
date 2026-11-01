@@ -94,10 +94,9 @@ export function useRichMarkdownSearch({
     })
   }, [editor, findMatches, isSearchOpen, matchCase, searchQuery, wholeWord])
 
-  // Why: mirror the guard used by replaceCurrentMatch/replaceAllMatches so the
-  // disabled state never disagrees with what a click will actually do during the
-  // debounce window when live matches diverge from the highlight set.
-  const replaceDisabled = getLiveMatches().some((match) => match.touchesReadOnlyAtom)
+  // Hidden replace controls must not bypass the find debounce with a live scan.
+  const replaceDisabled =
+    isReplaceMode && getLiveMatches().some((match) => match.touchesReadOnlyAtom)
 
   // Clamp the user-controlled index to the valid range on every render.
   // No state update needed — this is a pure derivation.

@@ -64,7 +64,9 @@ describe('rich markdown annotation block reuse', () => {
     }))
     const doc = {
       forEach(callback: (node: unknown, offset: number, index: number) => void): void {
-        content.forEach((node, index) => callback(node, index * 10, index))
+        content.forEach((node, index) =>
+          callback({ ...node, toJSON: () => node }, index * 10, index)
+        )
       },
       // The text-range search walks the doc to locate the selected text; these
       // fixtures never match, so it only needs to be traversable.
