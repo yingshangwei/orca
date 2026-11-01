@@ -211,16 +211,26 @@ export function buildRepoIdToRepresentative(
   return map
 }
 
-/** Maps each host's repoId to its owning entry + host, so a deep link can
- *  select that host in the pane's "Available Hosts" switcher. */
+/** Which entry, host and setup row a Settings deep link opens. */
+export type SettingsProjectHostSelection = {
+  selectionKey: string
+  hostId: ExecutionHostId
+  setupId: string
+}
+
+/** Resolve deep links to their exact setup: one host can own several (e.g. Windows + WSL clones). */
 export function buildRepoIdToHostSelection(
   projects: readonly SettingsProject[]
-): Map<string, { selectionKey: string; hostId: ExecutionHostId }> {
-  const map = new Map<string, { selectionKey: string; hostId: ExecutionHostId }>()
+): Map<string, SettingsProjectHostSelection> {
+  const map = new Map<string, SettingsProjectHostSelection>()
   for (const settingsProject of projects) {
     for (const setup of settingsProject.setups) {
       if (setup.repoId.trim().length > 0 && !map.has(setup.repoId)) {
-        map.set(setup.repoId, { selectionKey: settingsProject.selectionKey, hostId: setup.hostId })
+        map.set(setup.repoId, {
+          selectionKey: settingsProject.selectionKey,
+          hostId: setup.hostId,
+          setupId: setup.id
+        })
       }
     }
   }
@@ -231,7 +241,7 @@ export function getSettingsTargetHostSelection(
   projects: readonly SettingsProject[],
   repoId: string,
   hostId: ExecutionHostId
-): { selectionKey: string; hostId: ExecutionHostId; setupId: string } | null {
+): SettingsProjectHostSelection | null {
   for (const settingsProject of projects) {
     const setup = settingsProject.setups.find(
       (candidate) => candidate.repoId === repoId && candidate.hostId === hostId

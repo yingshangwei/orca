@@ -124,6 +124,11 @@ const skillFreshnessResources = {
   from: 'resources/skills',
   to: 'skills'
 }
+// The bundled agent-browser binary finds its version-matched catalog via the nearest skills/ above it (Resources/).
+const agentBrowserSkillResources = [
+  { from: 'node_modules/agent-browser/skills/agent-browser', to: 'skills/agent-browser' },
+  { from: 'node_modules/agent-browser/skill-data', to: 'skill-data' }
+]
 // Why a real directory: native-chat agents load this skill plugin by path (Claude --plugin-dir,
 // Codex skill roots), and neither can read inside app.asar.
 const nativeChatVisualsResource = {
@@ -161,6 +166,7 @@ const commonExtraResources = [
   ...bundledRipgrepExtraResources,
   bundledPluginResources,
   skillFreshnessResources,
+  ...agentBrowserSkillResources,
   nativeChatVisualsResource,
   emojiShortcodeDatasetResource
 ]
@@ -189,7 +195,10 @@ const debElectronRuntimeDependencies = [
   'xdg-utils',
   'libatspi2.0-0',
   'libuuid1',
-  'libsecret-1-0'
+  'libsecret-1-0',
+  // Electron links these but electron-builder's defaults omit them; t64 is Ubuntu 24.04+/Debian 13.
+  'libasound2t64 | libasound2',
+  'libgbm1'
 ]
 const rpmElectronRuntimeDependencies = [
   'gtk3',
@@ -199,7 +208,8 @@ const rpmElectronRuntimeDependencies = [
   '(libXtst or libXtst6)',
   'xdg-utils',
   'at-spi2-core',
-  '(libuuid or libuuid1)'
+  '(libuuid or libuuid1)',
+  'alsa-lib'
 ]
 
 // Why mirrored, not imported: this config is CJS loaded by electron-builder outside the TS build.

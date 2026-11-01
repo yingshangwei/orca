@@ -14,10 +14,8 @@
  *   "Pi"  — `normalizeTerminalTitle` collapsing our own extension's output to a hardcoded
  *           literal, discarding the session name and cwd along with it (#16093).
  *
- * The fix removes both: the agent owns the title it animates (`synthesizeWorkingTitle: false`
- * — not the stronger `synthesizeTerminalTitle: false`, because terminal-state frames still
- * carry the pane's agent identity downstream), and the normalizer canonicalizes only the
- * rotating braille frame so consecutive frames dedupe while the label survives.
+ * OMP now owns its session title in every state. Pi retains terminal-state synthesis, while
+ * both keep animation normalization that preserves the session label.
  */
 import { describe, expect, it } from 'vitest'
 import { detectAgentStatusFromTitle, normalizeTerminalTitle } from './agent-title-status'
@@ -122,12 +120,17 @@ describe('Orca stops writing over the working title it does not own', () => {
     expect(shouldDriveSyntheticAgentTitleFromHook(agent, 'working')).toBe(false)
   })
 
-  // Why NOT terminal states: the synthetic frame is also how the pane's agent identity reaches
-  // downstream consumers, and both agents are quiet at rest so nothing churns.
-  it.each(['omp', 'pi'] as const)('still synthesizes terminal states for %s', (agent) => {
+  it('keeps OMP session titles through terminal states', () => {
     for (const state of ['done', 'waiting', 'blocked'] as const) {
-      expect(getSyntheticAgentTerminalTitle(agent, state)).not.toBeNull()
-      expect(shouldDriveSyntheticAgentTitleFromHook(agent, state)).toBe(true)
+      expect(getSyntheticAgentTerminalTitle('omp', state)).toBeNull()
+      expect(shouldDriveSyntheticAgentTitleFromHook('omp', state)).toBe(false)
+    }
+  })
+
+  it('still synthesizes terminal states for Pi', () => {
+    for (const state of ['done', 'waiting', 'blocked'] as const) {
+      expect(getSyntheticAgentTerminalTitle('pi', state)).not.toBeNull()
+      expect(shouldDriveSyntheticAgentTitleFromHook('pi', state)).toBe(true)
     }
   })
 

@@ -33,25 +33,21 @@ describe('synthetic agent titles', () => {
     expect(shouldDriveSyntheticAgentTitleFromHook('codex', 'done')).toBe(true)
   })
 
-  it('does not synthesize OpenCode titles over native session titles', () => {
-    expect(getSyntheticAgentTerminalTitle('opencode', 'done')).toBeNull()
-    expect(getSyntheticAgentTerminalTitle('opencode', 'waiting')).toBeNull()
-    expect(shouldDriveSyntheticAgentTitleFromHook('opencode', 'working')).toBe(false)
-    expect(shouldDriveSyntheticAgentTitleFromHook('opencode', 'done')).toBe(false)
-    expect(shouldDriveSyntheticAgentTitleFromHook('opencode', 'waiting')).toBe(false)
-  })
+  it.each(['opencode', 'omp'] as const)(
+    'keeps %s native session titles in every state',
+    (agent) => {
+      for (const state of ['done', 'waiting', 'blocked'] as const) {
+        expect(getSyntheticAgentTerminalTitle(agent, state)).toBeNull()
+        expect(shouldDriveSyntheticAgentTitleFromHook(agent, state)).toBe(false)
+      }
+      expect(shouldDriveSyntheticAgentTitleFromHook(agent, 'working')).toBe(false)
+    }
+  )
 
   it('provides Devin titles for hook-driven status updates', () => {
     expect(getSyntheticAgentTerminalTitle('devin', 'done')).toBe('Devin ready')
     expect(getSyntheticAgentTerminalTitle('devin', 'waiting')).toBe('Devin - action required')
     expect(shouldDriveSyntheticAgentTitleFromHook('devin', 'working')).toBe(true)
-  })
-
-  it('provides Pi-compatible OMP titles for hook-driven status updates', () => {
-    expect(getSyntheticAgentTerminalTitle('omp', 'done')).toBe('OMP ready')
-    expect(getSyntheticAgentTerminalTitle('omp', 'waiting')).toBe('OMP - action required')
-    // Why: the native π working title carries session name/cwd; synthesizing would clobber it.
-    expect(shouldDriveSyntheticAgentTitleFromHook('omp', 'working')).toBe(false)
   })
 
   it('provides Pi titles for hook-driven status updates', () => {

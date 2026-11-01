@@ -2,6 +2,7 @@ import { withWorkspaceRoute } from '../../../../src/navigation/workspace-route'
 import { useLocalSearchParams } from 'expo-router'
 import { MobileSourceControlPanel } from '../../../../src/source-control/MobileSourceControlPanel'
 import { firstParam } from '../../../../src/navigation/route-param-reader'
+import { useSessionDiffOpenHandlers } from '../../../../src/session/session-diff-open-handlers'
 import { parseSourceControlHubTab } from '../../../../src/source-control/mobile-source-control-hub-tab'
 
 /**
@@ -20,14 +21,19 @@ export default withWorkspaceRoute(function MobileSourceControlScreen() {
     origin?: string | string[]
     tab?: string | string[]
   }>()
+  const hostId = firstParam(params.hostId)
+  const worktreeId = firstParam(params.worktreeId)
+  const origin = firstParam(params.origin)
+  const sessionHandlers = useSessionDiffOpenHandlers(hostId, worktreeId)
   return (
     <MobileSourceControlPanel
-      hostId={firstParam(params.hostId)}
-      worktreeId={firstParam(params.worktreeId)}
+      hostId={hostId}
+      worktreeId={worktreeId}
       name={firstParam(params.name)}
-      origin={firstParam(params.origin)}
+      origin={origin}
       initialTab={parseSourceControlHubTab(firstParam(params.tab))}
       embedded={false}
+      {...(origin === 'session' ? sessionHandlers : undefined)}
     />
   )
 })

@@ -14,6 +14,7 @@ import {
   normalizeAgentNativeChatPermissionModes
 } from '../../../shared/agent-chat-permission-mode'
 import {
+  expandWorkspaceDirHome,
   savedChatUiWithTerminalDefaultView,
   stripRetiredGlobalSettings
 } from '../applying-settings/terminal-settings-migrations'
@@ -68,7 +69,7 @@ export function normalizeLoadedGlobalSettings(
     // Why (#7977): v1.4.130 onboarding persisted this as a plain boolean, making the
     // old default indistinguishable from a real opt-in. Preserve stored `true`; only
     // the default changed.
-    ...stripRetiredGlobalSettings(parsed.settings),
+    ...expandWorkspaceDirHome(stripRetiredGlobalSettings(parsed.settings)),
     // Why: Chat UI on now opens new tabs in chat; keep users whose new tabs opened in the terminal there.
     ...(savedChatUiWithTerminalDefaultView(parsed.settings)
       ? { experimentalNativeChat: false }

@@ -58,7 +58,7 @@ export function observeTerminalCommandPaint(
 
 /**
  * Why no marker reads as painted: some launches get no command boundary (older fish, SSH relay
- * zsh, shells Orca could not wrap, and Windows launches that pass the command in shell args), so
+ * zsh, shells Orca could not wrap, and cmd.exe /K startup arguments), so
  * any output is all the evidence there is.
  */
 export function hasTerminalCommandPainted(record: TerminalCommandPaintRecord): boolean {
