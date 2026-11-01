@@ -73,7 +73,7 @@ itOnPosix(
       const rootProcessGroup = readProcessGroup(proc.pid)
       expect(tagged.some((process) => process.pgid !== rootProcessGroup)).toBe(true)
 
-      forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'))
+      await forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'))
       await Promise.race([
         exited,
         new Promise<never>((_, reject) =>

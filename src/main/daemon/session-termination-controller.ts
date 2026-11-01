@@ -24,7 +24,7 @@ export type SessionTerminationControllerDeps = {
 export class SessionTerminationController {
   private _isTerminating = false
   private killTimer: ReturnType<typeof setTimeout> | null = null
-  private forceKillSent = false
+  private forceKillRequest: Promise<void> | null = null
   private subprocessDisposed = false
   private readonly physicalExit = new PhysicalExitTracker()
 
@@ -135,6 +135,11 @@ export class SessionTerminationController {
     this.deps.subprocess.signal(sig)
   }
 
+  /** Joins any in-flight request so disposal never starts a second process-group sweep. */
+  forceKillDuringDispose(): Promise<void> {
+    return this.requestForceKill()
+  }
+
   disposeSubprocessHandle(): void {
     if (this.subprocessDisposed) {
       return
@@ -157,37 +162,44 @@ export class SessionTerminationController {
     this.killTimer = setTimeout(() => {
       this.killTimer = null
       if (!this.deps.isExited()) {
-        try {
-          this.requestForceKill()
-        } catch (error) {
+        this.requestForceKill().catch((error: unknown) => {
           console.warn('[Session] failed to force-kill terminating subprocess:', error)
           // Why: a transient SIGKILL rejection must not consume the only fallback owner after graceful shutdown returned.
           if (attemptsRemaining > 1) {
             this.armForceKillFallback(SESSION_FORCE_KILL_RETRY_MS, attemptsRemaining - 1)
           }
-        }
+        })
       }
     }, delayMs)
   }
 
-  private requestForceKill(): void {
-    if (this.deps.isExited() || this.forceKillSent) {
-      return
+  private requestForceKill(): Promise<void> {
+    if (this.deps.isExited()) {
+      return Promise.resolve()
     }
-    this.forceKillSent = true
-    try {
-      this.deps.subprocess.forceKill()
-    } catch (error) {
-      this.forceKillSent = false
-      throw error
+
+    if (!this.forceKillRequest) {
+      const request = this.sendForceKill()
+      this.forceKillRequest = request
+      // A refused signal releases the claim so a retry can send again.
+      request.catch(() => {
+        if (this.forceKillRequest === request) {
+          this.forceKillRequest = null
+        }
+      })
     }
+    return this.forceKillRequest
+  }
+
+  private async sendForceKill(): Promise<void> {
+    await this.deps.subprocess.forceKill()
   }
 
   private async requestForceKillWithRetry(): Promise<void> {
     let lastError: unknown
     for (let attempt = 0; attempt < SESSION_FORCE_KILL_MAX_ATTEMPTS; attempt++) {
       try {
-        this.requestForceKill()
+        await this.requestForceKill()
         return
       } catch (error) {
         lastError = error

@@ -4,6 +4,8 @@ import type { PtyTransport } from '../pty-transport-types'
 
 // Why: connectPanePty is a single closure factory. The bag lets extracted
 // installers share the same mutable bindings without changing call order.
+
+import type { TerminalIdleCursorReset } from '../terminal-idle-cursor-reset'
 export type ConnectPanePtySession = {
   pane: ManagedPane
   manager: PaneManager
@@ -11,6 +13,7 @@ export type ConnectPanePtySession = {
   // Why typed: every PTY write must name its input kind, and the bag's `any` would hide a missing one.
   transport: PtyTransport
   hiddenOutputRestoreUnhideSeq: number | null
+  idleCursorReset: TerminalIdleCursorReset
   // oxlint-disable-next-line typescript/no-explicit-any -- session bag for mechanical extract
   [key: string]: any
 }

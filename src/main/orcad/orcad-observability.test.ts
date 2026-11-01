@@ -62,11 +62,11 @@ describe('orcad trace file', () => {
       error: new Error('disk full')
     })
 
-  it('writes a structured chat failure to its own file under the data root, flushed by close', () => {
+  it('writes a structured chat failure to its own file under the data root, flushed by close', async () => {
     const close = installOrcadObservability()
 
     reportLateSettlement()
-    close()
+    await close()
 
     expect(traceRecords()).toContainEqual(
       expect.objectContaining({
@@ -78,7 +78,7 @@ describe('orcad trace file', () => {
     expect(existsSync(join(dataRoot, 'logs', 'main.trace.ndjson'))).toBe(false)
   })
 
-  it('flushes what is buffered when the process exits with no cleanup', () => {
+  it('flushes what is buffered when the process exits with no cleanup', async () => {
     const before = new Set(process.listeners('exit'))
     const close = installOrcadObservability()
     const onExit = process.listeners('exit').filter((listener) => !before.has(listener))
@@ -88,18 +88,20 @@ describe('orcad trace file', () => {
     onExit[0]?.call(process, 1)
 
     expect(traceRecords().map((record) => record.name)).toContain('agentSession.late-settlement')
-    close()
+
+    await close()
     expect(process.listeners('exit')).toHaveLength(before.size)
   })
 
-  it('still starts when the logs folder cannot be opened, with tracing off', () => {
+  it('still starts when the logs folder cannot be opened, with tracing off', async () => {
     // A regular file where the folder belongs fails the open as a read-only mount or EACCES does.
     writeFileSync(join(dataRoot, 'logs'), 'not a folder')
     const warn = vi.mocked(console.warn)
 
     const close = installOrcadObservability()
     reportLateSettlement()
-    close()
+
+    await close()
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('[observability] tracing is off'),
@@ -118,8 +120,9 @@ it('orcad installs the trace file before its runtime and closes it after every q
   expect(install).toBeLessThan(entry.indexOf('new OrcaRuntimeService('))
   const quit = entry.indexOf('      runOrcadQuitHandlers()\n')
   expect(quit).toBeGreaterThan(-1)
-  const close = entry.indexOf('      closeOrcadObservability()\n', quit)
+  const close = entry.indexOf('      const closing = closeOrcadObservability()\n', quit)
   expect(close).toBeGreaterThan(quit)
   // A failing quit handler must not skip the close.
   expect(entry.slice(quit, close)).toContain('} finally {')
+  expect(entry.slice(close)).toContain('await closing')
 })

@@ -6,7 +6,7 @@ import { TerminalKittyKeyboardModeTracker } from '../../../../../shared/terminal
 import type { PtyConnectionDeps } from '../pty-connection-types'
 import { registerTerminalPaneRecoveryInstance } from '../terminal-pane-recovery'
 import { captureTabRecoveryGeneration } from '@/store/terminals/terminal-tab-recovery-ledger'
-import { RESET_TERMINAL_CURSOR_STYLE } from '../../../../../shared/terminal-mode-reset-profiles'
+import { TerminalIdleCursorReset } from '../terminal-idle-cursor-reset'
 import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import { createTerminalStructuralReplayCoordinator } from '@/lib/pane-manager/terminal-structural-replay-coordinator'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
@@ -129,19 +129,25 @@ export function connectPanePty(
   // Why: idle callbacks are registered before the deferred PTY output plumbing
   // exists. Start with the shared scheduler, then switch to the PTY writer
   // so hidden-tab resets keep backlog-recovery callbacks and byte order.
+
+  session.idleCursorReset = new TerminalIdleCursorReset()
   session.queueAgentIdleTerminalModeReset = (): void => {
     if (session.disposed) {
       return
     }
-    writeTerminalOutput(session.pane.terminal, RESET_TERMINAL_CURSOR_STYLE, {
-      foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
-    })
+
+    const reset = session.idleCursorReset.request()
+    if (reset) {
+      writeTerminalOutput(session.pane.terminal, reset, {
+        foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
+      })
+    }
+    // Why: passphrase-gate waits register a teardown here so dispose() can
+    // actively unsubscribe + resolve them. Without this, a pane disposed
+    // mid-wait leaks its zustand subscriber and the surrounding async IIFE
+    // forever, since the subscriber's `disposed` check only fires when the
+    // store next emits — which may never happen after disconnect.
   }
-  // Why: passphrase-gate waits register a teardown here so dispose() can
-  // actively unsubscribe + resolve them. Without this, a pane disposed
-  // mid-wait leaks its zustand subscriber and the surrounding async IIFE
-  // forever, since the subscriber's `disposed` check only fires when the
-  // store next emits — which may never happen after disconnect.
   session.waitTeardowns = []
   // Why: startup commands must only run once — in the pane they were
   // targeted at. Capture `deps.startup` into a local and clear the field on

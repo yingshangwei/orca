@@ -56,6 +56,8 @@ export type PtyDataMeta = {
   background?: boolean
   /** Main dropped this PTY's buffered output at the pending cap; repaint from the main-owned snapshot, not the live stream. */
   droppedOutput?: boolean
+  /** Escape main's dropped bytes left open where this chunk begins; only an abandoned restore uses it. */
+  gapEscapeState?: string
 }
 
 /** Sidecar PTY-data observers, invoked AFTER the primary handler so a side-effect-only watcher can't delay xterm rendering. */
@@ -118,6 +120,7 @@ function handleDispatchedPtyData(payload: {
   transformed?: boolean
   background?: boolean
   droppedOutput?: boolean
+  gapEscapeState?: string
 }): void {
   let meta: PtyDataMeta | undefined
   if (typeof payload.seq === 'number') {
@@ -139,6 +142,10 @@ function handleDispatchedPtyData(payload: {
   if (payload.droppedOutput === true) {
     meta ??= {}
     meta.droppedOutput = true
+  }
+  if (typeof payload.gapEscapeState === 'string' && payload.gapEscapeState.length > 0) {
+    meta ??= {}
+    meta.gapEscapeState = payload.gapEscapeState
   }
   const chars = payload.rawLength ?? payload.data.length
   const dispatch = (): void => {

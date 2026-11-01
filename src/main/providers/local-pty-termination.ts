@@ -1,7 +1,11 @@
 import type * as pty from 'node-pty'
 import { PhysicalExitTracker } from '../../shared/physical-exit-tracker'
 import { killWithDescendantSweep } from '../pty-descendant-termination'
-import { forceKillPosixPtyProcessGroups } from '../pty/posix-pty-process-groups'
+import {
+  forceKillPosixPtyProcessGroups,
+  forceKillPosixPtyProcessGroupsSync
+} from '../pty/posix-pty-process-groups'
+import { PendingPtyGroupSweep } from '../pty/pending-pty-group-sweep'
 import { terminatePtyJob } from '../windows/windows-pty-job'
 import {
   clearLocalPtyForceKillTimer,
@@ -41,6 +45,17 @@ function waitForPtyPhysicalExit(id: string, physicalExit?: PhysicalExitTracker):
   )
 }
 
+const groupSweeps = new WeakMap<pty.IPty, PendingPtyGroupSweep>()
+
+function groupSweepFor(proc: pty.IPty): PendingPtyGroupSweep {
+  let sweep = groupSweeps.get(proc)
+  if (!sweep) {
+    sweep = new PendingPtyGroupSweep()
+    groupSweeps.set(proc, sweep)
+  }
+  return sweep
+}
+
 function killLocalPtyProcess(proc: pty.IPty, immediate: boolean): void {
   if (process.platform === 'win32') {
     proc.kill()
@@ -50,7 +65,7 @@ function killLocalPtyProcess(proc: pty.IPty, immediate: boolean): void {
     proc.kill('SIGTERM')
     return
   }
-  forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'))
+  forceKillPosixPtyProcessGroupsSync(proc.pid, () => proc.kill('SIGKILL'))
 }
 
 function armLocalPtyForceKill(
@@ -68,19 +83,24 @@ function armLocalPtyForceKill(
       return
     }
     ptyTerminationMode.set(id, 'force')
-    try {
-      killLocalPtyProcess(proc, true)
-    } catch (error) {
-      ptyTerminationMode.set(id, 'graceful')
-      console.error('[pty] failed to force-kill PTY after graceful deadline', { id, error })
-      // Why: a transient native rejection must not consume the only SIGKILL owner while shutdown still awaits physical exit.
-      if (attemptsRemaining > 1) {
-        armLocalPtyForceKill(id, proc, {
-          delayMs: LOCAL_PTY_FORCE_KILL_RETRY_MS,
-          attemptsRemaining: attemptsRemaining - 1
+    // Graceful mode is POSIX-only, so this deadline never reaches the ConPTY kill path.
+    groupSweepFor(proc)
+      .track(
+        forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'), {
+          ownsRoot: () => ptyProcesses.get(id) === proc
         })
-      }
-    }
+      )
+      .catch((error: unknown) => {
+        ptyTerminationMode.set(id, 'graceful')
+        console.error('[pty] failed to force-kill PTY after graceful deadline', { id, error })
+        // Why: a transient native rejection must not consume the only SIGKILL owner while shutdown still awaits physical exit.
+        if (attemptsRemaining > 1) {
+          armLocalPtyForceKill(id, proc, {
+            delayMs: LOCAL_PTY_FORCE_KILL_RETRY_MS,
+            attemptsRemaining: attemptsRemaining - 1
+          })
+        }
+      })
   }, options.delayMs ?? LOCAL_PTY_GRACEFUL_FORCE_TIMEOUT_MS)
   timer.unref?.()
   ptyForceKillTimers.set(id, timer)
@@ -110,6 +130,16 @@ export function destroyPtyProcess(proc: pty.IPty, options: { alreadyKilled?: boo
 function requestPtyTermination(id: string, proc: pty.IPty): void {
   runPtyCleanup(id)
   disposePtyListeners(id)
+
+  groupSweepFor(proc).afterSettled(() => finishPtyTermination(id, proc))
+}
+
+function finishPtyTermination(id: string, proc: pty.IPty): void {
+  if (ptyProcesses.get(id) !== proc) {
+    // Exited while the sweep ran: its pid may be reused, so only release the handle.
+    destroyPtyProcess(proc, { alreadyKilled: true })
+    return
+  }
   const previousMode = ptyTerminationMode.get(id)
   // Why: cleanup neutralizes proc.kill below, so escalate an outstanding graceful request before its deadline is disabled.
   if (previousMode !== 'force') {
@@ -246,7 +276,8 @@ export function killAllLocalPtys(): void {
         if (ptyAgentSessionIds.has(id) && process.platform !== 'win32') {
           // App quit is synchronous, so sweep attached agent process groups before
           // releasing node-pty; otherwise OMP workers can outlive the foreground PTY.
-          forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'))
+
+          forceKillPosixPtyProcessGroupsSync(proc.pid, () => proc.kill('SIGKILL'))
         } else {
           proc.kill()
         }

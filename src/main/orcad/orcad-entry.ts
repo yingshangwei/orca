@@ -48,7 +48,7 @@ import { placeUnshownLiveTerminalsBestEffort } from '../runtime/terminal/adoptio
 
 export { parseArgs }
 
-let closeOrcadObservability = (): void => {}
+let closeOrcadObservability = (): Promise<void> => Promise.resolve()
 
 /**
  * Boot the runtime and serve RPC. Resolves once the transport is listening and the
@@ -65,13 +65,16 @@ export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandl
   const { readiness, instance, stop } = await startOrcadWithHost(
     userDataPath,
     (registerCleanup) => startOrcadRuntime(options, registerCleanup),
-    () => {
+
+    async () => {
       try {
         runOrcadQuitHandlers()
       } finally {
         // Last, after every quit handler (even a failing one), so their spans still reach the file.
-        closeOrcadObservability()
-        closeOrcadObservability = () => {}
+
+        const closing = closeOrcadObservability()
+        closeOrcadObservability = () => Promise.resolve()
+        await closing
       }
     }
   )

@@ -32,20 +32,34 @@ export function createLaunchedAgentWriteGuard(
    *  proven in front refuses, so a caller that wrote there before keeps doing so. */
   { unprovableHost = 'refuse' }: { unprovableHost?: 'refuse' | 'write-unless-shell' } = {}
 ): LaunchedAgentWriteGuard {
-  let cleared: { ptyId: string; shellMayHaveReturned: boolean; unsubscribe: () => void } | null =
-    null
+  let disposed = false
+  let current: {
+    ptyId: string
+    proven: boolean
+    shellMayHaveReturned: boolean
+    unsubscribe: () => void
+  } | null = null
+  const clearWatch = (): void => {
+    const previous = current
+    current = null
+    previous?.unsubscribe()
+  }
   const dispose = (): void => {
-    cleared?.unsubscribe()
-    cleared = null
+    disposed = true
+    clearWatch()
   }
   const beforeWrite = async (ptyId: string): Promise<void> => {
-    if (cleared?.ptyId === ptyId && !cleared.shellMayHaveReturned) {
+    if (disposed) {
+      throw new Error('request_aborted')
+    }
+    if (current?.ptyId === ptyId && current.proven && !current.shellMayHaveReturned) {
       return
     }
-    dispose()
+    clearWatch()
     let carry = ''
-    const watch = { ptyId, shellMayHaveReturned: false, unsubscribe: (): void => {} }
-    // Subscribed before the read, so a shell that returns while it runs is not missed.
+    const watch = { ptyId, proven: false, shellMayHaveReturned: false, unsubscribe: (): void => {} }
+    current = watch
+    // Subscribe before probing so shell return during the read cannot be missed.
     watch.unsubscribe = runtime.subscribeToTerminalData(ptyId, (data) => {
       const window = carry + data
       carry = window.slice(-MARKER_CARRY_CHARS)
@@ -53,24 +67,31 @@ export function createLaunchedAgentWriteGuard(
         watch.shellMayHaveReturned = true
       }
     })
-    let foreground: LaunchedAgentForeground
     try {
-      foreground = await runtime.readLaunchedAgentForeground(ptyId, agent)
+      const foreground: LaunchedAgentForeground = await runtime.readLaunchedAgentForeground(
+        ptyId,
+        agent
+      )
+      if (disposed || current !== watch) {
+        throw new Error('request_aborted')
+      }
+      if (foreground === 'agent') {
+        watch.proven = true
+        return
+      }
+      clearWatch()
+      if (
+        foreground === 'shell' ||
+        unprovableHost === 'refuse' ||
+        runtime.launchedAgentHostProvesAgent?.(ptyId) !== false
+      ) {
+        throw new Error('agent_not_in_foreground')
+      }
     } catch (error) {
-      watch.unsubscribe()
+      if (current === watch) {
+        clearWatch()
+      }
       throw error
-    }
-    if (foreground === 'agent') {
-      cleared = watch
-      return
-    }
-    watch.unsubscribe()
-    if (
-      foreground === 'shell' ||
-      unprovableHost === 'refuse' ||
-      runtime.launchedAgentHostProvesAgent?.(ptyId) !== false
-    ) {
-      throw new Error('agent_not_in_foreground')
     }
   }
   return { beforeWrite, dispose }

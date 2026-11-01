@@ -140,6 +140,8 @@ async function main(): Promise<void> {
   // Fail-open: a broken log path must never block daemon startup.
   const daemonLog = logFilePath ? createDaemonFileLog(logFilePath) : createNoopDaemonFileLog()
   daemonLog.log('startup', { protocolVersion: PROTOCOL_VERSION, socketPath })
+  // Log writes are async; every exit, including process.exit below, flushes the queued tail.
+  process.once('exit', () => daemonLog.close())
   const daemonScope = ownFreshDaemonScope(freshDaemonScope === true, launchNonce)
   const log = (event: string, details?: Record<string, unknown>): void =>
     daemonLog.log(event, details)
@@ -175,6 +177,8 @@ async function main(): Promise<void> {
       return
     }
     daemonLog.log('uncaught-exception-fatal', { name: err?.name, message: msg })
+    // Rethrowing from this handler skips 'exit' listeners.
+    daemonLog.close()
     console.error('[daemon] Uncaught exception (fatal):', err)
     throw err
   })
@@ -182,7 +186,7 @@ async function main(): Promise<void> {
   let daemon: DaemonHandle | null = null
   let deathWatch: MacosLoginSessionDeathWatch | null = null
   let shuttingDown = false
-  const shutdownDeadline = createDaemonShutdownDeadline(daemonLog, () => process.exit(0))
+  const shutdownDeadline = createDaemonShutdownDeadline(daemonLog, () => daemon)
   const beginShutdown = (): void => {
     shuttingDown = true
     shutdownDeadline.start()
@@ -209,7 +213,6 @@ async function main(): Promise<void> {
       daemonLog.log('shutdown-error', { message: (err as Error)?.message })
     } finally {
       shutdownDeadline.cancel()
-      daemonLog.close()
       process.exit(0)
     }
   }
@@ -267,7 +270,7 @@ async function main(): Promise<void> {
             shuttingDown = true
             daemonLog.log('login-session-dead-retire', details)
             daemon?.recordOrderlyExit()
-            daemonLog.close()
+
             // Why: crash-style exit (no PTY teardown) keeps session meta unclean so the
             // replacement daemon cold-restores scrollback; stale socket/pid files ride
             // the existing dead-endpoint recovery.
@@ -324,12 +327,10 @@ async function main(): Promise<void> {
       deathWatch?.stop()
       shuttingDown = true
       daemonLog.log('shutdown', { reason: 'idle' })
-      daemonLog.close()
       process.exit(0)
     },
     onRpcShutdown: () => {
       shutdownDeadline.cancel()
-      daemonLog.close()
       process.exit(0)
     },
     onShutdownRequested: beginShutdown

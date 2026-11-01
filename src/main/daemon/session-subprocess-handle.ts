@@ -36,7 +36,8 @@ export type SubprocessHandle = {
    *  where a stale cursor row makes the next prompt repaint below a blank gap. */
   clear?(): void
   kill(): void
-  forceKill(): void
+  /** Settles once signals are sent; a rejection means the kernel refused them. */
+  forceKill(): void | Promise<void>
   /**
    * Terminate this pty's job object, covering descendants that detached or
    * reparented. `unavailable` when the pty has no job -- never a false
