@@ -6,6 +6,7 @@ import type { ProviderRateLimits, UsageRateLimitFailureKind } from '../../shared
 import {
   ANTIGRAVITY_MIN_USAGE_VERSION,
   ANTIGRAVITY_PROBE_ENV,
+  ANTIGRAVITY_SIGN_IN_HOLD_RETRY_AT_MS,
   ANTIGRAVITY_USAGE_ARGS,
   ANTIGRAVITY_USAGE_MAX_OUTPUT_BYTES,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
@@ -15,7 +16,10 @@ import {
 } from './antigravity-usage-command'
 import { parseAntigravityUsageStdout, stdoutShowsModelTurn } from './antigravity-usage-response'
 
-import { classifyAntigravityUsageFailure } from './antigravity-usage-error'
+import {
+  classifyAntigravityUsageFailure,
+  stderrShowsInteractiveSignIn
+} from './antigravity-usage-error'
 
 const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
   'rate-limited':
@@ -175,6 +179,27 @@ export async function fetchAntigravityRateLimits(
     return failed(spawnFailureMessage(error), 'cli-unavailable', now())
   }
 
+  const reading = parseAntigravityUsageStdout(result.stdout)
+  // A completed browser sign-in still yields a reading; only a failed read holds future polls.
+  if (
+    !reading &&
+    (result.timedOut || result.code !== 0) &&
+    stderrShowsInteractiveSignIn(result.stderr)
+  ) {
+    return {
+      ...unavailable(
+        'Antigravity usage is not available. Sign in with `agy`, then refresh usage.',
+        'missing-credentials',
+        now()
+      ),
+      usageMetadata: {
+        source: 'cli',
+        attemptedSources: ['cli'],
+        failureKind: 'missing-credentials',
+        retryAtMs: ANTIGRAVITY_SIGN_IN_HOLD_RETRY_AT_MS
+      }
+    }
+  }
   if (result.timedOut) {
     return failed(
       'Antigravity usage is not available. The Antigravity CLI did not answer in time.',
@@ -183,7 +208,6 @@ export async function fetchAntigravityRateLimits(
     )
   }
 
-  const reading = parseAntigravityUsageStdout(result.stdout)
   // Why the successful read is checked first: a real reading can never be evidence of a prompt, so
   // ordering it ahead of the turn check makes a false latch impossible.
   if (!reading && stdoutShowsModelTurn(result.stdout)) {

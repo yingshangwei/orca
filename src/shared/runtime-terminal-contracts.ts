@@ -276,6 +276,7 @@ export type RuntimeTerminalCreateRequestPayload =
     })
 
 export type RuntimeTerminalCreate = {
+  coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }
   handle: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */
   incarnationId?: string | null

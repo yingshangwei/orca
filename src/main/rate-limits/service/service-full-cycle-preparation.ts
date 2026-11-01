@@ -39,6 +39,7 @@ export type FetchAllCyclePrepared = {
   miniMaxGeneration: number
   zcodeConfigChanged: boolean
   zcodeGeneration: number
+  antigravityGeneration: number
   claudeFetchGated: boolean
   results: [
     PromiseSettledResult<ProviderRateLimits>,
@@ -74,10 +75,11 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
     const codexTarget = this.codexFetchTarget
     // Why: capture before the resolver await; a reset during it bumps the generation and this cycle's result is stale.
     const codexGeneration = this.codexFetchGeneration
-    const previousState = this.state
     // Why: a skipped Codex poll must not stop the other providers' cycle, so gate
     // only the Codex slot instead of returning early (#STA-4422).
     const codexHome = await this.resolveCodexHome(codexTarget)
+    const previousState = this.state
+    const antigravityGeneration = this.antigravityFetchGeneration
     const codexFetchGated = codexHome.skip
     const codexHomePath = codexHome.homePath
     const codexStateBeforeFetch =
@@ -123,7 +125,9 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
     }
     const miniMaxGeneration = this.minimaxFetchGeneration
 
-    const antigravityUsageEnabled = this.antigravityUsageEnabledResolver?.() ?? true
+    const antigravityFetchAllowed =
+      (this.antigravityUsageEnabledResolver?.() ?? true) &&
+      (options?.force || !this.shouldSkipAutomatedFetch('antigravity', previousState.antigravity))
 
     const zcodePlanConfigResult = this.resolveZcodePlanConfig()
     const zcodePlanApiKey = zcodePlanConfigResult.config.apiKey
@@ -157,7 +161,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
         ? this.withFetchingStatus(null, 'opencode-go')
         : this.withFetchingStatus(previousState.opencodeGo, 'opencode-go'),
       kimi: this.withFetchingStatus(previousState.kimi, 'kimi'),
-      antigravity: antigravityUsageEnabled
+      antigravity: antigravityFetchAllowed
         ? this.withFetchingStatus(previousState.antigravity, 'antigravity')
         : (previousState.antigravity ?? antigravityUsageDisabledSnapshot()),
       minimax: miniMaxConfigChanged
@@ -193,7 +197,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
 
     // Hidden meters avoid the CLI spawn; the separate promise keeps other providers responsive.
     const antigravityResultPromise = (
-      antigravityUsageEnabled
+      antigravityFetchAllowed
         ? fetchAntigravityRateLimits({ signal })
         : Promise.resolve(previousState.antigravity ?? antigravityUsageDisabledSnapshot())
     ).then(
@@ -299,6 +303,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
       miniMaxGeneration,
       zcodeConfigChanged,
       zcodeGeneration,
+      antigravityGeneration,
       claudeFetchGated,
       results: [
         claudeResult,

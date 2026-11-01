@@ -5,6 +5,7 @@ import {
   isSameUsageWindow,
   normalizeClaudeConfigDir,
   type ClaudeRuntimeAuthPreparation,
+  type ActiveRateLimitProvider,
   type ClaudeStatusLineRateLimits,
   type NormalizedClaudeAccountSelectionTarget,
   type ProviderRateLimits
@@ -61,6 +62,15 @@ export abstract class RateLimitServiceFetchPolicy extends RateLimitServiceFetchT
       this.isRetryAfterActive(limits) ||
       (this.isLiveClaudeUsageFresh(limits) && !limits?.fableWeekly)
     )
+  }
+
+  protected shouldSkipAutomatedFetch(
+    provider: ActiveRateLimitProvider,
+    limits: ProviderRateLimits | null
+  ): boolean {
+    return provider === 'claude'
+      ? this.shouldSkipAutomatedClaudeFetch(limits)
+      : provider === 'antigravity' && this.isRetryAfterActive(limits)
   }
 
   protected resolveClaudeFetchApply(

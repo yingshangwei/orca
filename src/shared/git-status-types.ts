@@ -88,6 +88,8 @@ export type GitStatusResult = {
   // Explicitly invalidates a previously published total for this merge-base OID.
   // Kept separate so older hosts/clients remain compatible with omitted totals.
   branchLineTotalUnavailable?: string
+  /** Git could not read status; empty entries do not prove a clean tree. */
+  readError?: string
 }
 
 // Why: when hasUpstream is false, ahead/behind are placeholder zeros, not a

@@ -78,8 +78,6 @@ export function startStructuredAgentSessionLiveRead(args: {
   /** The open generation whose first frame has not arrived yet. */
   let openingFrameGeneration = 0
   let stateGeneration = 0
-  /** The current-request version whose failed read already reopened the subscription once. */
-  let failedRequestsVersion: string | undefined
   let unsubscribe = (): void => {}
   let shouldStopCoalescedEvent = (): boolean => true
   const coalescer = createStructuredAgentSessionEventCoalescer((event) => {
@@ -148,15 +146,7 @@ export function startStructuredAgentSessionLiveRead(args: {
     read: args.readCurrentRequests,
     complete: (marker, items) => args.applyRequests?.({ type: 'requests-complete', marker, items }),
     replaceMarker: (marker) => args.applyRequests?.({ type: 'requests-marker', marker }),
-    error: (error, marker) => {
-      reportReadFailure(error)
-      // Why: a reopen re-reads the same version, so a deterministic failure would resubscribe forever.
-      if (failedRequestsVersion === marker.version) {
-        return
-      }
-      failedRequestsVersion = marker.version
-      loseContact()
-    }
+    error: reportReadFailure
   })
   const handleEvent = (event: AgentSessionSubscribeEvent, eventOpenGeneration: number): void => {
     if (!isCurrentOpenGeneration(eventOpenGeneration)) {

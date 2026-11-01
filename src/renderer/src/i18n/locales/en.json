@@ -13663,6 +13663,7 @@
             "a1f2c8d901": "View"
           },
           "SourceControl": {
+            "statusReadFailed": "Git could not read this workspace. Changes shown may be out of date.",
             "1406954883": "Clear all notes...",
             "conflictsSection": "Conflicts",
             "cc05b2d088": "Open in File Explorer",
