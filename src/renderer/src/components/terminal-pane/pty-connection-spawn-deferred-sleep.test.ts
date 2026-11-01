@@ -280,6 +280,50 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     binding.dispose()
   })
 
+  it("declares a hidden pane's restart and its deferred retry as user resumes, so the live cap cannot defer them", async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const transport = createMockTransport(null)
+    // Main takes the replaced PTY with the first request, as the IPC spawn does, then defers it.
+    transport.connect.mockImplementation(
+      async (opts: {
+        claimReplacedPtyId?: () => string | null
+        callbacks?: { onSpawnDeferred?: (reason: string) => void }
+      }) => {
+        opts.claimReplacedPtyId?.()
+        opts.callbacks?.onSpawnDeferred?.('pressure')
+        return undefined
+      }
+    )
+    transportFactoryQueue.push(transport)
+    const pane = createPane(1)
+    const paneKey = makePaneKey('tab-1', pane.leafId)
+    const deps = createDeps({
+      isVisibleRef: { current: false },
+      replacesPtyId: 'old-pty',
+      startup: {
+        command: "claude '--resume' 'provider-session-1'",
+        launchAgent: 'claude',
+        resumeProviderSession: RESUME
+      }
+    })
+
+    // SAFETY: these pane fixtures provide the methods used by the connection under test.
+    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    await flushAsyncTicks(20)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      binding.dispose()
+      return
+    }
+    transport.connect.mockImplementation(async () => 'resumed-pty')
+    await expect(drain.queued.get(paneKey)?.()).resolves.toBe(true)
+    await flushAsyncTicks(20)
+
+    const [first, retry] = freshSpawns(transport)
+    expect(first).toMatchObject({ resumeSpawnIntent: 'user-resume' })
+    expect(retry).toMatchObject({ resumeSpawnIntent: 'user-resume' })
+    binding.dispose()
+  })
+
   it('resumes a hidden pane in the background once the host has room, as an automatic restore', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const { getPaneSpawnDeferral } = await import('@/lib/pane-spawn-deferral-registry')

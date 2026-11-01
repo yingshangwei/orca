@@ -112,7 +112,7 @@ function repoDigest(repos: readonly Repo[]): string {
       // Why: the source builder keeps only locally-executed repos, so the same
       // path reassigned to another execution host is a different root set.
       .map((repo) => `${getRepoExecutionHostId(repo)}\0${repo.path}`)
-      .sort((left, right) => left.localeCompare(right))
+      .sort((left, right) => left.localeCompare(right, 'en'))
       // NUL is the one byte a path cannot contain, so no repo list can be spelled
       // two ways that digest alike.
       .join('\0')

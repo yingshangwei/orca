@@ -357,14 +357,8 @@ async function subscribeForRedrive(
     maxWaitMs: REDRIVE_MAX_WAIT_MS
   })
   try {
-    const unsubscribe = await host.subscribe({
-      id: `orchestration:redrive:${sessionId}`,
-      sessionId,
-      emit: (event) => {
-        if (event.type === 'batch' || event.type === 'reset') {
-          coalescer.schedule(sessionId)
-        }
-      }
+    const unsubscribe = host.observeJournalPublications(sessionId, () => {
+      coalescer.schedule(sessionId)
     })
     // Disposal drops the pending timer rather than flushing it: every settlement reaches here, and
     // a redrive that fires after it would nudge a session no dispatch owns.

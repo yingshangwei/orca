@@ -447,7 +447,7 @@ describe('the shell capture', () => {
   it('does not open a capture for a start that lands after the session ended', async () => {
     const entered = gate()
     const blocked = gate()
-    const { engine, liveListeners, log } = createTestEngine({
+    const { engine, liveListeners, log, calls } = createTestEngine({
       permission: async () => {
         entered.release()
         await blocked.promise
@@ -461,10 +461,8 @@ describe('the shell capture', () => {
     blocked.release()
     await expect(pending).resolves.toMatchObject({ started: false })
     expect(liveListeners()).toEqual({ microphone: 0, interruptions: 0 })
-    // And the device is left torn down. The open succeeded — on a phone that is `initialize()`
-    // bringing the audio session up — so a start that simply returned here would leave it up with
-    // nothing holding it: the local end is a no-op with no capture, and nobody else will call one.
-    expect(log).toContain('end')
+    expect(calls).toEqual([])
+    expect(log).not.toContain('end')
   })
 
   it('tears the device down for a start that lost the race after opening', async () => {

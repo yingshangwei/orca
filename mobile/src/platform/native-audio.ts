@@ -114,29 +114,27 @@ export type NativeAudioCapture = {
   readonly dispose: () => void
 }
 
+type AudioDeviceOwner = {
+  queue: Promise<void>
+  stop: (() => boolean) | null
+}
+
+const audioDeviceOwners = new WeakMap<NativeAudioEngine, AudioDeviceOwner>()
+
 export function createNativeAudioCapture(engine: NativeAudioEngine): NativeAudioCapture {
   const screen = engine.screenLock
+  const device: AudioDeviceOwner = audioDeviceOwners.get(engine) ?? {
+    queue: Promise.resolve(),
+    stop: null
+  }
+  audioDeviceOwners.set(engine, device)
   let capture: Capture | null = null
   let disposed = false
-  /**
-   * Starts and stops run one at a time, in the order the page asked for them.
-   *
-   * Both of them await the device, and both decide what `capture` is when they come back. Two
-   * starts overlapping — a page reloaded while the OS prompt is up, which is the very case the
-   * replacement rule below exists for — each reached `listen()` and the second overwrote the
-   * first's handlers without removing them, leaving the engine calling into a capture nobody could
-   * read for the life of the app. A stop overlapping a start found nothing to end and the start
-   * opened a microphone after it.
-   *
-   * Reads stay off this queue: they must not wait behind an opening capture, and a read with no
-   * capture is already a refusal rather than a guess.
-   */
-  let queue: Promise<unknown> = Promise.resolve()
 
   function enqueue<Value>(action: () => Promise<Value>): Promise<Value> {
-    // On both settle paths: a start that failed must not wedge every stop behind it.
-    const run = queue.then(action, action)
-    queue = run.then(
+    // The microphone is shared across page sessions, including starts still awaiting native open.
+    const run = device.queue.then(action, action)
+    device.queue = run.then(
       () => undefined,
       () => undefined
     )
@@ -149,6 +147,9 @@ export function createNativeAudioCapture(engine: NativeAudioEngine): NativeAudio
     }
     capture.stopListening()
     capture = null
+    if (device.stop === end) {
+      device.stop = null
+    }
     screen.release()
     engine.end()
     return true
@@ -183,12 +184,13 @@ export function createNativeAudioCapture(engine: NativeAudioEngine): NativeAudio
 
   async function start(params: unknown): Promise<unknown> {
     const { sampleRate } = audioStartParamsSchema.parse(params)
-    // A page is a document that can navigate, fault or be swiped away mid-capture, and the shell is
-    // the only side that notices. So a second start replaces the first rather than refusing it,
-    // which would leave the microphone held by a document that is gone.
-    end()
+    if (disposed) {
+      return { started: false, sampleRate, permission: 'undetermined' }
+    }
+    // Replace prior capture because its page may have navigated or disappeared without stopping it.
+    device.stop?.()
     const permission = await engine.requestPermission()
-    if (permission !== 'granted') {
+    if (disposed || permission !== 'granted') {
       return { started: false, sampleRate, permission }
     }
     const opened = await engine.open(sampleRate)
@@ -205,8 +207,8 @@ export function createNativeAudioCapture(engine: NativeAudioEngine): NativeAudio
       return { started: false, sampleRate: opened.sampleRate, permission }
     }
     capture = listen()
-    // The mic is open from here, so the screen is held from here — and given back by `end()`,
-    // which every exit below reaches, including the one an engine that throws takes.
+    device.stop = end
+    // Hold only after opening; every subsequent failure must release through end().
     screen.hold()
     try {
       if (!engine.begin()) {

@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { shallow } from 'zustand/shallow'
+import type { AppState } from '@/store/types'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 import { useAppStore } from '@/store'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
@@ -24,8 +26,30 @@ import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 const EMPTY_WORKTREE_ID_SET: ReadonlySet<string> = new Set()
 
-// Applies every sidebar filter to the sorted id stream. Flatten/filter/sort goes through the
-// shared utility so card order matches Cmd+1–9 numbering.
+function createSidebarPairedDeviceIdsSelector(enabled: boolean) {
+  let inputs: readonly unknown[] = []
+  let result = EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT
+  return (state: AppState): ReadonlyMap<string, string> => {
+    if (!enabled) {
+      return EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT
+    }
+    const nextInputs = [state.runtimeEnvironments, state.runtimeStatusByEnvironmentId]
+    if (shallow(inputs, nextInputs)) {
+      return result
+    }
+    inputs = nextInputs
+    const next = getPairedDeviceIdsByEnvironment(
+      state.runtimeEnvironments,
+      state.runtimeStatusByEnvironmentId
+    )
+    if (!shallow(result, next)) {
+      result = next
+    }
+    return result
+  }
+}
+
+// Share visibility filtering with shortcuts so displayed order and Cmd+1–9 numbering agree.
 export function useVisibleSidebarWorktrees(args: {
   filterState: SidebarWorktreeFilters['filterState']
   sortBy: SortBy
@@ -55,15 +79,11 @@ export function useVisibleSidebarWorktrees(args: {
   // Why: skip the clock entirely when the epoch is the opt-out sentinel, so a
   // sleeping-workspaces list cannot evict the sample the live lists share.
   const agentStatusNow = showSleepingWorkspaces ? 0 : getAgentStatusEpochNow(agentStatusEpoch)
-  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
-  const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)
-  const pairedDeviceIdsByEnvironment = useMemo(
-    () =>
-      hideWorkspacesFromOtherDevices
-        ? getPairedDeviceIdsByEnvironment(runtimeEnvironments, runtimeStatusByEnvironmentId)
-        : EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
-    [hideWorkspacesFromOtherDevices, runtimeEnvironments, runtimeStatusByEnvironmentId]
+  const selectPairedDevices = useMemo(
+    () => createSidebarPairedDeviceIdsSelector(hideWorkspacesFromOtherDevices),
+    [hideWorkspacesFromOtherDevices]
   )
+  const pairedDeviceIdsByEnvironment = useAppStore(selectPairedDevices)
 
   // Read tabsByWorktree when needed for filtering or sorting
   const needsActivityMaps = !showSleepingWorkspaces || sortBy === 'smart'

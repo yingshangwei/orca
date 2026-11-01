@@ -64,6 +64,7 @@ function createNativeChatImageExtension(
   const Anchor = createDocumentCommentMarkdownComponents(onLinkClick).a
   return {
     remarkPlugins: visualExtension?.remarkPlugins ?? [],
+    extraFlowSyntaxMarkers: visualExtension?.extraFlowSyntaxMarkers,
     sanitizeAttributes: visualExtension?.sanitizeAttributes ?? {},
     components: {
       ...visualExtension?.components,

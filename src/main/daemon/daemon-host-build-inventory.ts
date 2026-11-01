@@ -110,7 +110,7 @@ export function collectDaemonHostBuildInventory(
       ...collectCodeFiles(join(processHostDir, 'package.json'), `${packageRel}/package.json`)
     )
     files.push(...collectCodeFiles(join(processHostDir, 'dist'), `${packageRel}/dist`))
-    files.sort((left, right) => left.path.localeCompare(right.path))
+    files.sort((left, right) => left.path.localeCompare(right.path, 'en'))
     const inventory = {
       runtimeVersion: runtimeVersion(),
       executableName: daemonHostExeName(sources.execPath),
