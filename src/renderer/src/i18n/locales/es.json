@@ -3526,7 +3526,8 @@
             "disconnectedTitle": "Remote runtime disconnected",
             "retryingBody": "Orca está reintentando automáticamente. Este terminal se reanudará si vuelve la conexión.",
             "disconnectedBody": "Se detuvieron los reintentos automáticos. Vuelva a conectarse para reanudar esta sesión de terminal.",
-            "reconnectButton": "Reconnect"
+            "reconnectButton": "Reconnect",
+            "wslStoppedBody": "Inicia esta distribución para continuar trabajando aquí."
           },
           "TerminalRestoringPlaceholder": {
             "restoring": "Restaurando terminal…"
@@ -12861,7 +12862,7 @@
         "wslHosts": {
           "title": "Hosts WSL",
           "experimental": "Experimental",
-          "description": "Orca ejecuta un servidor dentro de cada distro. Una distro detenida solo se inicia cuando abres uno de sus proyectos o la conectas aquí.",
+          "description": "Orca ejecuta un servidor dentro de cada distribución. Iniciar, Nuevo terminal o Conectar aquí inicia una distribución detenida. Abrir o restaurar un proyecto no la inicia.",
           "add": "Agregar distro WSL",
           "connect": "Conectar",
           "remove": "Quitar",
@@ -19278,7 +19279,9 @@
       "hostOutage": {
         "offline": "{{hostName}} está sin conexión",
         "reconnecting": "{{hostName}} se está reconectando…",
-        "reconnect": "Reconectar"
+        "reconnect": "Reconectar",
+        "stopped": "{{distro}} está detenida",
+        "start": "Iniciar"
       },
       "interruptedContinue": {
         "continue": "Continuar",

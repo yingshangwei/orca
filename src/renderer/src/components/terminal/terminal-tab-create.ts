@@ -23,13 +23,16 @@ export function createNewTerminalTab(
     // Why: paired web clients receive host-owned terminal tabs through
     // session.tabs. Creating a local tab first races the host snapshot and can
     // leave stale remote handles in the web store.
-    void createWebRuntimeSessionTerminal({
-      worktreeId: activeWorktreeId,
-      environmentId: runtimeEnvironmentId,
-      shell: shellOverride,
-      ...(options?.startupCwd ? { cwd: options.startupCwd } : {}),
-      activate: true
-    })
+    void createWebRuntimeSessionTerminal(
+      {
+        worktreeId: activeWorktreeId,
+        environmentId: runtimeEnvironmentId,
+        shell: shellOverride,
+        ...(options?.startupCwd ? { cwd: options.startupCwd } : {}),
+        activate: true
+      },
+      { userAct: true }
+    )
     return
   }
   const tabId = createBrowserUuid()

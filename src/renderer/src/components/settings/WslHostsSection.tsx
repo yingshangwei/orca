@@ -124,7 +124,7 @@ export function WslHostsSection({
             {unavailableLabel ??
               translate(
                 'auto.components.settings.wslHosts.description',
-                'Orca runs a server inside each distro. A stopped distro starts only when you open one of its projects or connect it here.'
+                'Orca runs a server inside each distro. Start, New Terminal, or Connect here starts a stopped distro. Opening or restoring a project does not.'
               )}
           </p>
         </div>

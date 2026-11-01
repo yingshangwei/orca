@@ -170,7 +170,7 @@ describe('WslOrcadLivenessSupervisor', () => {
     expect(h.watches).toHaveLength(1)
   })
 
-  it('marks terminals exited and recovers when a user-visible distro is confirmed stopped', async () => {
+  it('parks a stopped user-visible distro until it is started explicitly elsewhere', async () => {
     const h = harness({ visible: true })
     await h.supervisor.connect('Ubuntu')
     h.state.running = { status: 'confirmed', distros: [] }
@@ -179,11 +179,16 @@ describe('WslOrcadLivenessSupervisor', () => {
     expect(h.statuses[0]).toEqual({
       state: 'distro-stopped',
       terminals: 'exited',
-      recovering: true
+      recovering: false
     })
     expect(h.readIdentity).toHaveBeenCalledTimes(1) // never exec'd into the stopped distro
     h.state.running = { status: 'confirmed', distros: ['Ubuntu'] }
+    await h.advance(60_000)
+    expect(h.ensure).toHaveBeenCalledTimes(1)
+    expect(h.ensureHolder).not.toHaveBeenCalled()
+    expect(h.deferred).toHaveLength(1)
     h.state.identity = { distroInstance: 'boot:2', orcad: 'orcad:101' }
+    h.deferred[0]()
     await h.advance(WSL_ORCAD_RECONNECT_DELAYS_MS[0] * 2)
     expect(h.ensure).toHaveBeenCalledTimes(2)
     expect(h.statuses.at(-1)).toEqual({ state: 'ready', census: CENSUS })
@@ -406,4 +411,23 @@ describe('WslOrcadLivenessSupervisor', () => {
     await h.advance(1_000)
     expect(h.statuses.map((status) => status.state)).toEqual(['distro-stopped'])
   })
+
+  it.each(['stopped', 'unavailable'] as const)(
+    'does not restart for visible work if the distro becomes %s during crash backoff',
+    async (verdict) => {
+      const h = harness({ visible: true })
+      await h.supervisor.connect('Ubuntu')
+      h.state.identity = { distroInstance: 'boot:1', orcad: null }
+      h.lastWatch().exit(0)
+      await h.settle()
+      expect(h.statuses[0]).toMatchObject({ state: 'reconnecting', reason: 'orcad-exited' })
+      h.state.running =
+        verdict === 'stopped' ? { status: 'confirmed', distros: [] } : { status: 'unavailable' }
+      await h.advance(5_000)
+      expect(h.ensure).toHaveBeenCalledTimes(1)
+      expect(h.statuses.at(-1)).toMatchObject({
+        state: verdict === 'stopped' ? 'distro-stopped' : 'unverifiable'
+      })
+    }
+  )
 })

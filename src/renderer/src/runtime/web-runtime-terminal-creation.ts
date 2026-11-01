@@ -1,4 +1,5 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
+import { startStoppedWslHostForUserAct, stoppedWslHostMessage } from '../lib/wsl-host-user-start'
 import {
   deliverLaunchPromptToAgentTab,
   seedNativeChatLaunchDraftForAgentTab
@@ -17,8 +18,12 @@ import type {
  */
 export async function createWebRuntimeSessionTerminal(
   args: CreateWebRuntimeSessionTerminalArgs,
-  options: { notifyFailure?: boolean } = {}
+  options: { notifyFailure?: boolean; userAct?: boolean } = {}
 ): Promise<WebRuntimeTerminalCreateOutcome> {
+  const start = options.userAct ? startStoppedWslHostForUserAct(args.environmentId) : null
+  if (start && !(await start)) {
+    return { status: 'failed', message: stoppedWslHostMessage(args.environmentId) }
+  }
   const created = await createWebRuntimeSessionTerminalResult(args)
   if (
     created.hostFailed &&

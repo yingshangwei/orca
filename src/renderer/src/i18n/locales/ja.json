@@ -3511,7 +3511,8 @@
             "disconnectedTitle": "リモートランタイムが切断されました",
             "retryingBody": "Orca は自動的に再試行します。接続が復元されると、このターミナルが再開されます。",
             "disconnectedBody": "自動再試行が停止しました。このターミナルセッションを再開するには再接続してください。",
-            "reconnectButton": "再接続"
+            "reconnectButton": "再接続",
+            "wslStoppedBody": "このディストリビューションを起動して作業を再開します。"
           },
           "TerminalLinkActionPopover": {
             "openLink": "リンクを開く",
@@ -12845,7 +12846,7 @@
         "wslHosts": {
           "title": "WSL ホスト",
           "experimental": "実験的機能",
-          "description": "Orca は各ディストリビューション内でサーバーを実行します。停止中のディストリビューションは、そのプロジェクトを開くか、ここで接続したときにのみ起動します。",
+          "description": "Orca は各ディストリビューション内でサーバーを実行します。停止中の場合は「開始」、新規ターミナル、またはここからの接続で起動します。プロジェクトを開いたり復元したりしても起動しません。",
           "add": "WSL ディストリビューションを追加",
           "connect": "接続",
           "remove": "削除",
@@ -19308,7 +19309,9 @@
       "hostOutage": {
         "offline": "{{hostName}} はオフラインです",
         "reconnecting": "{{hostName}} に再接続しています…",
-        "reconnect": "再接続"
+        "reconnect": "再接続",
+        "stopped": "{{distro}} は停止しています",
+        "start": "開始"
       },
       "interruptedContinue": {
         "continue": "続行",

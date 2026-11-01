@@ -41,7 +41,7 @@ export async function resolveManagedRuntimeEnvironment(
   const host = classifyRuntimeEnvironmentHost(environment)
   switch (host.kind) {
     case 'wsl':
-      // Reached over the wsl.exe bridge; connects only when an open project or terminal needs it.
+      // A passive bridge call reconnects only a running distro; a stopped one needs Start.
       await getWslHostService()?.ensureForRuntimeCall(environment.id)
       break
     case 'network':

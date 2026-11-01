@@ -37,6 +37,7 @@ import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import { noteRuntimeEnvironmentConnectRequested } from './runtime-environment-pairing-refusal-registry'
 import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-key'
 import { withWslOrcadAccountEnv } from '../../wsl/wsl-orcad-account-env'
+import { getWslHostService } from '../../wsl/wsl-host-service-instance'
 import { clearSshCredentialDeclinedForEnvironment } from '../../ssh/ssh-credential-decline'
 import {
   disconnectManagedHostOfEnvironmentForUser,
@@ -259,26 +260,31 @@ function registerPassiveCallHandler(getUserDataPath: () => string): void {
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
       }
-      // Why here: every renderer call to a paired host passes this one handler.
-      const accounts = await withWslOrcadAccountEnv({
-        environmentId: environment.id,
-        method: args.method,
-        params: args.params,
-        hostSupports: (capability) =>
-          wslOrcadHostSupports(environment.id, capability, () =>
-            callRuntimeEnvironment(getUserDataPath(), environment.id, 'status.get', undefined)
-          )
-      })
-      if (!accounts.ok) {
-        return {
-          id: args.method,
-          ok: false,
-          error: { code: 'account_preparation_failed', message: accounts.message },
-          _meta: { runtimeId: environment.runtimeId }
-        }
-      }
       let response: RuntimeRpcResponse<unknown>
       try {
+        if (environment.orcadDeployment?.kind === 'wsl') {
+          // Account preparation may exec in the guest, so the passive gate must precede it too.
+          assertWslHostReachable(environment)
+          await getWslHostService()?.ensureForRuntimeCall(environment.id)
+        }
+        // Why here: every renderer call to a paired host passes this one handler.
+        const accounts = await withWslOrcadAccountEnv({
+          environmentId: environment.id,
+          method: args.method,
+          params: args.params,
+          hostSupports: (capability) =>
+            wslOrcadHostSupports(environment.id, capability, () =>
+              callRuntimeEnvironment(getUserDataPath(), environment.id, 'status.get', undefined)
+            )
+        })
+        if (!accounts.ok) {
+          return {
+            id: args.method,
+            ok: false,
+            error: { code: 'account_preparation_failed', message: accounts.message },
+            _meta: { runtimeId: environment.runtimeId }
+          }
+        }
         response = await callRuntimeEnvironment(
           getUserDataPath(),
           environment.id,

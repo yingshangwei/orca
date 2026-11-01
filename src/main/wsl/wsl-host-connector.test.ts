@@ -36,16 +36,18 @@ it('uses owned readiness without discovery and coalesces cold cleanup without wa
     runtime: { isReady: mocks.ready, call: vi.fn(), census: vi.fn() }
   })
   mocks.ready.mockReturnValue(true)
-  await expect(connector.isReachable('Ubuntu', 'wsl:ubuntu')).resolves.toBe(true)
+  await expect(connector.reachability('Ubuntu', 'wsl:ubuntu')).resolves.toBe('available')
   expect(mocks.readRunning).not.toHaveBeenCalled()
   expect(mocks.verify).not.toHaveBeenCalled()
   mocks.ready.mockReturnValue(false)
   mocks.readRunning.mockResolvedValueOnce({ status: 'confirmed', distros: [] })
-  const passive = connector.isReachable('Ubuntu', 'wsl:ubuntu')
+  const passive = connector.reachability('Ubuntu', 'wsl:ubuntu')
   const removal = connector.stopServer('Ubuntu', 'wsl:ubuntu')
-  await expect(passive).resolves.toBe(false)
+  await expect(passive).resolves.toBe('stopped')
   await expect(removal).resolves.toEqual({ stopped: true })
   expect(mocks.readRunning).toHaveBeenCalledTimes(1)
+  mocks.readRunning.mockResolvedValueOnce({ status: 'unavailable' })
+  await expect(connector.reachability('Ubuntu', 'wsl:ubuntu')).resolves.toBe('unavailable')
   mocks.readRunning.mockResolvedValueOnce({ status: 'unavailable' })
   await expect(connector.stopServer('Ubuntu', 'wsl:ubuntu')).resolves.toMatchObject({
     stopped: false

@@ -298,15 +298,11 @@ export class WslOrcadLivenessSupervisor {
 
   private async onDistroStopped(entry: Supervised): Promise<void> {
     disarmSupervised(entry)
-    const recovering = this.deps.hasUserVisibleWork(entry.distro)
     // The holder and the watch both exit on a stop; report it once.
-    if (recovering || entry.state !== 'distro-stopped') {
-      this.publish(entry, { state: 'distro-stopped', terminals: 'exited', recovering })
+    if (entry.state !== 'distro-stopped') {
+      this.publish(entry, { state: 'distro-stopped', terminals: 'exited', recovering: false })
     }
-    if (recovering) {
-      return this.recover(entry, 'distro-stopped')
-    }
-    // Never boot it for background work; the gate runs this once something else starts it.
+    // Start is explicit; the gate runs this once the user or something else starts the distro.
     const generation = entry.generation
     this.deps.deferUntilRunning(entry.distro, `wsl-orcad-liveness:${entry.key}`, () => {
       if (entry.generation === generation) {

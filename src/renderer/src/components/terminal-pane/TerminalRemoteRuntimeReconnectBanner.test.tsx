@@ -11,7 +11,8 @@ import {
 } from './TerminalRemoteRuntimeReconnectBanner'
 
 vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string) => fallback
+  translate: (_key: string, fallback: string, options?: Record<string, string>) =>
+    fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => options?.[name] ?? '')
 }))
 
 afterEach(() => {
@@ -84,5 +85,36 @@ describe('DelayedRemoteRuntimeReconnectBanner', () => {
       <DelayedRemoteRuntimeReconnectBanner epoch={2} phase="recovering" onReconnect={vi.fn()} />
     )
     expect(screen.getByText('Reconnecting to remote runtime')).toBeInTheDocument()
+  })
+
+  it('offers Start immediately for a stopped distro, even during backoff', async () => {
+    const onReconnect = vi.fn()
+    render(
+      <DelayedRemoteRuntimeReconnectBanner
+        epoch={0}
+        phase="backoff"
+        wslHostStopped="Ubuntu"
+        onReconnect={onReconnect}
+      />
+    )
+    expect(screen.getByText('Ubuntu is stopped')).toBeInTheDocument()
+    expect(screen.queryByText(/retrying automatically/)).not.toBeInTheDocument()
+    expect(onReconnect).not.toHaveBeenCalled()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Start' }))
+    expect(onReconnect).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the unavailable-host reason ahead of the stopped action', () => {
+    render(
+      <DelayedRemoteRuntimeReconnectBanner
+        epoch={0}
+        phase="backoff"
+        wslHostStopped="Ubuntu"
+        wslHostUnavailable="turned-off"
+        onReconnect={vi.fn()}
+      />
+    )
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Ubuntu is stopped')).not.toBeInTheDocument()
   })
 })

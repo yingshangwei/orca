@@ -1,9 +1,10 @@
 /**
  * WSL distros as hosts (WSL-via-orcad C7): add and remove them, persist what each connection
- * reports, and connect only for the user. A stopped distro boots on an explicit add or connect,
- * or while a project or terminal the user has open needs it; never for background work.
+ * reports, and connect only for the user. Only an explicit add or connect boots a stopped distro;
+ * restoring or switching to an open project or terminal never starts it.
  */
 import { errorMessage } from '../../shared/error-message'
+import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -29,6 +30,8 @@ import type { WslOrcadConnection } from './wsl-orcad-connection'
 import { registerWslHost } from './wsl-host-registration'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 
+export type WslHostReachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
+
 /** The WSL side the service drives: C3 holder, C5 connections, C6 liveness (or an e2e fake). */
 export type WslHostConnector = {
   listDistros(): Promise<WslHostDistroCandidate[]>
@@ -40,7 +43,7 @@ export type WslHostConnector = {
   forgetPairingFailures?(environmentId: string): void
   get(distro: string): WslOrcadConnection | null
   /** Checks the paired server without starting a stopped or unconfirmed distro. */
-  isReachable(distro: string, environmentId: string): Promise<boolean>
+  reachability(distro: string, environmentId: string): Promise<WslHostReachability>
   disconnect(distro: string): Promise<void>
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>
@@ -68,6 +71,7 @@ export class WslHostService {
   private readonly adding = new Map<string, Promise<WslHostAddResult>>()
   private visible = new Set<string>()
   private readonly removing = new Set<string>()
+  private readonly readyGenerations = new Map<string, number>()
   // Bumped on disable so an Add that started before it cannot finish as a ready host.
   private disableGeneration = 0
   private readonly statusListeners = new Set<() => void>()
@@ -180,6 +184,7 @@ export class WslHostService {
       this.removing.delete(environmentId)
     }
     this.statuses.delete(environmentId)
+    this.readyGenerations.delete(environmentId)
     this.notifyStatusesChanged()
     await this.deps.removed(environmentId)
     return serverStop
@@ -220,27 +225,61 @@ export class WslHostService {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
     this.wsl.forgetPairingFailures?.(environmentId)
-    await this.wsl.connect(record.distro, options)
+    const connection = await this.wsl.connect(record.distro, options)
+    this.noteConnected(record, connection)
   }
 
-  /**
-   * Before a call to a WSL host: a live connection serves it; otherwise connect only for open
-   * work, and say why not instead of letting the call fail as an unreachable network server.
-   */
+  /** A passive call may reconnect a running distro for open work, but never boot it. */
   async ensureForRuntimeCall(environmentId: string): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
     const connector = this.connector
-    if (!record || !connector || (await connector.isReachable(record.distro, environmentId))) {
+    if (!record || !connector) {
       return
+    }
+    const generation = this.readyGenerations.get(environmentId)
+    const reachability = await connector.reachability(record.distro, environmentId)
+    if (reachability === 'available') {
+      return
+    }
+    // A Start during the read supersedes its stopped verdict, which would mark live terminals exited.
+    if (this.readyGenerations.get(environmentId) !== generation) {
+      return this.ensureForRuntimeCall(environmentId)
     }
     const refusal = wslHostRunRefusal(this.deps)
     if (refusal || this.removing.has(environmentId)) {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
-    if (!this.visible.has(environmentId)) {
+    if (!this.recordForEnvironment(environmentId)) {
+      return
+    }
+    if (reachability === 'stopped') {
+      const state = this.statuses.get(environmentId)?.state
+      if (this.visible.has(environmentId) && state !== 'distro-stopped' && state !== 'connecting') {
+        this.setStatus(record, { state: 'distro-stopped', terminals: 'exited', recovering: false })
+      }
+      throw new RemoteRuntimeClientError(
+        'wsl_host_stopped',
+        `${record.distro} is stopped. Choose Start, New Terminal, or connect it in Settings → Remote Orca Servers.`
+      )
+    }
+    if (reachability === 'unavailable' || !this.visible.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
-    await connector.connect(record.distro)
+    const connection = await connector.connect(record.distro)
+    this.noteConnected(record, connection)
+  }
+
+  private noteConnected(record: WslHostDeploymentRecord, connection: WslOrcadConnection): void {
+    const id = record.environmentId
+    if (!this.recordForEnvironment(id) || this.removing.has(id) || !this.canRun()) {
+      return
+    }
+    this.readyGenerations.set(id, (this.readyGenerations.get(id) ?? 0) + 1)
+    // The connection manager can reuse a ready connection without publishing another ready event.
+    if (this.statuses.get(id)?.state === 'distro-stopped') {
+      this.setStatus(record, { state: 'ready', census: null }, connection)
+      this.deps.ready(id)
+    }
   }
 
   /** Whether anything may still be started for this distro (spawn guard). */
@@ -296,6 +335,10 @@ export class WslHostService {
     status: WslOrcadConnectionStatus,
     connection: WslOrcadConnection | null = null
   ): void {
+    if (status.state === 'ready') {
+      const id = record.environmentId
+      this.readyGenerations.set(id, (this.readyGenerations.get(id) ?? 0) + 1)
+    }
     const next = toWslHostStatus(record, status, connection)
     this.statuses.set(record.environmentId, next)
     this.deps.publish(next)
