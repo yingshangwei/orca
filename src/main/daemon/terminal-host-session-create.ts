@@ -24,6 +24,7 @@ import { waitForTerminalAttachOperation } from './terminal-attach-cancellation'
 import { sharedPromiseSettlementWaiters } from '../../shared/promise-settlement-waiters'
 import { SessionNotFoundError } from './types'
 import { resolveWslSessionContext } from './wsl-session-context'
+import { recordSessionSpawnPaneKey } from './terminal-host-session-listing'
 import {
   attachSessionInputViewer,
   isSessionInputClosed,
@@ -215,6 +216,7 @@ async function spawnAndPublishSession(
       ? { shellReadyTimeoutMs: opts.shellReadyTimeoutMs }
       : {})
   })
+  recordSessionSpawnPaneKey(session, opts.env?.ORCA_PANE_KEY)
 
   trackSessionInput(session, subprocess, deps.reportReadinessEvent)
 

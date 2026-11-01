@@ -16,6 +16,11 @@ export const LIVENESS_PROBE_TIMEOUT_MS = 2_000
 const MAX_TOMBSTONES = 1000
 
 export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
+  protected abstract adoptListedSessionForSleep(
+    sessionId: string,
+    deadlineMs?: number
+  ): Promise<void>
+
   async attach(id: string): Promise<Pick<PtySpawnResult, 'providerSequence' | 'lastTitle'> | void> {
     await this.ensureConnected()
     if (!this.canDelegateBackgroundToDaemon) {
@@ -104,7 +109,7 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     if (opts.keepHistory && this.disconnectOnlyPromise) {
       throw new Error('Cannot keep history after daemon disconnect has started')
     }
-    const shutdown = this.withHistorySpawnLock(id, () => this.shutdownWithHistoryLock(id, opts))
+    const shutdown = this.adoptThenShutdown(id, opts)
     if (!opts.keepHistory) {
       await shutdown
       return
@@ -115,6 +120,18 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     } finally {
       this.keepHistoryShutdowns.delete(shutdown)
     }
+  }
+
+  private async adoptThenShutdown(
+    id: string,
+    opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }
+  ): Promise<void> {
+    if (opts.keepHistory) {
+      // Outside the spawn lock, but included in disconnectOnly's admitted shutdown wait.
+      await this.ensureConnected(opts.deadlineMs)
+      await this.adoptListedSessionForSleep(id, opts.deadlineMs).catch(() => {})
+    }
+    await this.withHistorySpawnLock(id, () => this.shutdownWithHistoryLock(id, opts))
   }
 
   protected async shutdownWithHistoryLock(
