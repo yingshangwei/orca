@@ -3545,6 +3545,10 @@ export function createRemoteRuntimePtyTransport(
   const transport: PtyTransport = {
     connect: connectHoldingRestoredInput,
 
+    abandonPreconnectInput() {
+      recoveryInputHold.discard()
+    },
+
     attach(options) {
       // Why: like the local attach, keys typed before it reach the terminal this pane names, never another.
       recoveryInputHold.expect(

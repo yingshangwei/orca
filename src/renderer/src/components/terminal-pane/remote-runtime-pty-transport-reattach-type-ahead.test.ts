@@ -239,6 +239,30 @@ describe('remote reattach type-ahead', () => {
 
   // A remount shows the pane's terminal id before its deferred attach starts; keys typed then are real.
   describe('a remounted pane attaching its terminal', () => {
+    it('discards typing while asleep before a later wake attaches the same terminal', async () => {
+      const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+      const transport = createRemoteRuntimePtyTransport('env-1', {
+        worktreeId: 'wt-1',
+        tabId: 'tab-1',
+        leafId: 'pane:1',
+        bufferInputUntilConnect: true
+      })
+      try {
+        expect(transport.sendInput('before-sleep', 'driving')).toBe(true)
+        const accepted = transport.sendInputAccepted?.('stale\r', 'driving')
+        transport.abandonPreconnectInput?.()
+        expect(transport.sendInput('while-asleep\r', 'driving')).toBe(false)
+        transport.attach({ existingPtyId: ORIGINAL_ID, cols: 80, rows: 24, callbacks: {} })
+        await completeAttach()
+        await expect(accepted).resolves.toBe(false)
+        expect(transport.sendInput('after-wake', 'driving')).toBe(true)
+        await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/after-wake$/))
+        expect(inputFrameTexts().join('')).toBe('after-wake')
+      } finally {
+        transport.destroy?.()
+      }
+    })
+
     async function attachRemountedPane(options: Record<string, unknown> = {}) {
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const transport = createRemoteRuntimePtyTransport('env-1', {
