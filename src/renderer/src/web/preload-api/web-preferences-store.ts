@@ -18,6 +18,7 @@ import {
 } from '../../../../shared/pr-bot-author-overrides'
 import { normalizeTerminalCursorStyleDefault } from '../../../../shared/terminal-cursor-style-settings'
 import { normalizeTerminalCustomThemes } from '../../../../shared/terminal-custom-themes'
+import { splitLegacyTerminalColorOverrides } from '../../../../shared/terminal-color-overrides'
 import { migratePortugueseUiLanguageOnLoad } from '../../../../shared/portuguese-ui-language-migration'
 import { readStoredWebRuntimeEnvironment } from '../web-runtime-environment'
 import {
@@ -41,6 +42,7 @@ export function getStoredSettings(): GlobalSettings {
     ...stored,
     ...normalizeAutoRenameBranchFromWorkDefaultOn(stored),
     ...normalizeTerminalCursorStyleDefault(stored),
+    ...splitLegacyTerminalColorOverrides(stored),
     ...normalizeOsc52ClipboardDefaultOn(stored),
     terminalCustomThemes: normalizeTerminalCustomThemes(stored.terminalCustomThemes),
     ...migratePortugueseUiLanguageOnLoad(stored)
@@ -59,6 +61,7 @@ export function getStoredSettings(): GlobalSettings {
       stored.terminalAllowOsc52ClipboardDefaultedOnForAllUsers !==
         migratedStored.terminalAllowOsc52ClipboardDefaultedOnForAllUsers ||
       stored.terminalCustomThemes !== migratedStored.terminalCustomThemes ||
+      stored.terminalColorOverridesSplit !== migratedStored.terminalColorOverridesSplit ||
       stored.uiLanguage !== migratedStored.uiLanguage ||
       stored.uiLanguagePortugueseMigrationApplied !== true)
   ) {

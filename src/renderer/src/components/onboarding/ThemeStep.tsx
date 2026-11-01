@@ -9,6 +9,8 @@ import type { GhosttyImportPreview, GlobalSettings } from '../../../../shared/gl
 import type { DiscoveryStatusEmitted } from '../../../../shared/onboarding-state-types'
 import { translate } from '@/i18n/i18n'
 import { ChromePreview } from './theme-chrome-preview'
+import { withImportedTerminalColorOverrides } from '../../../../shared/terminal-theme-selection'
+import { getSystemPrefersDark } from '@/lib/terminal-theme'
 
 type ThemeStepProps = {
   theme: GlobalSettings['theme']
@@ -142,19 +144,10 @@ export function ThemeStep({ theme, onThemeChange, settings, updateSettings }: Th
         track('onboarding_ghostty_import_failed', { reason: 'empty_diff' })
         return
       }
-      await updateSettings({
-        ...resolved.diff,
-        ...(resolved.diff.terminalColorOverrides
-          ? {
-              terminalColorOverrides: {
-                ...settings.terminalColorOverrides,
-                ...resolved.diff.terminalColorOverrides
-              }
-            }
-          : {})
-      })
-      // Why: parent controller holds local `theme` state that overwrites
-      // settings.theme on Continue; sync it so the import isn't clobbered.
+      await updateSettings(
+        withImportedTerminalColorOverrides(settings, resolved.diff, getSystemPrefersDark())
+      )
+      // Sync the controller’s local theme so Continue cannot overwrite the imported theme.
       if (resolved.diff.theme && mountedRef.current) {
         onThemeChange(resolved.diff.theme)
       }
