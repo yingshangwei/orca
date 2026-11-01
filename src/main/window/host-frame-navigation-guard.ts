@@ -27,12 +27,12 @@ export function hostFrameKindForName(name: string): HostFrameKind | null {
 /** Records host-marked frame identities at browsing-context creation, before their content can
  * mutate window.name. */
 export class HostFrameNavigationRegistry {
-  private frames = new WeakMap<NavigationFrame, RegisteredFrame>()
+  private readonly frames = new Map<number, RegisteredFrame>()
 
   register(frame: NavigationFrame): void {
     const kind = hostFrameKindForName(frame.name)
     if (kind) {
-      this.frames.set(frame, { kind, initialSrcdocPending: true })
+      this.frames.set(frame.frameTreeNodeId, { kind, initialSrcdocPending: true })
     }
   }
 
@@ -41,7 +41,7 @@ export class HostFrameNavigationRegistry {
     initiator: NavigationFrame | null,
     destinationUrl: string
   ): boolean {
-    const registeredTarget = frame ? this.frames.get(frame) : undefined
+    const registeredTarget = frame ? this.frames.get(frame.frameTreeNodeId) : undefined
     if (registeredTarget && frame && !frame.isDestroyed()) {
       // Why: registration happens before the host-provided srcdoc commits;
       // allow exactly that initial document, then contain every navigation.
@@ -51,11 +51,13 @@ export class HostFrameNavigationRegistry {
       }
       return true
     }
-    return Boolean(initiator && this.frames.has(initiator) && !initiator.isDestroyed())
+    return Boolean(
+      initiator && this.frames.has(initiator.frameTreeNodeId) && !initiator.isDestroyed()
+    )
   }
 
   clear(): void {
-    this.frames = new WeakMap()
+    this.frames.clear()
   }
 }
 
