@@ -167,6 +167,7 @@ export abstract class DaemonPtySessionInventory extends DaemonPtyProcessInspecti
         )
       )
       this.sessionIncarnations.delete(id)
+      this.inputClosedIncarnations.delete(id)
     }
   }
 
