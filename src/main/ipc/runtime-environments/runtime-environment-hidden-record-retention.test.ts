@@ -164,3 +164,27 @@ it('refuses WSL add before probing or waking a distro when its deployment file i
   expect(readPublicKey).not.toHaveBeenCalled()
   expect(readFileSync(deploymentPath)).toEqual(before)
 })
+
+it('preserves all resources when an unreadable record has no identifiable owner', async () => {
+  writeFileSync(
+    getEnvironmentStorePath(state.userDataPath),
+    JSON.stringify({
+      version: 1,
+      environments: [{ kind: 'unknown-server' }]
+    })
+  )
+  const sessionStore = sessions()
+  const preferenceStore = preference()
+  expect(reconcileOrphanedRuntimeSessions(sessionStore, state.userDataPath)).toEqual([])
+  expect(sessionStore.removeWorkspaceSessionHost).not.toHaveBeenCalled()
+  expect(
+    readSettingsWithRuntimeEnvironmentPreference(preferenceStore, state.userDataPath)
+      .activeRuntimeEnvironmentId
+  ).toBe(environmentId)
+  expect(preferenceStore.updateSettings).not.toHaveBeenCalled()
+  await expect(collectOrphanedBrowserRoutePartitionStorage(() => [])).rejects.toThrow(
+    'Could not identify every saved server'
+  )
+  expect(state.cleared).toEqual([])
+  expect(state.bindings.has(PARTITION)).toBe(true)
+})

@@ -63,6 +63,12 @@ export function listRegisteredEnvironmentIds(
   options: EnvironmentStoreRecordsReadOptions = {}
 ): Set<string> {
   const { environments, unreadable } = readEnvironmentStoreRecords(userDataPath, options)
+  if (unreadable.some((record) => record.id === undefined)) {
+    throw new RuntimeEnvironmentStoreError(
+      'runtime_error',
+      `Could not identify every saved server at ${getEnvironmentStorePath(userDataPath)}.`
+    )
+  }
   const ids = new Set(environments.map((environment) => environment.id))
   for (const record of unreadable) {
     if (record.id !== undefined) {
