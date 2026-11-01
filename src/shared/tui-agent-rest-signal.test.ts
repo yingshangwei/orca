@@ -10,7 +10,7 @@ const EXPECTED_REST_SIGNALS: Record<TuiAgent, TuiAgentRestSignal> = {
   codex: 'synthetic-title',
   cursor: 'synthetic-title',
   pi: 'synthetic-title',
-  omp: 'synthetic-title',
+  omp: 'title',
   droid: 'synthetic-title',
   hermes: 'synthetic-title',
   devin: 'synthetic-title',
