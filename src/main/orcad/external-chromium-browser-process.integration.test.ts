@@ -86,6 +86,9 @@ describe('ExternalChromiumBrowserProcess integration', () => {
         await expect(
           commands.browserScreenshot({ page: 'external-page', format: 'png' })
         ).resolves.toMatchObject({ data: expect.stringMatching(/\S+/), format: 'png' })
+        await expect(
+          commands.browserSetDevice({ page: 'external-page', name: 'iPhone 15' })
+        ).resolves.toMatchObject({ mobile: true })
       } finally {
         await provider?.stop()
         await rm(root, { recursive: true, force: true })

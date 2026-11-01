@@ -109,7 +109,8 @@ describe('AgentBrowserBridge', () => {
 
   it('passes --cdp on every helper command family so a restarted daemon cannot launch Chrome', async () => {
     const spawns = succeedRecordingAgentBrowserSpawns(execFileMock, stdinWrites, {
-      snapshot: '...'
+      snapshot: '...',
+      messages: []
     })
     await bridge.snapshot()
 
@@ -120,7 +121,6 @@ describe('AgentBrowserBridge', () => {
     await bridge.click('@e1')
     await bridge.scroll('down')
     await bridge.setOffline('on')
-    succeedWith({ messages: [] })
     await bridge.consoleLog()
     await bridge.exec('get title')
 

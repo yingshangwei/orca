@@ -9,6 +9,8 @@ import {
   type ProjectExecutionRuntimeResolution
 } from '../../../shared/project-execution-runtime'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
+import { resolveAgentResumeLaunchTarget } from '@/lib/agent-resume-launch-target'
+import { makeWorktree, TEST_REPO } from '@/store/slices/worktrees-slice-test-fixtures'
 import {
   buildPaneAccountRestartStartup,
   resolveAgentAccountRestartResumeStartup,
@@ -16,6 +18,8 @@ import {
 } from './agent-account-restart-startup'
 
 let projectRuntimeContext: ProjectExecutionRuntimeResolution | undefined
+
+vi.mock('@/lib/agent-resume-launch-target', { spy: true })
 
 vi.mock('@/lib/local-preflight-context', async (importOriginal) => ({
   ...(await importOriginal<typeof localPreflightContext>()),
@@ -134,6 +138,72 @@ describe('buildPaneAccountRestartStartup for Codex', () => {
 
     expect(startup.command).toContain(SESSION_ID)
     expect(startup.resumeProviderSession?.id).toBe(SESSION_ID)
+  })
+
+  it('uses the selected host metadata when another host has the same workspace id', () => {
+    const original = useAppStore.getState()
+    try {
+      seedAgentStatus({
+        agentType: 'codex',
+        providerSession: { key: 'session_id', id: SESSION_ID }
+      })
+      useAppStore.setState({
+        settings: { ...getDefaultSettings('/home/dev'), agentDefaultArgs: { codex: '' } },
+        repos: [
+          TEST_REPO,
+          { ...TEST_REPO, executionHostId: 'ssh:selected-ssh', connectionId: 'selected-ssh' }
+        ],
+        worktreesByRepo: {
+          [TEST_REPO.id]: [
+            makeWorktree({
+              id: WORKTREE_ID,
+              repoId: TEST_REPO.id,
+              path: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\repo',
+              hostId: 'local'
+            }),
+            makeWorktree({
+              id: WORKTREE_ID,
+              repoId: TEST_REPO.id,
+              path: 'C:\\remote\\repo',
+              hostId: 'ssh:selected-ssh'
+            })
+          ]
+        },
+        detectedWorktreesByRepo: {},
+        activeWorktreeId: WORKTREE_ID,
+        activeWorkspaceExecutionHostId: 'ssh:selected-ssh',
+        sshConnectionStates: new Map([
+          [
+            'selected-ssh',
+            {
+              targetId: 'selected-ssh',
+              status: 'connected',
+              error: null,
+              reconnectAttempt: 0,
+              remotePlatform: 'win32'
+            }
+          ]
+        ])
+      })
+
+      const startup = buildPaneAccountRestartStartup('codex', {
+        tabId: TAB_ID,
+        leafId: LEAF_ID,
+        worktreeId: WORKTREE_ID,
+        shellOverride: 'cmd.exe'
+      })
+
+      expect(startup?.command).toBe(`codex "resume" "${SESSION_ID}"`)
+      expect(resolveAgentResumeLaunchTarget).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          executionHostId: 'ssh:selected-ssh',
+          connectionId: 'selected-ssh',
+          worktreePath: 'C:\\remote\\repo'
+        })
+      )
+    } finally {
+      useAppStore.setState(original)
+    }
   })
 
   it('keeps the configured fresh relaunch for a resolved WSL runtime', () => {

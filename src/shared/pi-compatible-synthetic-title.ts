@@ -14,7 +14,6 @@ const LEGACY_PI_COMPATIBLE_TITLE_RE = /^\s*(?:[\u2800-\u28ff]\s+)?\u03C0(?:\s*[-
 // A leading spinner needs Orca's ` - ` working frame, so Claude tasks like `⠂ OMP: fix` stay Claude's.
 const PI_COMPATIBLE_SEPARATOR_RE =
   /^\s*(?:[\u2800-\u28ff]\s+(?=\S+\s+-(?:\s|$)))?(\u03C0|Pi|OMP)(?::|\s+([!>:\-\u2800-\u28ff]))(?=\s|$)/u
-const PI_COMPATIBLE_PERMISSION_TAIL_RE = /\baction required\b/i
 
 const PI_COMPATIBLE_LEADING_BRAND_RE = /^(\s*(?:[\u2800-\u28ff]\s+)?)(?:\u03C0|Pi|OMP)/u
 
@@ -90,10 +89,8 @@ export function getPiCompatibleTitleSeparatorStatus(
   if (!match) {
     return null
   }
-  // Why: `-` is both a state separator and the delimiter in the synthetic permission label, so
-  // `OMP - action required` would read as idle. Callers happen to resolve that label earlier,
-  // but this is exported — carry the guard here rather than depend on their ordering.
-  if (PI_COMPATIBLE_PERMISSION_TAIL_RE.test(title)) {
+  // Only the complete synthetic label means permission; session names are free text.
+  if (getPiCompatibleSyntheticAgentStatus(title) === 'permission') {
     return 'permission'
   }
   return match[2] === '!' ? 'permission' : 'idle'

@@ -310,7 +310,7 @@ describe('BrowserClientUploadStaging', () => {
     expect(staging.activeStagingCount()).toBe(1)
   })
 
-  it('retries the staged removal so a briefly held file is not orphaned', async () => {
+  it('removes staged files without multiplying retries for nested entries', async () => {
     const staging = new BrowserClientUploadStaging(stagingRoot)
     const staged = await staging.stage({
       browserPageId: 'page-1',
@@ -325,8 +325,9 @@ describe('BrowserClientUploadStaging', () => {
     expect(nodeRemovals.rm).toEqual([
       {
         target: directory,
-        options: { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }
+        options: { recursive: true, force: true }
       }
     ])
+    expect(existsSync(directory!)).toBe(false)
   })
 })
