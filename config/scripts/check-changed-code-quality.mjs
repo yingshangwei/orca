@@ -187,6 +187,7 @@ export function collectAddedLineRanges(
     const source = renamedSources.get(file)
     const paths = source ? [source, file] : [file]
     const diff = runGit(root, [
+      '--literal-pathspecs',
       'diff',
       '--find-renames',
       '--unified=0',

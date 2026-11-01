@@ -1,3 +1,4 @@
+import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
@@ -98,7 +99,11 @@ export function deleteOwnerKeyedSessionFields(
       }
     }
   }
-  if (next.activeWorkspaceKey === ownerKey) {
+  // Worktree owners are raw ids, but the active key stores their canonical worktree: form.
+  if (
+    next.activeWorkspaceKey === ownerKey ||
+    next.activeWorkspaceKey === worktreeWorkspaceKey(ownerKey)
+  ) {
     next.activeWorkspaceKey = null
   }
   if (next.activeWorktreeId === ownerKey) {

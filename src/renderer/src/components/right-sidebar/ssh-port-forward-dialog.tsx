@@ -1,3 +1,4 @@
+import { ImeInput } from '@/lib/ime-text-field'
 import React, { useCallback, useState } from 'react'
 import {
   Dialog,
@@ -221,7 +222,7 @@ function PortForwardForm({
           <span className="text-[11px] text-muted-foreground">
             {translate('auto.components.right.sidebar.PortsPanel.9e5a4118b0', 'Remote Port')}
           </span>
-          <input
+          <ImeInput
             type="text"
             inputMode="numeric"
             value={remotePort}
@@ -246,7 +247,7 @@ function PortForwardForm({
           <span className="text-[11px] text-muted-foreground">
             {translate('auto.components.right.sidebar.PortsPanel.b950b1948b', 'Local Port')}
           </span>
-          <input
+          <ImeInput
             type="text"
             inputMode="numeric"
             value={localPort}
@@ -263,7 +264,7 @@ function PortForwardForm({
           <span className="text-[11px] text-muted-foreground">
             {translate('auto.components.right.sidebar.PortsPanel.a3721a50b0', 'Remote Host')}
           </span>
-          <input
+          <ImeInput
             type="text"
             value={remoteHost}
             onChange={(e) => setRemoteHost(e.target.value)}
@@ -279,7 +280,7 @@ function PortForwardForm({
           <span className="text-[11px] text-muted-foreground">
             {translate('auto.components.right.sidebar.PortsPanel.8dfed0a15c', 'Label (optional)')}
           </span>
-          <input
+          <ImeInput
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}

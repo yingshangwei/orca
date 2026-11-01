@@ -473,6 +473,7 @@ describe('Store host-partitioned workspace sessions', () => {
     const makeSession = (): ReturnType<typeof makeHostSession> => ({
       ...makeHostSession('repo-ssh'),
       activeWorktreeId: worktreeId,
+      activeWorkspaceKey: worktreeWorkspaceKey(worktreeId),
       lastVisitedAtByWorktreeId: { [worktreeId]: 123 },
       tabsByWorktree: {
         [worktreeId]: [makeTerminalTab({ id: 'stale-tab', worktreeId })]
@@ -491,6 +492,7 @@ describe('Store host-partitioned workspace sessions', () => {
       expect(store.getWorkspaceSession(hostId)).toMatchObject({
         tabsByWorktree: {},
         activeWorktreeId: null,
+        activeWorkspaceKey: null,
         lastVisitedAtByWorktreeId: {},
         terminalTopologyRevisionByRepoId: { 'repo-ssh': 1 }
       })

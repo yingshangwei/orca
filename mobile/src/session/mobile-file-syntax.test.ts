@@ -9,6 +9,30 @@ import {
 import type { MobileDiffLine } from './mobile-diff-lines'
 
 describe('mobile file syntax highlighting', () => {
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty'])(
+    'renders a prototype-named file as plain text: %s',
+    (filePath) => {
+      expect(detectMobileFileLanguage(filePath)).toBe('plaintext')
+      const language = resolveMobileSyntaxLanguage(filePath)
+      expect(language).toBe('plaintext')
+      expect(
+        highlightMobileDiffLines([{ kind: 'add', text: 'content', newLineNumber: 1 }], language)
+      ).toEqual([
+        {
+          kind: 'add',
+          text: 'content',
+          newLineNumber: 1,
+          highlighted: false,
+          segments: [{ text: 'content', kind: 'plain' }]
+        }
+      ])
+    }
+  )
+
+  it('retains makefile detection when mobile shares the desktop detector', () => {
+    expect(detectMobileFileLanguage('build.make')).toBe('makefile')
+  })
+
   it.each([
     ['.env', 'ini'],
     ['.env.local', 'ini'],
