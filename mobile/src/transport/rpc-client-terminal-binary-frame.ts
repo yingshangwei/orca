@@ -61,6 +61,7 @@ export function handleTerminalBinaryFrame(
   if (frame.opcode === TerminalStreamOpcode.SnapshotStart) {
     const meta = decodeTerminalStreamJson<Record<string, unknown>>(frame.payload)
     if (!meta) {
+      reportUnreadableTerminalFrame(options, frame.streamId, frame.opcode)
       return
     }
     options.terminalSnapshots.set(frame.streamId, {

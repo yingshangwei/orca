@@ -88,7 +88,13 @@ export function installMultiplexSlotFrames(state: TerminalMultiplexConnection): 
       if (stream.outputPaused) {
         stream.pausedOutputDropNoticeSent = false
         const discardsQueuedOutput =
-          stream.ackPendingOutput.length > 0 || stream.ackPendingOutputOverflowed
+          stream.ackPendingOutput.length > 0 ||
+          stream.ackPendingOutputOverflowed ||
+          (stream.buffering && (stream.pendingOutput.length > 0 || stream.pendingOutputOverflowed))
+        if (stream.buffering) {
+          stream.pendingOutput = []
+          stream.pendingOutputBytes = 0
+        }
         stream.ackPendingOutput = []
         stream.ackPendingOutputBytes = 0
         stream.ackPendingOutputOverflowed = false

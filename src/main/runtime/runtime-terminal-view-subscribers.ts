@@ -85,7 +85,7 @@ export class RuntimeTerminalViewSubscribers {
       }
     }
     const mobile = this.deps.hasMobileSubscribers(ptyId) ? 1 : 0
-    return (this.remoteCounts.get(ptyId) ?? 0) - paused + mobile
+    return Math.max(0, (this.remoteCounts.get(ptyId) ?? 0) - paused) + mobile
   }
 
   isKnownUnattachedLocal(ptyId: string): boolean {
