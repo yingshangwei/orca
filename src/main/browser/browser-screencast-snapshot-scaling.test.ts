@@ -45,6 +45,34 @@ function createCapturedImage(width: number, height: number) {
 }
 
 describe('browser screencast snapshot scaling', () => {
+  it('does not scale or encode a capture that settles after the stream stops', async () => {
+    const { image, resized } = createCapturedImage(4000, 3000)
+    const pending = Promise.withResolvers<typeof image>()
+    const webContents = createMockWebContents(() => pending.promise)
+    const onFrame = vi.fn()
+    const session = await startBrowserScreencast(webContents as never, {
+      format: 'jpeg',
+      quality: 70,
+      maxWidth: 1440,
+      maxHeight: 1200,
+      viewportWidth: 2000,
+      viewportHeight: 1500,
+      everyNthFrame: 2,
+      minFrameIntervalMs: 0,
+      onFrame
+    })
+    await vi.waitFor(() => expect(webContents.capturePage).toHaveBeenCalledTimes(1))
+
+    session.stop()
+    pending.resolve(image)
+    await session.done
+
+    expect(image.resize).not.toHaveBeenCalled()
+    expect(image.toJPEG).not.toHaveBeenCalled()
+    expect(resized.toJPEG).not.toHaveBeenCalled()
+    expect(onFrame).not.toHaveBeenCalled()
+  })
+
   it('scales a hi-DPI capture down to the requested frame bounds', async () => {
     const { image, resized } = createCapturedImage(4000, 3000)
     const webContents = createMockWebContents(async () => image)

@@ -85,6 +85,27 @@ describe('watchFileExplorerInWatcherProcess', () => {
     vi.restoreAllMocks()
   })
 
+  it('rejects an already-aborted request without acquiring or retiring the root', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const watch = installSuccessfulWatch()
+
+    await expect(
+      watchFileExplorerInWatcherProcess('/repo', vi.fn(), vi.fn(), controller.signal)
+    ).rejects.toThrow('file watcher subscription aborted')
+    expect(subscribeViaRuntimeWatcherProcessMock).not.toHaveBeenCalled()
+    expect(watch.unsubscribe).not.toHaveBeenCalled()
+
+    const onEvents = vi.fn<(events: FsChangeEvent[]) => void>()
+    const dispose = await watchFileExplorerInWatcherProcess('/repo', onEvents)
+    watch.callback(null, [{ type: 'update', path: '/repo/file.txt', isDirectory: false }])
+    expect(onEvents).toHaveBeenCalledWith([
+      { kind: 'update', absolutePath: '/repo/file.txt', isDirectory: false }
+    ])
+    await dispose()
+    expect(watch.unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
   it('installs a bounded watch in the shared runtime watcher process', async () => {
     const watch = installSuccessfulWatch()
 

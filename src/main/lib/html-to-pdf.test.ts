@@ -25,7 +25,7 @@ vi.mock('electron', () => ({
       once: (event: string, listener: (...args: unknown[]) => void) => {
         fake.handlers.set(event, listener)
       },
-      executeJavaScript: fake.images,
+      mainFrame: { executeJavaScript: fake.images },
       printToPDF: fake.print
     }
     loadFile = fake.load

@@ -37,6 +37,8 @@ export function IpynbMarkdownCell({ source }: { source: string }): React.JSX.Ele
 }
 
 type IpynbCellSourceProps = {
+  /** Null for cells without a stable id, whose position-based key can move to another cell. */
+  modelKey: string | null
   cell: IpynbCell
   source: string
   active: boolean
@@ -143,6 +145,7 @@ function IpynbCodePreview({
 }
 
 function IpynbSourceEditor({
+  modelKey,
   cell,
   source,
   pressedAt,
@@ -177,7 +180,16 @@ function IpynbSourceEditor({
       return
     }
     const { lineHeight, paddingX, paddingY } = CODE_LAYOUT
-    const model = monaco.editor.createModel(source, cell.language)
+    // Monaco restores undo for disposed models with this scheme; no other Monaco feature special-cases it.
+    const uri =
+      modelKey === null
+        ? null
+        : monaco.Uri.from({ scheme: 'vscode-userdata', path: `/${modelKey}` })
+    const model = monaco.editor.createModel(
+      source,
+      cell.language,
+      uri && !monaco.editor.getModel(uri) ? uri : undefined
+    )
     const editorInstance = monaco.editor.create(container, {
       dropIntoEditor: { enabled: false },
       model,

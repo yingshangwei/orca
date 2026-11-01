@@ -7,7 +7,7 @@ import {
 } from './local-image-cache-pinning'
 
 const BLOB_URL_CACHE_MAX_SIZE = 100
-// Keep retained decoded image data bounded as well as entry count.
+// Bound retained encoded image payload separately from the reusable entry target.
 const BLOB_URL_CACHE_MAX_BYTES = 128 * 1024 * 1024
 
 export const blobUrlCache = new Map<string, string>()
@@ -91,13 +91,15 @@ export function cacheLocalImageBlob(
   let projectedEntries = blobUrlCache.size + (previousUrl === undefined ? 1 : 0)
   let projectedBytes = retainedBytes - previousBytes + byteLength
 
-  // Evict only unpinned entries. If visible leases consume the budget, fail
-  // closed so a late/non-visible decode cannot make retention unbounded.
+  // Active displays share the strict byte budget; the entry target bounds reusable, unleased images.
   while (projectedEntries > BLOB_URL_CACHE_MAX_SIZE || projectedBytes > BLOB_URL_CACHE_MAX_BYTES) {
     const candidate = Array.from(blobUrlCache.keys()).find(
       (candidateKey) => candidateKey !== key && !isLocalImageCacheKeyPinned(candidateKey)
     )
     if (candidate === undefined) {
+      if (isLocalImageCacheKeyPinned(key) && projectedBytes <= BLOB_URL_CACHE_MAX_BYTES) {
+        break
+      }
       URL.revokeObjectURL(url)
       cleanupLocalImageCacheKeyVersion(key)
       return false

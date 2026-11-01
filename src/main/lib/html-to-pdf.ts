@@ -82,7 +82,7 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
 
         await win.loadFile(tempPath)
         await loadPromise
-        await win.webContents.executeJavaScript(WAIT_FOR_IMAGES_SCRIPT, true)
+        await win.webContents.mainFrame.executeJavaScript(WAIT_FOR_IMAGES_SCRIPT, true)
         return win.webContents.printToPDF({
           printBackground: true,
           pageSize: 'A4',
