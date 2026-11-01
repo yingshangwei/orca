@@ -6,6 +6,7 @@ import type { Plugin, Rollup } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { createBootstrapFatalExitBanner } from './config/build-plugins/bootstrap-fatal-exit-banner'
+import { createMainLocaleSubsetPlugin } from './config/build-plugins/main-locale-subset'
 import { createPdfjsViewerAssetsPlugin } from './config/build-plugins/pdfjs-viewer-assets'
 import { createProcessHostDevRebuildPlugin } from './config/build-plugins/process-host-dev-rebuild'
 import { createViteCacheRetentionPlugin } from './config/build-plugins/vite-cache-retention'
@@ -247,7 +248,8 @@ export const electronViteConfig: UserConfig = {
         plugins: [
           createPlainNodeEntryGuardPlugin(),
           createProcessHostDevRebuildPlugin(),
-          createDarkBuildMarkerPlugin()
+          createDarkBuildMarkerPlugin(),
+          createMainLocaleSubsetPlugin()
         ]
       }
     },

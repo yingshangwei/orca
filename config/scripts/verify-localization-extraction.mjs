@@ -7,6 +7,10 @@ import { pathToFileURL } from 'node:url'
 const EN_CATALOG_PATH = path.join('src', 'renderer', 'src', 'i18n', 'locales', 'en.json')
 const PLACEHOLDER_RE = /\{\{[^}]+\}\}/g
 
+const KEY_LITERAL_RE = /['"`]([A-Za-z][\w-]*(?:\.[\w-]+)+)['"`]/g
+const DYNAMIC_KEY_HEAD_RE =
+  /\b(?:t|translate\w*)\(\s*(?:`([A-Za-z][\w-]*\.[\w.-]*)\$\{|['"]([A-Za-z][\w-]*\.[\w.-]*)['"]\s*\+)/g
+
 function flattenCatalog(value, prefix = '', entries = new Map()) {
   if (typeof value === 'string') {
     entries.set(prefix, value)
@@ -59,6 +63,16 @@ export function compareExtraction(extractedCatalog, englishCatalog) {
     fallbackDrift,
     placeholderMismatches
   }
+}
+
+export function collectKeyLiterals(sourceText, evidence) {
+  for (const match of sourceText.matchAll(KEY_LITERAL_RE)) {
+    evidence.literals.add(match[1])
+  }
+  for (const match of sourceText.matchAll(DYNAMIC_KEY_HEAD_RE)) {
+    evidence.dynamicPrefixes.add(match[1] ?? match[2])
+  }
+  return evidence
 }
 
 function printKeys(label, keys) {

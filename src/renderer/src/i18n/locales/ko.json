@@ -1459,7 +1459,6 @@
         "aba792c8b3": "PR을 병합하지 못했습니다.",
         "dbe5e2448e": "PR이 병합되었습니다",
         "a27ee5ca1a": "그러면 GitHub의 PR이 업데이트됩니다.",
-        "03d7216d62": "{{value0}} PR #{{value1}}?",
         "e9b7cb7d17": "{{value0}} PR에 실패했습니다.",
         "bd3b4492a0": "PR이 다시 열렸습니다",
         "9f88657c4e": "PR이 종료되었습니다.",
@@ -1974,7 +1973,6 @@
         "aae645d36d": "PR을 병합하지 못했습니다.",
         "c57873d721": "PR이 병합되었습니다",
         "a63b3c159c": "그러면 GitHub의 PR이 업데이트됩니다.",
-        "eec3706a6a": "{{value0}} PR #{{value1}}?",
         "710e47aa06": "PR이 다시 열렸습니다",
         "7aa3b5f706": "PR이 종료되었습니다.",
         "3d77438c92": "그러면 GitHub에서 PR이 다시 열립니다.",
@@ -2303,7 +2301,6 @@
         "88f478cdef": "PR을 병합하지 못했습니다.",
         "a161925adc": "PR이 병합되었습니다",
         "0506a78337": "그러면 GitHub의 PR이 업데이트됩니다.",
-        "844dc193c7": "{{value0}} PR #{{value1}}?",
         "995dd6af9b": "PR 체크 열기",
         "8a22eb3f7b": "일치하는 리뷰어가 없습니다.",
         "67755a83a1": "다른 사람들",
@@ -13066,6 +13063,16 @@
           "noMatches": "일치하는 빌드가 없습니다.",
           "searchPlaceholder": "빌드 검색…",
           "searchLabel": "빌드 검색"
+        },
+        "notification": {
+          "settings": {
+            "copy": {
+              "macFailureTitle": "macOS에서 알림을 표시하지 않았습니다",
+              "macFailureDescription": "시스템 설정에서 Orca의 알림 허용을 켜세요.",
+              "windowsFailureTitle": "Windows에서 알림을 표시하지 않았습니다",
+              "windowsFailureDescription": "Windows 설정에서 Orca 알림을 켜세요."
+            }
+          }
         }
       },
       "right": {
@@ -15612,6 +15619,9 @@
             "0d6efe9cf4": "프로젝트나 워크트리가 보호된 폴더에 있는 경우 macOS에서 권장됩니다.",
             "dac08ec03e": "여는 중...",
             "6e3d62b816": "전체 디스크 액세스 열기"
+          },
+          "FeatureWallTourSurface": {
+            "reopenHint": "도움말 > Orca 둘러보기에서 언제든지 다시 열 수 있습니다."
           }
         },
         "tips": {
@@ -15638,7 +15648,8 @@
             "53905bd076": "개발 미리보기: 스킬 설정 terminal 열기.",
             "1da82af45b": "Orca CLI에 주의가 필요합니다",
             "ce13a742d0": "PATH에 'orca'를 등록했습니다.",
-            "d1a86c7eb5": "설정을 열어 CLI 설정을 완료하세요."
+            "d1a86c7eb5": "설정을 열어 CLI 설정을 완료하세요.",
+            "cliInstallFailed": "Orca CLI를 설치하지 못했습니다."
           },
           "CmdJPaletteFeatureTipVisual": {
             "ab94e16d44": "작업 트리 \"{{value0}}\" 만들기",
@@ -16643,6 +16654,17 @@
           },
           "copy": {
             "copyFailed": "충돌 보고서 세부 정보를 복사하지 못했습니다."
+          },
+          "CrashReportDialogSurface": {
+            "reportTitle": "충돌 보고",
+            "uiErrorTitle": "Orca에서 복구 가능한 UI 오류가 발생했습니다",
+            "closedTitle": "Orca가 예기치 않게 종료되었습니다",
+            "reportDescription": "개인정보를 보호하는 충돌 보고서를 보냅니다. 가능한 경우 민감한 정보를 제거한 최근 진단 로그가 포함됩니다.",
+            "uiErrorDescription": "개인정보를 보호하는 진단 보고서를 보내 실패한 UI 영역을 파악하는 데 도움을 주세요.",
+            "closedDescription": "개인정보를 보호하는 진단 보고서를 보내 무슨 일이 있었는지 파악하는 데 도움을 주세요.",
+            "reportNotesPlaceholder": "선택 사항: 무슨 일이 있었나요?",
+            "uiErrorNotesPlaceholder": "선택 사항: 이 UI 오류가 발생하기 전에 무엇을 하고 있었나요?",
+            "closedNotesPlaceholder": "선택 사항: Orca가 종료되기 전에 무엇을 하고 있었나요?"
           }
         }
       },
@@ -18459,6 +18481,16 @@
         "cancelled": "이 일반 SSH 터미널은 시작되기 전에 닫혔습니다.",
         "terminalUnavailable": "Orca에서 여기의 터미널을 열 수 없습니다.",
         "openHint": "Orca가 호스트에서 설정할 수 없는 동안에도 호스트에서 계속 작업할 수 있습니다."
+      },
+      "PullRequestConfirmation": {
+        "closeTitle": "PR #{{number}}을(를) 닫으시겠습니까?",
+        "mergeLabel": "병합 커밋 생성",
+        "mergeTitle": "병합 커밋을 생성하여 PR #{{number}}을(를) 병합하시겠습니까?",
+        "rebaseLabel": "리베이스 및 병합",
+        "rebaseTitle": "PR #{{number}}을(를) 리베이스하여 병합하시겠습니까?",
+        "reopenTitle": "PR #{{number}}을(를) 다시 여시겠습니까?",
+        "squashLabel": "스쿼시 및 병합",
+        "squashTitle": "PR #{{number}}을(를) 스쿼시하여 병합하시겠습니까?"
       }
     },
     "i18n": {
@@ -19197,7 +19229,7 @@
           "stoppedCount": "{{value0}} 중지됨",
           "unverifiableCount": "{{value0}} 상태를 확인할 수 없음"
         },
-        "startedOne": "서브에이전트 1명 추방",
+        "startedOne": "하위 에이전트 1개가 시작되었습니다.",
         "startedN": "{{value0}} 하위 에이전트가 시작되었습니다.",
         "ranOne": "하위 에이전트 1개 실행",
         "ranN": "{{value0}} 하위 에이전트를 실행했습니다.",

@@ -16,6 +16,7 @@ import type { PRInfo } from '../../../../shared/github/pull-request-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { resolveGitHubPRMergeMethods } from '../../../../shared/github/pull-request-merge-methods'
+import { getPullRequestMergeMethodLabel } from '@/components/github/pull-request-confirmation-copy'
 import { runWorktreeDelete } from '../sidebar/delete-worktree-flow'
 import { getDeleteStateForWorktreeHost } from '../sidebar/worktree-delete-state-host-match'
 import { presentGitLabMRMergeState } from './gitlab-mr-merge-state'
@@ -226,7 +227,8 @@ export default function HostedReviewActions({
                               'Working...'
                             )
                         : mergePresentation.directMergeAvailable
-                          ? (stackMergeLabel ?? mergeMethods.defaultLabel)
+                          ? (stackMergeLabel ??
+                            getPullRequestMergeMethodLabel(mergeMethods.defaultMethod))
                           : (mergePresentation.autoMergeAction?.label ?? mergePresentation.label)}
                     </span>
                   </Button>
@@ -280,14 +282,14 @@ export default function HostedReviewActions({
                   </>
                 )}
                 {(!stackMergeScope || !stackUsesMergeQueue) &&
-                  mergeMethods.methods.map(({ method, label }) => (
+                  mergeMethods.methods.map((method) => (
                     <DropdownMenuItem
                       key={method}
                       disabled={directMergeDisabled}
                       onSelect={() => void handleMerge(method)}
                     >
                       <GitMerge className="size-3.5" />
-                      {label}
+                      {getPullRequestMergeMethodLabel(method)}
                     </DropdownMenuItem>
                   ))}
                 <DropdownMenuSeparator />

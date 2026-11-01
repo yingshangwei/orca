@@ -1618,7 +1618,6 @@
         "aba792c8b3": "Échec de la fusion de la pull request",
         "dbe5e2448e": "Pull request fusionnée",
         "a27ee5ca1a": "Cela mettra à jour la pull request sur GitHub.",
-        "03d7216d62": "{{value0}} la PR #{{value1}} ?",
         "e9b7cb7d17": "Impossible de {{value0}} la PR",
         "bd3b4492a0": "Pull request rouverte",
         "9f88657c4e": "Pull request fermée",
@@ -2137,7 +2136,6 @@
         "aae645d36d": "Échec de la fusion de la pull request",
         "c57873d721": "Pull request fusionnée",
         "a63b3c159c": "Cela mettra à jour la pull request sur GitHub.",
-        "eec3706a6a": "{{value0}} la PR #{{value1}} ?",
         "710e47aa06": "Pull request rouverte",
         "7aa3b5f706": "Pull request fermée",
         "3d77438c92": "Cela rouvrira la pull request sur GitHub.",
@@ -2462,7 +2460,6 @@
         "88f478cdef": "Échec de la fusion de la pull request",
         "a161925adc": "Pull request fusionnée",
         "0506a78337": "Cela mettra à jour la pull request sur GitHub.",
-        "844dc193c7": "{{value0}} la PR #{{value1}} ?",
         "995dd6af9b": "Ouvrir les vérifications de la PR",
         "8a22eb3f7b": "Aucun reviewer correspondant.",
         "67755a83a1": "Tous les autres",
@@ -13226,6 +13223,16 @@
           "searchPlaceholder": "Rechercher des versions…",
           "searchLabel": "Rechercher des versions",
           "noMatches": "Aucune version correspondante."
+        },
+        "notification": {
+          "settings": {
+            "copy": {
+              "macFailureTitle": "macOS n'a pas affiché la notification",
+              "macFailureDescription": "Activez Autoriser les notifications pour Orca dans Réglages Système.",
+              "windowsFailureTitle": "Windows n'a pas affiché la notification",
+              "windowsFailureDescription": "Activez les notifications pour Orca dans les Paramètres Windows."
+            }
+          }
         }
       },
       "right": {
@@ -15772,6 +15779,9 @@
             "0d6efe9cf4": "Recommandé sur macOS quand les projets ou les worktrees se trouvent dans des dossiers protégés.",
             "dac08ec03e": "Ouverture...",
             "6e3d62b816": "Ouvrir l'accès complet au disque"
+          },
+          "FeatureWallTourSurface": {
+            "reopenHint": "Rouvrez-le à tout moment depuis Aide > Découvrir Orca."
           }
         },
         "tips": {
@@ -15798,7 +15808,8 @@
             "53905bd076": "Aperçu de développement : ouverture du terminal de configuration des skills.",
             "1da82af45b": "L'Orca CLI requiert votre attention",
             "ce13a742d0": "`orca` enregistré dans le PATH.",
-            "d1a86c7eb5": "Ouvrez les paramètres pour terminer la configuration du CLI."
+            "d1a86c7eb5": "Ouvrez les paramètres pour terminer la configuration du CLI.",
+            "cliInstallFailed": "Impossible d'installer le CLI Orca."
           },
           "CmdJPaletteFeatureTipVisual": {
             "ab94e16d44": "Créer le worktree « {{value0}} »",
@@ -16803,6 +16814,17 @@
           },
           "copy": {
             "copyFailed": "Impossible de copier les détails du rapport de plantage."
+          },
+          "CrashReportDialogSurface": {
+            "reportTitle": "Signaler un plantage",
+            "uiErrorTitle": "Orca a rencontré une erreur d'interface récupérable",
+            "closedTitle": "Orca s'est fermé de manière inattendue",
+            "reportDescription": "Envoyez un rapport de plantage respectueux de la vie privée. Les journaux de diagnostic récents, expurgés, sont inclus lorsqu'ils sont disponibles.",
+            "uiErrorDescription": "Envoyez un rapport de diagnostic respectueux de la vie privée pour nous aider à comprendre la partie de l'interface qui a échoué.",
+            "closedDescription": "Envoyez un rapport de diagnostic respectueux de la vie privée pour nous aider à comprendre ce qui s'est passé.",
+            "reportNotesPlaceholder": "Facultatif : que s'est-il passé ?",
+            "uiErrorNotesPlaceholder": "Facultatif : que faisiez-vous avant cette erreur d'interface ?",
+            "closedNotesPlaceholder": "Facultatif : que faisiez-vous avant qu'Orca se ferme ?"
           }
         }
       },
@@ -18600,6 +18622,16 @@
         "copyFailed": "Impossible de copier le lien.",
         "signingIn": "Connexion…",
         "cancel": "Annuler"
+      },
+      "PullRequestConfirmation": {
+        "closeTitle": "Fermer la PR #{{number}} ?",
+        "mergeLabel": "Créer un commit de merge",
+        "mergeTitle": "Merger la PR #{{number}} avec un commit de merge ?",
+        "rebaseLabel": "Rebaser et merger",
+        "rebaseTitle": "Rebaser et merger la PR #{{number}} ?",
+        "reopenTitle": "Rouvrir la PR #{{number}} ?",
+        "squashLabel": "Squasher et merger",
+        "squashTitle": "Squasher et merger la PR #{{number}} ?"
       }
     },
     "i18n": {
@@ -19308,9 +19340,9 @@
           "unverifiableCount": "{{value0}} au statut indisponible"
         },
         "startedOne": "A lancé 1 sous-agent",
-        "startedN": "Lancement des sous-agents {{value0}}",
+        "startedN": "A lancé {{value0}} sous-agents",
         "ranOne": "A exécuté 1 sous-agent",
-        "ranN": "Ran les sous-agents {{value0}}",
+        "ranN": "A exécuté {{value0}} sous-agents",
         "tokens": "Jetons {{value0}}",
         "unnamed": "Sous-agent"
       },
