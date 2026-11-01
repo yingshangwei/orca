@@ -51,3 +51,6 @@ export const pdfViewPositionCache = new Map<string, PdfViewPosition>()
 // for both sides plus diff model state, which matches VS Code's restore path
 // more closely than Orca's previous scroll-only cache.
 export const diffViewStateCache = new Map<string, editor.IDiffEditorViewState>()
+
+// Full Monaco view state carries folds and horizontal scroll that scrollTop/selection caches miss.
+export const editorViewStateCache = new Map<string, editor.ICodeEditorViewState>()

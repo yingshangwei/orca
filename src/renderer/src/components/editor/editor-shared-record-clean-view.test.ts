@@ -83,10 +83,12 @@ function openSharedMarkdown() {
     .result.current
   const viewText = (id: string): string =>
     store.getState().editorDrafts[id] ?? fileContents[id].content
-  // A's editor content sync: its `content` prop is the view's text.
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: content sync only calls getModel and pushUndoStop.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the bridge uses the real model event and text through this editor facade.
   const editorA = {
     getModel: () => model,
+    getValue: () => model.getValue(),
+    onDidChangeModelContent: (listener: (event: editor.IModelContentChangedEvent) => void) =>
+      model.onDidChangeContent(listener),
     pushUndoStop: () => true
   } as unknown as editor.IStandaloneCodeEditor
   const contentRef = { current: viewText(a.id) }
@@ -94,6 +96,7 @@ function openSharedMarkdown() {
     ({ content }: { content: string }) =>
       useMonacoContentSyncBridge({
         editorRef: { current: editorA },
+        mountedEditor: editorA,
         content,
         contentRef,
         contentSyncModeRef: { current: 'undoable' },
@@ -110,7 +113,6 @@ function openSharedMarkdown() {
   const typeInA = (text: string): void => {
     act(() => {
       model.setValue(text)
-      bridge.result.current.handleChange(text)
     })
     renderA()
   }

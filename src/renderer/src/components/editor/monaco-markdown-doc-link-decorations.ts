@@ -34,14 +34,18 @@ function collectInlineCodeSpans(
 }
 
 export function getMarkdownDocLinkDecorationRanges(content: string): IRange[] {
+  // Advance delimiter cursors monotonically to avoid rescanning each line’s remaining document tail.
+  let nextOpen = content.indexOf('[[')
+  if (nextOpen === -1) {
+    return []
+  }
+  let nextClose = content.indexOf(']]', nextOpen + 2)
+  if (nextClose === -1) {
+    return []
+  }
   const ranges: IRange[] = []
   const inlineCodeSpans: number[] = []
   const isInsideFence = createMarkdownFenceRangeCursor(getMarkdownFenceRanges(content))
-  // Why: `indexOf` on the whole document would rescan the tail once per line.
-  // Both cursors only ever move forward, and every probe position is
-  // monotonic, so the delimiter search stays linear in document length.
-  let nextOpen = content.indexOf('[[')
-  let nextClose = content.indexOf(']]')
 
   forEachLine(content, (lineStart, lineEnd, lineNumber) => {
     if (isInsideFence(lineStart)) {

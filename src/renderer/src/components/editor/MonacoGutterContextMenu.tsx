@@ -20,8 +20,10 @@ type MonacoGutterContextMenuProps = {
   onOpenChange: (open: boolean) => void
   point: { x: number; y: number }
   line: number
+  fileId: string
   filePath: string
   relativePath: string
+  worktreeId?: string
 }
 
 export function MonacoGutterContextMenu({
@@ -29,8 +31,10 @@ export function MonacoGutterContextMenu({
   onOpenChange,
   point,
   line,
+  fileId,
   filePath,
-  relativePath
+  relativePath,
+  worktreeId
 }: MonacoGutterContextMenuProps): React.JSX.Element {
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
@@ -66,7 +70,14 @@ export function MonacoGutterContextMenu({
         <DropdownMenuItem
           onSelect={async () => {
             const state = useAppStore.getState()
-            const activeFile = state.openFiles.find((f) => f.filePath === filePath)
+            // Conflict overview editors may carry a synthetic id; fall back only within this owner.
+            const activeFile =
+              state.openFiles.find((file) => file.id === fileId) ??
+              (worktreeId
+                ? state.openFiles.find(
+                    (file) => file.filePath === filePath && file.worktreeId === worktreeId
+                  )
+                : undefined)
             if (!activeFile) {
               return
             }

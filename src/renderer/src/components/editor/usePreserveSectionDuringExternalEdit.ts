@@ -14,8 +14,10 @@ export function usePreserveSectionDuringExternalEdit(
   const [renderedContent, setRenderedContent] = useState(content)
   const pendingContentRef = useRef(content)
   pendingContentRef.current = content
+  const deferredUntilRef = useRef<number | null>(null)
   useEffect(() => {
     if (content === renderedContent) {
+      deferredUntilRef.current = null
       return
     }
     const body = bodyRef.current
@@ -35,6 +37,7 @@ export function usePreserveSectionDuringExternalEdit(
       )
     }
     if (!hasSelectionInsideBody()) {
+      deferredUntilRef.current = null
       setRenderedContent(content)
       return
     }
@@ -44,10 +47,12 @@ export function usePreserveSectionDuringExternalEdit(
     // content even if the selection is still held — the user loses a
     // highlight they'd abandoned anyway, which is preferable to stale content.
     const MAX_DEFER_MS = 3000
-    const deadline = performance.now() + MAX_DEFER_MS
+    const deadline = deferredUntilRef.current ?? performance.now() + MAX_DEFER_MS
+    deferredUntilRef.current = deadline
     let frameId = 0
     const waitForSelectionRelease = (): void => {
       if (performance.now() >= deadline || !hasSelectionInsideBody()) {
+        deferredUntilRef.current = null
         setRenderedContent(pendingContentRef.current)
         return
       }

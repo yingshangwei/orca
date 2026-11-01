@@ -139,6 +139,7 @@ export default function MonacoEditor({
     useMonacoRevealScheduler()
   const contentSync = useMonacoContentSyncBridge({
     editorRef,
+    mountedEditor,
     content,
     contentRef,
     contentSyncModeRef,
@@ -281,7 +282,6 @@ export default function MonacoEditor({
         // Why: defaultValue, not controlled value — Orca owns post-mount content sync; a controlled path would double setValue.
         defaultValue={content}
         theme={isDark ? 'vs-dark' : 'vs'}
-        onChange={contentSync.handleChange}
         onMount={handleMount}
         options={{
           dropIntoEditor: { enabled: false },
@@ -327,8 +327,10 @@ export default function MonacoEditor({
         onOpenChange={setGutterMenuOpen}
         point={gutterMenuPoint}
         line={gutterMenuLine}
+        fileId={fileId}
         filePath={filePath}
         relativePath={relativePath}
+        worktreeId={worktreeId}
       />
     </div>
   )

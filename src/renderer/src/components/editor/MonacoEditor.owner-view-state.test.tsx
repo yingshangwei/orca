@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { AppState } from '@/store/types'
 import { createTestStore, makeWorktree } from '@/store/slices/store-test-helpers'
 import type { OpenFile } from '@/store/slices/editor'
-import { editorSelectionCache, scrollTopCache } from '@/lib/scroll-cache'
+import { editorSelectionCache, editorViewStateCache, scrollTopCache } from '@/lib/scroll-cache'
 import { getDefaultSettings } from '../../../../shared/constants'
 
 const testState = vi.hoisted(() => {
@@ -54,6 +54,7 @@ afterEach(() => {
     model.dispose()
   }
   editorSelectionCache.clear()
+  editorViewStateCache.clear()
   scrollTopCache.clear()
   Reflect.set(HTMLCanvasElement.prototype, 'getContext', originalGetContext)
   testState.store = null

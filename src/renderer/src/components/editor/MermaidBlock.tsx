@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react'
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import type mermaidNamespace from 'mermaid'
 import DOMPurify from 'dompurify'
@@ -30,6 +30,7 @@ type MermaidBlockProps = {
   className?: string
   pendingContent?: React.ReactNode
   renderEnabled?: boolean
+  onRenderComplete?: () => void
   onExpand?: (diagram: RenderedMermaidDiagram) => void
 }
 
@@ -66,6 +67,7 @@ export default function MermaidBlock({
   className,
   pendingContent,
   renderEnabled = true,
+  onRenderComplete,
   onExpand
 }: MermaidBlockProps): React.JSX.Element {
   const id = useId().replace(/:/g, '_')
@@ -131,6 +133,12 @@ export default function MermaidBlock({
       cancelled = true
     }
   }, [content, htmlLabels, isDark, id, renderEnabled])
+
+  useLayoutEffect(() => {
+    if (renderEnabled && rendered?.content === content) {
+      onRenderComplete?.()
+    }
+  }, [content, rendered, renderEnabled, onRenderComplete])
 
   if ((!renderEnabled || result === null) && pendingContent !== undefined) {
     return <>{pendingContent}</>
