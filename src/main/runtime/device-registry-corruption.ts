@@ -16,15 +16,17 @@ export function corruptRegistryCopyExists(registryPath: string): boolean {
   }
 }
 
-/** Moves an unparseable registry aside so the first rewrite cannot destroy it. */
-export function quarantineCorruptRegistry(registryPath: string): void {
+/** True when this call moved the file aside; false when it was already gone. */
+export function quarantineCorruptRegistry(registryPath: string): boolean {
   const target = join(dirname(registryPath), `${corruptCopyPrefix(registryPath)}${Date.now()}`)
   try {
     renameSync(registryPath, target)
+    return true
   } catch (error) {
     if (!isMissingFileError(error)) {
       throw error
     }
+    return false
   }
 }
 
