@@ -20,6 +20,8 @@ export type DaemonCreateOrAttachResult = {
    * path proves nothing about the daemon's (#17696). Omitted by daemons predating this field.
    */
   cwdReadableByDaemon?: boolean
+  /** The live child can no longer take input through its PTY; older daemons omit this field. */
+  inputClosed?: true
 }
 
 export function getDaemonSessionResultMetadata(session: {

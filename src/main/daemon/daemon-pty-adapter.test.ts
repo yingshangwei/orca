@@ -842,6 +842,43 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
   })
 
   describe('fanoutSyntheticExits / getActiveSessionIds (restart primitives)', () => {
+    it('allows legacy reattach writes after synthetically retiring a closed incarnation', async () => {
+      const request = DaemonClient.prototype.request
+      let legacyReply = false
+      const requestSpy = vi
+        .spyOn(DaemonClient.prototype, 'request')
+        .mockImplementation(async function (this: DaemonClient, ...args) {
+          const reply = await request.call(this, ...args)
+          if (args[0] !== 'createOrAttach' || !reply || typeof reply !== 'object') {
+            return reply
+          }
+          return legacyReply
+            ? { ...reply, incarnationId: undefined, inputClosed: undefined }
+            : { ...reply, inputClosed: true }
+        })
+      try {
+        const { id } = await adapter.spawn({ cols: 80, rows: 24 })
+        await expect(adapter.writeWithSettlement(id, 'closed')).resolves.toEqual({
+          outcome: 'refused',
+          reason: 'provider_refused_write'
+        })
+        expect(lastSubprocess.write).not.toHaveBeenCalled()
+
+        adapter.fanoutSyntheticExits(-1)
+        legacyReply = true
+        const reattached = await adapter.spawn({ sessionId: id, cols: 80, rows: 24 })
+        expect(reattached.isReattach).toBe(true)
+        expect(reattached.incarnationId).toBeUndefined()
+        await expect(adapter.writeWithSettlement(id, 'legacy-input')).resolves.toEqual({
+          outcome: 'accepted'
+        })
+        await waitFor(() => lastSubprocess.write.mock.calls.length > 0)
+        expect(lastSubprocess.write).toHaveBeenCalledWith('legacy-input')
+      } finally {
+        requestSpy.mockRestore()
+      }
+    })
+
     it.each(['synthetic', 'daemon'])(
       'snapshots subscriptions and isolates %s exit payloads',
       async (source) => {

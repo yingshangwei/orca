@@ -4,6 +4,10 @@ import { writeRefused, type WriteSettlement } from '../../shared/pty-write-settl
 
 export abstract class DaemonPtySessionInput extends DaemonPtySessionSpawn {
   write(id: string, data: string): boolean {
+    // Remount recovery cannot reopen a live child's retired PTY master; refuse instead of dropping.
+    if (this.inputClosedIncarnations.isClosed(id, this.sessionIncarnations.get(id))) {
+      return false
+    }
     const recoverable = this.prepareWrite(id)
     return this.finishWrite(id, this.client.notify('write', { sessionId: id, data }), recoverable)
   }
@@ -14,6 +18,9 @@ export abstract class DaemonPtySessionInput extends DaemonPtySessionSpawn {
    * as a rejection it would read as a proven refusal.
    */
   async writeWithSettlement(id: string, data: string): Promise<WriteSettlement> {
+    if (this.inputClosedIncarnations.isClosed(id, this.sessionIncarnations.get(id))) {
+      return writeRefused('provider_refused_write')
+    }
     let recoverable: boolean
     try {
       recoverable = this.prepareWrite(id)

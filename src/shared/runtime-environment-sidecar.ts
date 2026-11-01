@@ -202,15 +202,15 @@ export function writeRuntimeEnvironmentSidecarEntry(
   }
   const live = new Map(environments.map((candidate) => [candidate.id, candidate]))
   // Servers whose main record this build cannot read still own their entries.
-  const foreignOwners = new Set(
-    readEnvironmentStoreRecords(userDataPath).unreadable.map((record) => record.id)
-  )
+  const onDisk = readEnvironmentStoreRecords(userDataPath, { recoverBlankStore: true })
+  const foreignOwners = new Set(onDisk.unreadable.map((record) => record.id))
   const entries: Record<string, RuntimeEnvironmentSidecarEntry> = {}
   for (const [id, existing] of Object.entries(current.entries)) {
     const owner = live.get(id)
     if (
       id !== environment.id &&
-      ((owner && isCurrentEntry(owner, existing)) || (!owner && foreignOwners.has(id)))
+      ((owner && isCurrentEntry(owner, existing)) ||
+        (!owner && (onDisk.blankFile || foreignOwners.has(id))))
     ) {
       entries[id] = existing
     }

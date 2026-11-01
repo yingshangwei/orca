@@ -27,6 +27,10 @@ export type SubprocessHandle = {
    *  Absent on handles with no POSIX slave to read (ConPTY, tests). */
   slavePath?: string
   write(data: string): void
+  /** True once writes can no longer reach the PTY while the child may still be running. */
+  isInputClosed?(): boolean
+  /** Fires once when input closes for a reason other than child exit. */
+  onInputClosed?(cb: (reason: string) => void): void
   resize(cols: number, rows: number): void
   /** Stop reading the PTY fd (node-pty pause()) so a flooding child blocks on write. Optional:
    *  handles that cannot pause omit it and flow control degrades to a no-op. */

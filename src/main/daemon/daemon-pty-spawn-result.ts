@@ -85,6 +85,7 @@ export abstract class DaemonPtySpawnResult extends DaemonPtySpawnRequest {
     if (result.incarnationId) {
       this.sessionIncarnations.set(sessionId, result.incarnationId)
     }
+    this.inputClosedIncarnations.sync(sessionId, result)
     let providerWslDistro = result.wslDistro === undefined ? wslDistro : result.wslDistro
     // Why: explicit null from a current daemon overrides the caller's WSL preference; undefined keeps compatibility with older daemons.
     wslDistro = providerWslDistro ?? undefined
@@ -156,6 +157,7 @@ export abstract class DaemonPtySpawnResult extends DaemonPtySpawnRequest {
         if (result.incarnationId) {
           this.sessionIncarnations.set(sessionId, result.incarnationId)
         }
+        this.inputClosedIncarnations.sync(sessionId, result)
         providerWslDistro = result.wslDistro === undefined ? wslDistro : result.wslDistro
         wslDistro = providerWslDistro ?? undefined
         context.wslDistro = wslDistro

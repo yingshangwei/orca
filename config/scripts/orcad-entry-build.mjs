@@ -63,6 +63,8 @@ const jsoncParserEsm = {
   }
 }
 
+export const ORCAD_BUNDLE_PLUGINS = [jsoncParserEsm, externalNativeAddons]
+
 /**
  * Where the bundle leaves the one-byte range, if anywhere. A single non-ASCII character makes V8 hold
  * the whole ~11 MB server source as a two-byte string (~21 MB); esbuild escapes strings itself but
@@ -146,7 +148,7 @@ function buildOrcadEntryBundle(outfile, minify) {
     format: 'cjs',
     outfile,
     external: ORCAD_EXTERNAL_MODULES,
-    plugins: [jsoncParserEsm, externalNativeAddons],
+    plugins: ORCAD_BUNDLE_PLUGINS,
     metafile: true,
     minify,
     // Licenses stay in the bundle as a trailing comment, which `escapeLegalCommentTail` keeps ASCII.
@@ -168,6 +170,7 @@ export function buildOrcadCli(outfile) {
     target: 'node18',
     format: 'cjs',
     outfile,
+    plugins: ORCAD_BUNDLE_PLUGINS,
     metafile: true,
     minify: true,
     sourcemap: false,

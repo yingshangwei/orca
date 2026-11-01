@@ -13,7 +13,7 @@ import { app as electronApp, type BrowserWindow } from 'electron'
  */
 
 type ActivationPolicyApp = {
-  dock?: { hide: () => void }
+  dock?: { hide: () => void; show?: () => Promise<void> }
   setActivationPolicy: (policy: 'accessory' | 'prohibited' | 'regular') => void
 }
 
@@ -52,16 +52,20 @@ export function isWindowlessLaunch(env: PolicyEnv = process.env): boolean {
  * macOS: a windowless run still claims a Dock tile and the menu bar as it starts
  * and exits. `accessory` drops both while leaving programmatic activation intact.
  */
-export function applyBackgroundActivationPolicy(
-  options: {
-    app?: ActivationPolicyApp
-    env?: PolicyEnv
-    platform?: NodeJS.Platform
-    warn?: (message: string, error: unknown) => void
-  } = {}
-): boolean {
+type ActivationPolicyOptions = {
+  app?: ActivationPolicyApp
+  env?: PolicyEnv
+  platform?: NodeJS.Platform
+  serveWithoutDesktopWindow?: boolean
+  warn?: (message: string, error: unknown) => void
+}
+
+export function applyBackgroundActivationPolicy(options: ActivationPolicyOptions = {}): boolean {
   const platform = options.platform ?? process.platform
-  if (platform !== 'darwin' || !isWindowlessLaunch(options.env ?? process.env)) {
+  if (
+    platform !== 'darwin' ||
+    !(options.serveWithoutDesktopWindow || isWindowlessLaunch(options.env ?? process.env))
+  ) {
     return false
   }
   try {
@@ -71,6 +75,27 @@ export function applyBackgroundActivationPolicy(
     return true
   } catch (error) {
     options.warn?.('[window] Failed to apply background activation policy', error)
+    return false
+  }
+}
+
+export function applyServeDesktopWindowActivationPolicy(
+  options: Omit<ActivationPolicyOptions, 'serveWithoutDesktopWindow'> = {}
+): boolean {
+  const platform = options.platform ?? process.platform
+  // dock.show() activates the app, so automated launches keep the accessory policy.
+  if (platform !== 'darwin' || isBackgroundLaunch(options.env ?? process.env)) {
+    return false
+  }
+  try {
+    const app = options.app ?? electronApp
+    app.setActivationPolicy('regular')
+    void app.dock?.show?.().catch((error: unknown) => {
+      options.warn?.('[window] Failed to show the Dock icon', error)
+    })
+    return true
+  } catch (error) {
+    options.warn?.('[window] Failed to apply foreground activation policy', error)
     return false
   }
 }
