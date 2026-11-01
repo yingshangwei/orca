@@ -8,8 +8,9 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const WINDOWS_DRIVE_MOUNT_TYPES = new Set(['drvfs', '9p', 'virtiofs'])
 
-/** Set only by the WSL-host orcad launch, so SSH remotes and Orca under WSLg keep their PATH. */
-export const ORCAD_WSL_HOST_ENV = 'ORCA_WSL_ORCAD_HOST'
+import { ORCAD_WSL_HOST_ENV } from '../../shared/orcad-server-launch-env'
+
+export { ORCAD_WSL_HOST_ENV }
 
 let cachedGuestMounts: readonly string[] | null = null
 

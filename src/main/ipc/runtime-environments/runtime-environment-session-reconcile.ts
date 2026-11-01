@@ -5,8 +5,10 @@
  */
 import { existsSync } from 'node:fs'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
-import { listEnvironments } from '../../../shared/runtime-environment-store'
-import { getEnvironmentStorePath } from '../../../shared/runtime-environment-store-file'
+import {
+  getEnvironmentStorePath,
+  listRegisteredEnvironmentIds
+} from '../../../shared/runtime-environment-store-file'
 
 type SessionHostStore = {
   getWorkspaceSessionHostIds: () => ExecutionHostId[]
@@ -25,7 +27,7 @@ export function reconcileOrphanedRuntimeSessions(
   }
   let known: Set<string>
   try {
-    known = new Set(listEnvironments(userDataPath).map((environment) => environment.id))
+    known = listRegisteredEnvironmentIds(userDataPath, { requireStoreFile: true })
   } catch (error) {
     console.warn('[runtime-environments] skipped orphaned session reconcile:', error)
     return []

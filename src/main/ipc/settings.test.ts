@@ -13,6 +13,7 @@ const {
   prepareLocalWorktreeRootsForReposMock,
   resolveEnvironmentMock,
   listEnvironmentsMock,
+  listRegisteredEnvironmentIdsMock,
   rebuildAppMenuMock,
   applyBrowserSessionProxiesMock,
   applySessionSearchSettingsChangeMock,
@@ -29,6 +30,7 @@ const {
   prepareLocalWorktreeRootsForReposMock: vi.fn(),
   resolveEnvironmentMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
+  listRegisteredEnvironmentIdsMock: vi.fn(),
   rebuildAppMenuMock: vi.fn(),
   applyBrowserSessionProxiesMock: vi.fn(),
   applySessionSearchSettingsChangeMock: vi.fn(),
@@ -89,6 +91,11 @@ vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: listEnvironmentsMock
 }))
 
+vi.mock('../../shared/runtime-environment-store-file', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listRegisteredEnvironmentIds: listRegisteredEnvironmentIdsMock
+}))
+
 import { registerSettingsHandlers } from './settings'
 
 const settingsInvokeEvent = { sender: { id: 1 } }
@@ -134,6 +141,7 @@ describe('registerSettingsHandlers', () => {
     store.updateSettings.mockReset()
     store.onSettingsChanged.mockClear()
     listEnvironmentsMock.mockReset().mockReturnValue([])
+    listRegisteredEnvironmentIdsMock.mockReset().mockReturnValue(new Set())
   })
 
   it('repairs removed Active Server preferences on asynchronous and synchronous reads', () => {
@@ -154,7 +162,9 @@ describe('registerSettingsHandlers', () => {
     getSync(event)
     expect(event.returnValue).toEqual({ activeRuntimeEnvironmentId: null })
     expect(store.updateSettings).toHaveBeenCalledTimes(2)
-    expect(listEnvironmentsMock).toHaveBeenCalledWith('/test/user-data', { requireStoreFile: true })
+    expect(listRegisteredEnvironmentIdsMock).toHaveBeenCalledWith('/test/user-data', {
+      requireStoreFile: true
+    })
   })
 
   it('registers settings:previewGhosttyImport handler', () => {

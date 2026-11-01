@@ -57,11 +57,28 @@ export function readPersistedEnvironmentStore(
   }
 }
 
-/** Persisted environments with their sidecar state overlaid; stale sidecar entries are ignored. */
-/**
- * Only an open internal gate fails closed on WSL state this build cannot read (a corrupt file, a
- * newer record). Closed, that state is ignored, so it can never hide an SSH or paired server.
- */
+/** Registered identities survive hidden links and records that require a newer build. */
+export function listRegisteredEnvironmentIds(
+  userDataPath: string,
+  options: EnvironmentStoreRecordsReadOptions = {}
+): Set<string> {
+  const { environments, unreadable } = readEnvironmentStoreRecords(userDataPath, options)
+  if (unreadable.some((record) => record.id === undefined)) {
+    throw new RuntimeEnvironmentStoreError(
+      'runtime_error',
+      `Could not identify every saved server at ${getEnvironmentStorePath(userDataPath)}.`
+    )
+  }
+  const ids = new Set(environments.map((environment) => environment.id))
+  for (const record of unreadable) {
+    if (record.id !== undefined) {
+      ids.add(record.id)
+    }
+  }
+  return ids
+}
+
+/** Unreadable WSL state hides only possible WSL hosts while their gate is open; writes still refuse it. */
 function readWslHostDeploymentsForRegistry(
   userDataPath: string
 ): ReturnType<typeof readWslHostDeployments> {
@@ -70,11 +87,11 @@ function readWslHostDeploymentsForRegistry(
     const read = readWslHostDeployments(userDataPath)
     return gateOpen ? read : { deployments: read.deployments, unreadableEnvironmentIds: new Set() }
   } catch (error) {
-    if (!(error instanceof WslHostDeploymentStoreInvalidError) || gateOpen) {
+    if (!(error instanceof WslHostDeploymentStoreInvalidError)) {
       throw error
     }
     warnUnreadableEnvironmentState(error.message)
-    return { deployments: [], unreadableEnvironmentIds: new Set() }
+    return { deployments: [], unreadableEnvironmentIds: new Set(), fileUnreadable: gateOpen }
   }
 }
 
@@ -93,10 +110,7 @@ export function readEnvironmentStore(
     wslDeployments = readWslHostDeploymentsForRegistry(userDataPath)
   } catch (error) {
     // Fail closed like the main file: a link we cannot read may pin a host key we must not drop.
-    if (
-      error instanceof RuntimeEnvironmentSidecarInvalidError ||
-      error instanceof WslHostDeploymentStoreInvalidError
-    ) {
+    if (error instanceof RuntimeEnvironmentSidecarInvalidError) {
       throw new RuntimeEnvironmentStoreError('runtime_error', error.message)
     }
     throw error

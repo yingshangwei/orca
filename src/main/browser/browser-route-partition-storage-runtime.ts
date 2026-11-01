@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { listEnvironments } from '../../shared/runtime-environment-store'
+import { listRegisteredEnvironmentIds } from '../../shared/runtime-environment-store-file'
 import {
   deriveBrowserRoutePartitionStorageScope,
   deriveLocalSshBrowserRoutePartitionStorageScope
@@ -37,8 +37,8 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
   }
   const dependencies = storageDependencies()
   const liveStorageScopes = new Set(
-    listEnvironments(app.getPath('userData')).map((environment) =>
-      deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId: environment.id })
+    [...listRegisteredEnvironmentIds(app.getPath('userData'), { requireStoreFile: true })].map(
+      (environmentId) => deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId })
     )
   )
   if (!listLocalSshTargetIds) {

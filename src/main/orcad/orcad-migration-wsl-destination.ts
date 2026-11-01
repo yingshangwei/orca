@@ -8,8 +8,9 @@ import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
 
 export const ORCAD_MIGRATION_SOURCE_NOT_THIS_HOST = 'orcad_migration_source_not_this_host'
 
-/** The distro's registry id, which the desktop passes at launch (D1b-4); the guest cannot read it. */
-export const ORCAD_WSL_DISTRO_GUID_ENV = 'ORCA_WSL_DISTRO_GUID'
+import { ORCAD_WSL_DISTRO_GUID_ENV } from '../../shared/orcad-server-launch-env'
+
+export { ORCAD_WSL_DISTRO_GUID_ENV }
 
 /** True on the orcad of a WSL host, which is the only host that advertises the WSL source kind. */
 export function servesLocalWslMigrationSource(
