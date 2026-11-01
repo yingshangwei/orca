@@ -6,6 +6,7 @@ import type {
 } from '../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
+import { compactIpcErrorMessage, extractIpcErrorMessage } from '@/lib/ipc-error'
 import { launchSessionEndedLine } from './ssh-host-launch-session-copy'
 import { bridgedTerminalsLine } from './ssh-host-bridged-terminals-copy'
 import { managedUpdateLine, withDetail } from './ssh-host-server-update-copy'
@@ -90,10 +91,13 @@ export function sshTargetConnectFailureText(
   error: unknown,
   fallback: string
 ): string {
-  return sshConnectFailureText(
-    useAppStore.getState().sshConnectionStates.get(targetId),
-    error instanceof Error ? error.message : fallback
-  )
+  const state = useAppStore.getState().sshConnectionStates.get(targetId)
+  // Main publishes the failure with its next step; the rejection carries only SSH's raw words.
+  const published =
+    state?.status === 'error' || state?.status === 'auth-failed'
+      ? compactIpcErrorMessage(state.error ?? '')
+      : undefined
+  return sshConnectFailureText(state, published || extractIpcErrorMessage(error, fallback))
 }
 
 // Mirror main's ORCAD_TUNNEL_UNAVAILABLE_REASON.

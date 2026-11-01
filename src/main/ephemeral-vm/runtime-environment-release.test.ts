@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   remove: vi.fn(),
   removeManaged: vi.fn(),
+  retire: vi.fn(),
   closeTunnel: vi.fn(async () => {})
 }))
 
@@ -30,10 +31,11 @@ describe('releaseEphemeralVmRuntimeEnvironments', () => {
       { id: 'env-vm', orcadDeployment: { sshTargetId: 'runtime-ssh-vm' } },
       { id: 'env-other', orcadDeployment: { sshTargetId: 'ssh-builder' } }
     ])
-    await releaseEphemeralVmRuntimeEnvironments('/user-data', {
-      runtimeEnvironmentId: 'env-vm',
-      sshTargetId: 'runtime-ssh-vm'
-    })
+    await releaseEphemeralVmRuntimeEnvironments(
+      '/user-data',
+      { runtimeEnvironmentId: 'env-vm', sshTargetId: 'runtime-ssh-vm' },
+      mocks.retire
+    )
     expect(mocks.closeTunnel).toHaveBeenCalledTimes(1)
     expect(mocks.closeTunnel).toHaveBeenCalledWith('env-vm')
     expect(mocks.removeManaged).toHaveBeenCalledTimes(1)
@@ -45,22 +47,32 @@ describe('releaseEphemeralVmRuntimeEnvironments', () => {
     mocks.list.mockReturnValue([
       { id: 'env-converted', orcadDeployment: { sshTargetId: 'runtime-ssh-vm' } }
     ])
-    await releaseEphemeralVmRuntimeEnvironments('/user-data', { sshTargetId: 'runtime-ssh-vm' })
+    await releaseEphemeralVmRuntimeEnvironments(
+      '/user-data',
+      { sshTargetId: 'runtime-ssh-vm' },
+      mocks.retire
+    )
     expect(mocks.removeManaged).toHaveBeenCalledWith('/user-data', 'env-converted')
   })
 
   it('removes a paired recipe server the ordinary way', async () => {
     mocks.list.mockReturnValue([{ id: 'env-paired' }])
-    await releaseEphemeralVmRuntimeEnvironments('/user-data', {
-      runtimeEnvironmentId: 'env-paired'
-    })
+    await releaseEphemeralVmRuntimeEnvironments(
+      '/user-data',
+      { runtimeEnvironmentId: 'env-paired' },
+      mocks.retire
+    )
     expect(mocks.remove).toHaveBeenCalledWith('/user-data', 'env-paired')
     expect(mocks.closeTunnel).not.toHaveBeenCalled()
   })
 
   it('ignores a server that is already gone', async () => {
     mocks.list.mockReturnValue([])
-    await releaseEphemeralVmRuntimeEnvironments('/user-data', { runtimeEnvironmentId: 'env-gone' })
+    await releaseEphemeralVmRuntimeEnvironments(
+      '/user-data',
+      { runtimeEnvironmentId: 'env-gone' },
+      mocks.retire
+    )
     expect(mocks.remove).not.toHaveBeenCalled()
     expect(mocks.removeManaged).not.toHaveBeenCalled()
   })

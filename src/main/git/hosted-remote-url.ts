@@ -1,3 +1,5 @@
+import { normalizeForgeWebHost } from '../../shared/git-remote-host-alias'
+
 // Scoped local fork of the hosted-git-info@9.0.3 behavior Orca used.
 // Why: source links only need GitHub/GitLab/Bitbucket remote parsing and file
 // URL construction, so we keep that small surface local and tested.
@@ -21,10 +23,8 @@ const shorthandHosts: Record<string, { host: string; provider: HostedRemoteProvi
 }
 
 function providerForHost(host: string): HostedRemoteHost | null {
-  const normalized = host.toLowerCase()
-  if (normalized === 'github.com' || normalized === 'ssh.github.com') {
-    // Why: GitHub documents ssh.github.com:443 as the SSH-over-HTTPS host,
-    // but browser links and account identity still belong to github.com.
+  const normalized = normalizeForgeWebHost(host)
+  if (normalized === 'github.com') {
     return { host: 'github.com', provider: 'github' }
   }
   if (normalized === 'gitlab.com') {

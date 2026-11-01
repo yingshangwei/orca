@@ -144,6 +144,27 @@ export const PR_E2E_SOURCE_ROUTES = [
           file
         ))
   },
+  {
+    id: 'ssh.orcad-ssh-failure-reason',
+    specs: ['tests/e2e/ssh-orcad-ssh-failure-reason.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/(?:ipc\/ssh\/(?:ssh-connect-flow|ssh-host-server-)|ssh\/(?:ssh-session-start-failure|ssh-host-server-|connection\/ssh-connection-manager))|renderer\/src\/ssh\/(?:ssh-host-server-status-copy|ssh-connect-failure-toast))/.test(
+          file
+        ))
+  },
+  {
+    id: 'ssh.orcad-identity-file-tokens',
+    specs: ['tests/e2e/ssh-orcad-identity-file-tokens.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      /^tests\/e2e\/helpers\/ssh-config-host-picker\.ts$/.test(file) ||
+      (isProductSource(file) &&
+        /^src\/main\/ssh\/(?:config\/(?:ssh-g-config-resolution|ssh-identity-file-tokens|ssh-config-path-expansion)|ssh-auth-resolution|ssh-identity-file-read)\.ts$/.test(
+          file
+        ))
+  },
   // COMPAT(legacy-relay-bridge): revisit 2027-01-15 with src/main/ssh/legacy-relay/.
   {
     id: 'ssh.orcad-legacy-relay-bridge',

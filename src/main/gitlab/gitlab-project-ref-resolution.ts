@@ -6,6 +6,7 @@ import { NEGATIVE_ENTRY_TTL_MS } from '../git/remote-ref-probe-cache'
 import { clearProjectRefInFlight, runProjectRefProbeOnce } from './project-ref-inflight'
 import {
   _resetGlabUnauthenticatedHosts,
+  getGlabPartialHosts,
   isGlabHostKnownUnauthenticated,
   parseGlabAuthStatusHosts,
   rememberGlabHostUnauthenticated,
@@ -47,14 +48,15 @@ export function _getProjectRefCacheSize(): number {
   return projectRefCache.size
 }
 
-function rememberProjectRefCacheEntry(cacheKey: string, value: ProjectRef | null): void {
-  // Why: "not GitLab" only holds until someone configures `origin` or logs into
-  // `glab` — a repo probed before either kept hosted-review detection stale for
-  // the life of the process. Negatives expire the way every other forge's do;
-  // positives still stay (see `createRemoteRefProbeCache`).
+function rememberProjectRefCacheEntry(
+  cacheKey: string,
+  value: ProjectRef | null,
+  finite = value === null
+): void {
+  // Negative forge identity expires so remote/auth configuration changes can be discovered.
   projectRefCache.set(cacheKey, {
     value,
-    expiresAt: value === null ? Date.now() + NEGATIVE_ENTRY_TTL_MS : Number.POSITIVE_INFINITY
+    expiresAt: finite ? Date.now() + NEGATIVE_ENTRY_TTL_MS : Number.POSITIVE_INFINITY
   })
   while (projectRefCache.size > PROJECT_REF_CACHE_MAX_ENTRIES) {
     const oldestKey = projectRefCache.keys().next().value
@@ -106,12 +108,10 @@ async function resolveProjectRefForRemote(
   ownsKey: () => boolean,
   localGitOptions: LocalGitExecOptions
 ): Promise<ProjectRef | null> {
-  // Why: a probe abandoned as stale still runs, and the repo state it read is
-  // older than whatever its successor already published. It may answer its own
-  // callers; it may not overwrite the cache.
-  const publish = (value: ProjectRef | null): void => {
+  // Abandoned probes may answer their callers but must not overwrite newer cached identity.
+  const publish = (value: ProjectRef | null, finite = value === null): void => {
     if (ownsKey()) {
-      rememberProjectRefCacheEntry(cacheKey, value)
+      rememberProjectRefCacheEntry(cacheKey, value, finite)
     }
   }
   try {
@@ -145,6 +145,15 @@ async function resolveProjectRefForRemote(
       rememberGlabKnownHost(remoteCandidate.host, connectionId, localGitOptions)
       publish(remoteCandidate)
       return remoteCandidate
+    }
+    const partial = parseGitLabProjectRef(
+      stdout,
+      getGlabPartialHosts(connectionId, localGitOptions)
+    )
+    if (partial) {
+      // Evidence from an unsettled discovery keeps the original miss expiry and never remembers auth.
+      publish(partial, true)
+      return partial
     }
   } catch (error) {
     // Why: a wedged or killed probe is not evidence the remote is not GitLab —

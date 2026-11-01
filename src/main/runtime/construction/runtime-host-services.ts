@@ -342,7 +342,8 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     stopProjectTerminals: (repo, options) => this.stopTerminalsForProject(repo, options),
     invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
     invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
-    notifyReposChanged: () => this.notifyReposChanged()
+    notifyReposChanged: () => this.notifyReposChanged(),
+    notifyWorktreesChanged: (repoId, options) => this.notifyWorktreesChanged(repoId, options)
   })
 
   protected readonly repositorySparsePresets = new RuntimeRepositorySparsePresets({

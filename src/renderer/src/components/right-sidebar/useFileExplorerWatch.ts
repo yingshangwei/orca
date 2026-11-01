@@ -1,5 +1,6 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import type { FsChangedPayload } from '../../../../shared/filesystem-entry-types'
+import type { FsChangedPayload, FsChangeEvent } from '../../../../shared/filesystem-entry-types'
+import { FileWatchEventBuffer } from '../../../../shared/filesystem-watch-event-buffer'
 import type {
   DirCache,
   FileExplorerOperationOwner,
@@ -124,13 +125,12 @@ export function useFileExplorerWatch({
   const refreshTreeRef = useRef(refreshTree)
   refreshTreeRef.current = refreshTree
 
-  // Deferred events queue: events that arrive during inline input or drag
-  const deferredRef = useRef<FsChangedPayload[]>([])
+  const deferredRef = useRef(new FileWatchEventBuffer())
   const resyncWatchKeysRef = useRef(new Set<string>())
   const activeResyncByWatchKeyRef = useRef(new Map<string, () => void>())
 
-  // Why: a ref bridges processPayload to the flush effect so it can replay deferred payloads without re-subscribing (design §6.2).
-  const processPayloadRef = useRef<((payload: FsChangedPayload) => void) | null>(null)
+  // Bridge payload replay to the flush effect without resubscribing.
+  const processPayloadRef = useRef<((events: FsChangeEvent[]) => void) | null>(null)
 
   // Why: one atomic effect avoids a cleanup-ordering race that drops events on rapid worktree switches (review issue §3).
   useEffect(() => {
@@ -142,6 +142,7 @@ export function useFileExplorerWatch({
 
     const currentWorktreePath = worktreePath
     const currentWorktreeId = activeWorktreeId
+    const deferred = deferredRef.current
     const resyncWatchKeys = resyncWatchKeysRef.current
     const activeResyncByWatchKey = activeResyncByWatchKeyRef.current
     const currentWatchKey = JSON.stringify([
@@ -188,8 +189,8 @@ export function useFileExplorerWatch({
       })
     }
 
-    // Why: expose processPayload to the flush effect so it can replay deferred payloads without re-subscribing.
-    processPayloadRef.current = processPayload
+    processPayloadRef.current = (events) =>
+      processPayload({ worktreePath: currentWorktreePath, events })
 
     // Declared before handleFsChanged so its `disposed` read can never hit the temporal dead zone.
     let disposed = false
@@ -221,7 +222,7 @@ export function useFileExplorerWatch({
         dragSourceRef.current !== null ||
         isNativeDragOverRef.current
       ) {
-        deferredRef.current.push(payload)
+        deferred.push(payload.events)
         return
       }
 
@@ -261,12 +262,12 @@ export function useFileExplorerWatch({
       if (activeResyncByWatchKey.get(currentWatchKey) === scheduler.requestFullRefresh) {
         activeResyncByWatchKey.delete(currentWatchKey)
       }
-      const hadDeferredEvents = deferredRef.current.length > 0
+      const hadDeferredEvents = deferred.size > 0
       if (scheduler.cancel() || hadDeferredEvents) {
         // The tree cache survives Files being hidden, so remember work canceled after receipt.
         resyncWatchKeys.add(currentWatchKey)
       }
-      deferredRef.current = []
+      deferred.clear()
       processPayloadRef.current = null
     }
   }, [worktreePath, activeWorktreeId, activeRuntimeEnvironmentId, setDirCache, setSelectedPath])
@@ -277,15 +278,9 @@ export function useFileExplorerWatch({
       inlineInput === null &&
       dragSourcePath === null &&
       !isNativeDragOver &&
-      deferredRef.current.length > 0
+      deferredRef.current.size > 0
     ) {
-      const deferred = deferredRef.current.splice(0)
-      // Why: replay deferred payloads so the tree cache reconciles to disk after inline input or drag ends (design §6.2).
-      if (processPayloadRef.current) {
-        for (const payload of deferred) {
-          processPayloadRef.current(payload)
-        }
-      }
+      processPayloadRef.current?.(deferredRef.current.take())
     }
   }, [inlineInput, dragSourcePath, isNativeDragOver])
 }

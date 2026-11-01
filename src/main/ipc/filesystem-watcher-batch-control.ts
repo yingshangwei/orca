@@ -9,6 +9,7 @@ export type DebouncedBatch = {
   flushInFlight: boolean
   flushQueued: boolean
   cancelled: boolean
+  statAbortController: AbortController
 }
 
 export function createDebouncedBatch(): DebouncedBatch {
@@ -19,13 +20,15 @@ export function createDebouncedBatch(): DebouncedBatch {
     lastFlushAt: 0,
     flushInFlight: false,
     flushQueued: false,
-    cancelled: false
+    cancelled: false,
+    statAbortController: new AbortController()
   }
 }
 
 /** Cancel pending and queued flush work when a root is torn down. */
 export function cancelLocalBatchFlush(root: WatchedRoot): void {
   root.batch.cancelled = true
+  root.batch.statAbortController.abort()
   root.batch.flushQueued = false
   if (root.batch.timer) {
     clearTimeout(root.batch.timer)

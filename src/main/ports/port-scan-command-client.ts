@@ -10,6 +10,7 @@ import { WorkerThreadRequestQueue } from '../worker-thread-request-queue'
 import {
   PORT_SCAN_COMMAND_TIMEOUT_MS,
   PortScanCommandTimeoutError,
+  type DarwinPortScanOperation,
   type PortScanCommandRequest,
   type PortScanCommandResponse
 } from './port-scan-command-protocol'
@@ -96,14 +97,15 @@ export class PortScanCommandClient {
     })
   }
 
-  /**
-   * Run one probe command on the worker.
-   * @param command - Executable name (lsof, ps, netstat, powershell.exe).
-   * @param args - Argument vector passed verbatim to execFile.
-   * @returns The command's stdout plus its measured process-creation latency.
-   */
-  async run(command: string, args: string[]): Promise<PortScanCommandResult> {
-    const response = await this.requests.dispatch((id) => ({ id, command, args }), CALL_DEADLINE_MS)
+  async run(
+    command: string,
+    args: string[],
+    darwinOperation?: DarwinPortScanOperation
+  ): Promise<PortScanCommandResult> {
+    const response = await this.requests.dispatch(
+      (id) => ({ id, command, args, ...(darwinOperation ? { darwinOperation } : {}) }),
+      CALL_DEADLINE_MS
+    )
     if (response.ok) {
       return { stdout: response.stdout, spawnMs: response.spawnMs }
     }
@@ -150,8 +152,9 @@ let sharedClient: PortScanCommandClient | null = null
  */
 export function runPortScanCommand(
   command: string,
-  args: string[]
+  args: string[],
+  darwinOperation?: DarwinPortScanOperation
 ): Promise<PortScanCommandResult> {
   sharedClient ??= new PortScanCommandClient({ workerFactory: defaultWorkerFactory })
-  return sharedClient.run(command, args)
+  return sharedClient.run(command, args, darwinOperation)
 }

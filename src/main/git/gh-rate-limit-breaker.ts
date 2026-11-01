@@ -99,13 +99,23 @@ function findGhApiEndpoint(args: readonly string[]): string | null {
   return null
 }
 
+// gh serves these over GraphQL; a mixed REST trip (e.g. GHES `pr edit` reviewers) is corrected by the reset probe.
+const GH_GRAPHQL_SUBCOMMANDS = new Map<string, ReadonlySet<string>>([
+  ['issue', new Set(['close', 'edit', 'list', 'reopen', 'view'])],
+  [
+    'pr',
+    new Set(['checks', 'close', 'create', 'edit', 'list', 'merge', 'ready', 'reopen', 'view'])
+  ],
+  ['repo', new Set(['view'])]
+])
+
 export function classifyGhRateLimitBucket(args: readonly string[]): GhRateLimitBucket {
   const command = args[0]
   if (command === 'search') {
     return 'search'
   }
   if (command !== 'api') {
-    return 'core'
+    return GH_GRAPHQL_SUBCOMMANDS.get(command)?.has(args[1]) ? 'graphql' : 'core'
   }
   const endpoint = findGhApiEndpoint(args)
   if (!endpoint) {
@@ -136,13 +146,10 @@ export function isGhLocalOnlyCommand(args: readonly string[]): boolean {
   return args[0] === 'auth' && args[1] === 'token'
 }
 
-/**
- * Primary rate-limit detection. Secondary limits ("secondary rate limit")
- * carry Retry-After and are handled by the runner's transient retry logic.
- */
+/** Recognize primary limits (GraphQL says "already exceeded"); secondary limits use Retry-After handling. */
 export function isGhPrimaryRateLimitStderr(stderr: string): boolean {
   const s = stderr.toLowerCase()
-  return s.includes('api rate limit exceeded') && !s.includes('secondary rate limit')
+  return /api rate limit (?:already )?exceeded/.test(s) && !s.includes('secondary rate limit')
 }
 
 export function recordGhPrimaryRateLimit(

@@ -5,6 +5,7 @@ import {
   type ExecutionHostId
 } from '../../../shared/execution-host'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import { refreshRuntimeEnvironmentCatalog } from '@/runtime/runtime-environment-pairing-refresh'
 
 /**
  * Tear down the ephemeral-VM runtimes backing a set of deleted workspaces (and,
@@ -68,9 +69,12 @@ export async function cleanupEphemeralVmRuntimesForDeleted(args: {
                 )))) ||
           (runtime.sshTargetId !== undefined && sshTargetIdSet.has(runtime.sshTargetId)))
     )
+    let releasedServer = false
     for (const runtime of matchingRuntimes) {
       try {
         const cleaned = await window.api.ephemeralVm.cleanup({ runtimeId: runtime.id })
+        releasedServer ||=
+          runtime.runtimeEnvironmentId !== undefined || runtime.sshTargetId !== undefined
         if (runtime.sshTargetId) {
           const targetIds = cleaned.sshTargetId ? retainedSshTargetIds : destroyedSshTargetIds
           targetIds.add(runtime.sshTargetId)
@@ -81,6 +85,10 @@ export async function cleanupEphemeralVmRuntimesForDeleted(args: {
           retainedSshTargetIds.add(runtime.sshTargetId)
         }
       }
+    }
+    if (releasedServer) {
+      // Cleanup can forget the VM's server; purge its rows now instead of on the next catalog read.
+      await refreshRuntimeEnvironmentCatalog()
     }
   } catch (error) {
     console.error('Failed to clean up ephemeral VM runtime for deleted workspace:', error)

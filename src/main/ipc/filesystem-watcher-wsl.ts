@@ -188,6 +188,8 @@ export async function createWslWatcher(
       return
     }
     stopped = true
+    // Stop queued UNC stats without cancelling the conservative overflow refresh.
+    root.batch.statAbortController.abort()
     markOverflowWithoutUncStat(root)
     deps.scheduleBatchFlush(root)
     deps.watchedRoots.delete(rootKey)

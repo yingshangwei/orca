@@ -3,6 +3,8 @@
 import { getAppEnvironment } from '../../../shared/app-environment'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
+import { resolveStartupShell } from '../../../shared/tui-agent-startup-shell'
+import { resolveLocalWindowsAgentStartupShell } from '../../../shared/windows-terminal-shell'
 import { withCodexTerminalServerIsolationEnv } from '../../../shared/codex-terminal-server-isolation'
 import { getLegacyOpenCodeEnvKeysToDelete } from '../../opencode/legacy-shared-config-dir'
 import { prepareOpenCodePtyLaunch } from '../../opencode/opencode-pty-launch'
@@ -118,6 +120,14 @@ export async function assemblePtySpawnLaunchOptions(input: PtySpawnLaunchOptions
   const { args } = input
   const connectionId = args.connectionId ?? undefined
   const launchAgent = isTuiAgent(args.launchAgent) ? args.launchAgent : undefined
+  const shell = resolveStartupShell(
+    input.codexRuntime === 'wsl' ? 'linux' : process.platform,
+    resolveLocalWindowsAgentStartupShell({
+      platform: process.platform,
+      isRemote: Boolean(connectionId) || input.codexRuntime === 'wsl',
+      terminalWindowsShell: input.shellOverride ?? input.getSettings?.()?.terminalWindowsShell
+    })
+  )
   const openCodeLaunch = await prepareOpenCodePtyLaunch({
     command: input.launchCommand,
     agent: launchAgent,
@@ -126,6 +136,7 @@ export async function assemblePtySpawnLaunchOptions(input: PtySpawnLaunchOptions
     cwd: input.cwd,
     connectionId,
     isFreshLaunch: !input.preAdoptedStablePane && input.launchCommand !== undefined,
+    shell,
     ...(input.codexRuntime === 'wsl'
       ? { wsl: { distro: input.expectedWslDistro ?? undefined } }
       : {})

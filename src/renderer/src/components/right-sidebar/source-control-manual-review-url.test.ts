@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseRemoteRepo } from './source-control/review/remote-repo'
 import {
   buildSourceControlManualReviewUrl,
   buildSourceControlManualReviewUrlFromContext,
@@ -78,6 +79,41 @@ describe('buildSourceControlManualReviewUrlFromContext', () => {
 })
 
 describe('buildSourceControlManualReviewUrl', () => {
+  it.each([
+    'ssh://git@ssh.bitbucket.org/team/project.git',
+    'git@ssh.bitbucket.org:team/project.git',
+    'git@SSH.BITBUCKET.ORG:team/project.git'
+  ])('canonicalizes the Bitbucket SSH host web identity: %s', (remote) => {
+    expect(parseRemoteRepo(remote)).toEqual({
+      provider: 'bitbucket',
+      path: 'team/project',
+      webBaseUrl: 'https://bitbucket.org/team/project'
+    })
+    for (const provider of [undefined, 'bitbucket'] as const) {
+      expect(
+        buildSourceControlManualReviewUrl({
+          baseRef: 'main',
+          branchName: 'feature/x',
+          repoRemoteName: 'origin',
+          repoRemoteUrl: remote,
+          provider,
+          upstreamName: 'origin/feature/x'
+        })
+      ).toBe('https://bitbucket.org/team/project/pull-requests/new?source=feature%2Fx&dest=main')
+    }
+  })
+
+  it.each(['ssh://git@ssh.github.com:443/team/project.git', 'git@ssh.github.com:team/project.git'])(
+    'canonicalizes the GitHub SSH-over-443 web identity: %s',
+    (remote) => {
+      expect(parseRemoteRepo(remote)).toEqual({
+        provider: 'github',
+        path: 'team/project',
+        webBaseUrl: 'https://github.com/team/project'
+      })
+    }
+  )
+
   it('builds a GitHub compare URL for the current remote branch', () => {
     expect(
       buildSourceControlManualReviewUrl({

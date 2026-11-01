@@ -58,6 +58,7 @@ const READY: WslOrcadConnectionStatus = { state: 'ready', census: null }
 export type WslOrcadConnectionDependencies = {
   holder?: WslDistroHolder
   getPairingOffer?: (environmentId: string) => PairingOffer | null
+  recordedLocalPort?: (environmentId: string) => number | null
   deployAndLaunch?: (distro: string, options: WslOrcadDeployOptions) => Promise<WslOrcadLaunch>
   createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport
   listen?: (
@@ -253,7 +254,11 @@ export class WslOrcadConnectionManager {
       )
     }
     // orcad moved ports (or this is the first connect): the old bridge dials a dead port.
-    const preferredLocalPort = current?.connection.localPort ?? options.localPort ?? 0
+    const preferredLocalPort =
+      current?.connection.localPort ??
+      options.localPort ??
+      this.dependencies.recordedLocalPort?.(environmentId) ??
+      0
     if (current) {
       await this.drop(key, current)
       this.dependencies.onChange?.(distro, null, status.pending)

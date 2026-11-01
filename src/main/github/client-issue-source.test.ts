@@ -114,7 +114,7 @@ function issueSearchArgs(
   ]
 }
 
-function prListArgs(ownerRepo: string, query = 'is:pr is:open'): string[] {
+function prListArgs(ownerRepo: string, query = 'is:open'): string[] {
   return [
     'pr',
     'list',
