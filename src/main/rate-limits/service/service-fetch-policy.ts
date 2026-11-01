@@ -160,6 +160,7 @@ export abstract class RateLimitServiceFetchPolicy extends RateLimitServiceFetchT
         // Why: the statusline payload has no Fable scoped window; keep the last OAuth-provided one visible
         // and let its presence keep the OAuth poll ungated (see shouldSkipAutomatedClaudeFetch).
         fableWeekly: previous?.fableWeekly ?? null,
+        extraUsage: previous?.extraUsage ?? null,
         updatedAt: Date.now(),
         error: null,
         status: 'ok',

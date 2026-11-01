@@ -8,10 +8,19 @@ import { isBrowserRoutePartitionRetainedByAnyOwner } from './browser-route-parti
 import {
   findBrowserRoutePartitionsForStorageScope,
   findOrphanedBrowserRoutePartitions,
+  partitionDirectory,
   releaseBrowserRoutePartitionStorage,
   type BrowserRoutePartitionStorageDependencies
 } from './browser-route-partition-storage-lifecycle'
-import { activeBrowserRoutePartitionOrcaProfileId } from './browser-route-partition-binding-runtime'
+import {
+  browserRoutePartitionDirectoryKey,
+  browserRoutePartitionPendingDeletesPath,
+  deletePendingBrowserRoutePartitionDirectories
+} from './browser-route-partition-pending-deletes'
+import {
+  activeBrowserRoutePartitionOrcaProfileId,
+  currentBrowserRoutePartitionBindingFilePath
+} from './browser-route-partition-binding-runtime'
 import { browserRoutePartitionStorageDependencies } from './browser-route-partition-storage-dependencies'
 
 export type BrowserRoutePartitionStorageClear = {
@@ -35,7 +44,28 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
   if (!orcaProfileId) {
     return []
   }
-  const dependencies = storageDependencies()
+  const dependencies = browserRoutePartitionStorageDependencies(
+    isBrowserRoutePartitionRetainedByAnyOwner,
+    'cold'
+  )
+  reportStorageFailures(
+    'deferred folder deletion',
+    await deletePendingBrowserRoutePartitionDirectories({
+      filePath: browserRoutePartitionPendingDeletesPath(
+        currentBrowserRoutePartitionBindingFilePath()
+      ),
+      partitionDataRoot: dependencies.partitionDataRoot,
+      // Re-read per entry: a partition bound while an earlier delete awaited must survive.
+      isBound: (directory) => {
+        const key = browserRoutePartitionDirectoryKey(directory)
+        return [...dependencies.bindings.listBindings().keys()].some(
+          (partition) =>
+            browserRoutePartitionDirectoryKey(partitionDirectory(dependencies, partition)) === key
+        )
+      },
+      removeDirectory: dependencies.removePartitionDirectory
+    })
+  )
   const liveStorageScopes = new Set(
     [...listRegisteredEnvironmentIds(app.getPath('userData'), { requireStoreFile: true })].map(
       (environmentId) => deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId })

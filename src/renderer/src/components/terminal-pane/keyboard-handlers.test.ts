@@ -152,6 +152,11 @@ describe('resolveTerminalKeyboardShortcutAction', () => {
 
 describe('runTerminalSearchNavigation', () => {
   const searchState = { query: 'hello', caseSensitive: true, regex: false }
+  const decoratedOptions = expect.objectContaining({
+    caseSensitive: true,
+    regex: false,
+    decorations: expect.objectContaining({ activeMatchBackground: expect.any(String) })
+  })
 
   it('runs the next search through the guarded xterm path', () => {
     const findNext = vi.fn(() => true)
@@ -161,7 +166,7 @@ describe('runTerminalSearchNavigation', () => {
     >[0]
 
     expect(runTerminalSearchNavigation(pane, 'next', searchState)).toBe(true)
-    expect(findNext).toHaveBeenCalledWith('hello', { caseSensitive: true, regex: false })
+    expect(findNext).toHaveBeenCalledWith('hello', decoratedOptions)
     expect(findPrevious).not.toHaveBeenCalled()
   })
 
@@ -173,7 +178,7 @@ describe('runTerminalSearchNavigation', () => {
     >[0]
 
     expect(runTerminalSearchNavigation(pane, 'previous', searchState)).toBe(true)
-    expect(findPrevious).toHaveBeenCalledWith('hello', { caseSensitive: true, regex: false })
+    expect(findPrevious).toHaveBeenCalledWith('hello', decoratedOptions)
     expect(findNext).not.toHaveBeenCalled()
   })
 

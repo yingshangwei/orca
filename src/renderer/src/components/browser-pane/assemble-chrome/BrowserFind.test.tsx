@@ -10,13 +10,27 @@ function createWebviewRef(): {
   stopFindInPage: ReturnType<typeof vi.fn>
   addEventListener: ReturnType<typeof vi.fn>
   removeEventListener: ReturnType<typeof vi.fn>
+  found: (requestId: number, activeMatchOrdinal: number, matches: number) => void
 } {
-  const findInPage = vi.fn()
+  let requestSequence = 0
+  const findInPage = vi.fn(() => ++requestSequence)
   const stopFindInPage = vi.fn()
   // Held apart from ref.current so a test that swaps the guest under the same ref can still ask
   // what happened to the node it swapped out.
-  const addEventListener = vi.fn()
-  const removeEventListener = vi.fn()
+  const events = new EventTarget()
+  const addEventListener = vi.fn((type: string, listener: EventListener) =>
+    events.addEventListener(type, listener)
+  )
+  const removeEventListener = vi.fn((type: string, listener: EventListener) =>
+    events.removeEventListener(type, listener)
+  )
+  const found = (requestId: number, activeMatchOrdinal: number, matches: number): void => {
+    events.dispatchEvent(
+      Object.assign(new Event('found-in-page'), {
+        result: { requestId, activeMatchOrdinal, matches, finalUpdate: true }
+      })
+    )
+  }
   const ref = {
     current: {
       findInPage,
@@ -25,7 +39,7 @@ function createWebviewRef(): {
       removeEventListener
     } as unknown as Electron.WebviewTag
   }
-  return { ref, findInPage, stopFindInPage, addEventListener, removeEventListener }
+  return { ref, findInPage, stopFindInPage, addEventListener, removeEventListener, found }
 }
 
 function openFindWithQuery(query: string): ReturnType<typeof createWebviewRef> {
@@ -131,5 +145,101 @@ describe('BrowserFind listener rebinding', () => {
     // Why the old guest is asserted too: the pane no longer owns it, but the host may still hold it
     // alive across the restart, and a listener left behind counts matches into a dead bar forever.
     expect(first.removeEventListener).toHaveBeenCalledWith('found-in-page', staleListener)
+  })
+})
+
+describe('BrowserFind result ownership', () => {
+  it('searches a replacement guest and discards the previous guest counts', () => {
+    vi.useFakeTimers()
+    const first = createWebviewRef()
+    const { rerender } = render(
+      <BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={1} />
+    )
+    fireEvent.change(screen.getByPlaceholderText('Find in page...'), {
+      target: { value: 'needle' }
+    })
+    act(() => vi.advanceTimersByTime(250))
+    act(() => first.found(1, 2, 7))
+    expect(screen.getByText('2 of 7')).not.toBeNull()
+
+    const second = createWebviewRef()
+    first.ref.current = second.ref.current
+    rerender(<BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={2} />)
+
+    expect(screen.getByPlaceholderText('Find in page...').getAttribute('value')).toBe('needle')
+    expect(screen.queryByText('2 of 7')).toBeNull()
+    expect(screen.queryByText('No matches')).toBeNull()
+    act(() => vi.advanceTimersByTime(250))
+    expect(second.findInPage).toHaveBeenCalledExactlyOnceWith('needle', { findNext: true })
+    act(() => first.found(1, 6, 7))
+    expect(screen.queryByText('6 of 7')).toBeNull()
+    act(() => second.found(1, 1, 3))
+    expect(screen.getByText('1 of 3')).not.toBeNull()
+    fireEvent.click(screen.getByTitle('Next match'))
+    expect(second.findInPage).toHaveBeenLastCalledWith('needle', { forward: true, findNext: false })
+  })
+
+  it('ignores replies from an older request in the same guest', () => {
+    const webview = openFindWithQuery('needle')
+    act(() => webview.found(1, 1, 2))
+    expect(screen.getByText('1 of 2')).not.toBeNull()
+    fireEvent.change(screen.getByPlaceholderText('Find in page...'), {
+      target: { value: 'replacement' }
+    })
+    expect(screen.queryByText('1 of 2')).toBeNull()
+    expect(screen.queryByText('No matches')).toBeNull()
+    act(() => vi.advanceTimersByTime(250))
+    act(() => webview.found(2, 1, 4))
+    expect(screen.getByText('1 of 4')).not.toBeNull()
+    act(() => webview.found(1, 2, 2))
+    expect(screen.getByText('1 of 4')).not.toBeNull()
+  })
+
+  it('ignores a delayed reply after advancing the current query', () => {
+    const webview = openFindWithQuery('needle')
+    fireEvent.click(screen.getByTitle('Next match'))
+    act(() => webview.found(2, 2, 7))
+    expect(screen.getByText('2 of 7')).not.toBeNull()
+    act(() => webview.found(1, 1, 7))
+    expect(screen.getByText('2 of 7')).not.toBeNull()
+  })
+
+  it('does not search an empty query after replacing the guest', () => {
+    vi.useFakeTimers()
+    const first = createWebviewRef()
+    const { rerender } = render(
+      <BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={1} />
+    )
+    const second = createWebviewRef()
+    first.ref.current = second.ref.current
+    rerender(<BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={2} />)
+    act(() => vi.advanceTimersByTime(250))
+    expect(second.findInPage).not.toHaveBeenCalled()
+  })
+
+  it('waits to search a replacement guest until a closed Find bar reopens', () => {
+    vi.useFakeTimers()
+    const first = createWebviewRef()
+    const { rerender } = render(
+      <BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={1} />
+    )
+    fireEvent.change(screen.getByPlaceholderText('Find in page...'), {
+      target: { value: 'needle' }
+    })
+    act(() => vi.advanceTimersByTime(250))
+    act(() => first.found(1, 1, 2))
+    rerender(
+      <BrowserFind isOpen={false} onClose={vi.fn()} webviewRef={first.ref} guestGeneration={1} />
+    )
+    const second = createWebviewRef()
+    first.ref.current = second.ref.current
+    rerender(
+      <BrowserFind isOpen={false} onClose={vi.fn()} webviewRef={first.ref} guestGeneration={2} />
+    )
+    act(() => vi.advanceTimersByTime(250))
+    expect(second.findInPage).not.toHaveBeenCalled()
+    rerender(<BrowserFind isOpen onClose={vi.fn()} webviewRef={first.ref} guestGeneration={2} />)
+    expect(second.findInPage).toHaveBeenCalledExactlyOnceWith('needle', { findNext: true })
+    expect(screen.queryByText('1 of 2')).toBeNull()
   })
 })

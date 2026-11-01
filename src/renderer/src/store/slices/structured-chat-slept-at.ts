@@ -20,17 +20,41 @@ export function isStructuredChatSlept(
   return typeof sleptAtByPaneKey[structuredAgentSessionPaneKey(tab.id, tab.entityId)] === 'number'
 }
 
-/** Missing is unknown; null keeps the chat awake for display, without proving execution. */
-export function hasUnknownStructuredChat(
-  tabs: readonly Tab[] | undefined,
-  sleptAtByPaneKey: StructuredChatSleptAtByPaneKey = {}
-): boolean {
-  return (tabs ?? []).some(
-    (tab) =>
-      isStructuredTab(tab) &&
-      sleptAtByPaneKey[structuredAgentSessionPaneKey(tab.id, tab.entityId)] === undefined
-  )
+const EMPTY_SLEPT_CHATS: StructuredChatSleptAtByPaneKey = Object.freeze({})
+
+function createStructuredChatPresenceSelector(
+  matches: (sleptAt: number | null | undefined) => boolean
+) {
+  const byTabs = new WeakMap<readonly Tab[], WeakMap<StructuredChatSleptAtByPaneKey, boolean>>()
+  return (
+    tabs: readonly Tab[] | undefined,
+    sleptAtByPaneKey: StructuredChatSleptAtByPaneKey = EMPTY_SLEPT_CHATS
+  ): boolean => {
+    if (!tabs?.length) {
+      return false
+    }
+    let bySleptAt = byTabs.get(tabs)
+    const cached = bySleptAt?.get(sleptAtByPaneKey)
+    if (cached !== undefined) {
+      return cached
+    }
+    const result = tabs.some(
+      (tab) =>
+        isStructuredTab(tab) &&
+        matches(sleptAtByPaneKey[structuredAgentSessionPaneKey(tab.id, tab.entityId)])
+    )
+    // Store selectors run on every write; immutable snapshots reuse scans without retaining closed tabs.
+    bySleptAt ??= new WeakMap()
+    bySleptAt.set(sleptAtByPaneKey, result)
+    byTabs.set(tabs, bySleptAt)
+    return result
+  }
 }
+
+/** Missing is unknown; null keeps the chat awake for display, without proving execution. */
+export const hasUnknownStructuredChat = createStructuredChatPresenceSelector(
+  (sleptAt) => sleptAt === undefined
+)
 
 export const createStructuredChatSleptAtSlice: StateCreator<
   AppState,

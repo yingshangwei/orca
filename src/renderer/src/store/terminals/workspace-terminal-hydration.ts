@@ -2,7 +2,7 @@ import type { WorkspaceKey } from '../../../../shared/folder-workspace-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import {
   folderWorkspaceKey,
-  parseWorkspaceKey,
+  isWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../../../shared/workspace-scope'
 import { buildByIdIndex } from '../slices/worktree-by-id-index'
@@ -87,14 +87,12 @@ export function createWorkspaceTerminalHydrationActions(
           // Why: a workspace with no tabs is still valid; fall back from the active repo to avoid a blank landing screen when tabs were pruned or never created.
           return fallbackActiveWorktreeId
         })()
-        const activeWorkspaceKey: WorkspaceKey | null =
-          session.activeWorkspaceKey && validWorktreeIds.has(session.activeWorkspaceKey)
-            ? session.activeWorkspaceKey
-            : activeWorktreeId
-              ? parseWorkspaceKey(activeWorktreeId)
-                ? (activeWorktreeId as WorkspaceKey)
-                : worktreeWorkspaceKey(activeWorktreeId)
-              : null
+        // Derive from the restored worktree; older builds could persist a key naming another workspace.
+        const activeWorkspaceKey: WorkspaceKey | null = activeWorktreeId
+          ? isWorkspaceKey(activeWorktreeId)
+            ? activeWorktreeId
+            : worktreeWorkspaceKey(activeWorktreeId)
+          : null
         const activeWorkspaceExecutionHostId =
           activeWorkspaceKey && session.activeWorkspaceExecutionHostId
             ? session.activeWorkspaceExecutionHostId

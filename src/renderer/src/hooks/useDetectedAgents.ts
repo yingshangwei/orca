@@ -92,6 +92,12 @@ export function useDetectedAgents(
     return environment ? (environment.pairingRevision ?? environment.createdAt) : undefined
   })
 
+  const sshConnected = useAppStore((s) => {
+    const status =
+      targetKind === 'ssh' && targetId ? s.sshConnectionStates.get(targetId)?.status : undefined
+    return status === undefined ? null : status === 'connected'
+  })
+
   const detectedIds = useAppStore((s) => {
     if (isUnknown) {
       return null
@@ -176,8 +182,14 @@ export function useDetectedAgents(
     }
     const state = useAppStore.getState()
     if (targetKind === 'ssh' && targetId) {
+      const failedWhileOffline =
+        sshConnected === false &&
+        state.isDetectingRemoteAgents[targetId] === false &&
+        state.remoteDetectedAgentIds[targetId] == null
       if (detectedIds === null) {
-        void state.ensureRemoteDetectedAgents(targetId)
+        if (!failedWhileOffline) {
+          void state.ensureRemoteDetectedAgents(targetId)
+        }
       } else if (isNewRemoteTarget && detectedIds.length > 0) {
         // Why: a host can install an agent after its cached list was populated;
         // refresh once when a new launch surface first observes that host.
@@ -208,6 +220,7 @@ export function useDetectedAgents(
     targetId,
     remoteTargetKey,
     pairingRevision,
+    sshConnected,
     detectedIds,
     localWorktreeId,
     runtimeWorktreeId,

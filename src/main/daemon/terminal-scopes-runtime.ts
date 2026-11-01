@@ -1,6 +1,7 @@
 /** The daemon's terminal scopes and process ceiling, applied to every PTY spawn it makes. */
 import { existsSync } from 'node:fs'
 import { userManagerEnv } from './daemon-cgroup-scope'
+import { warnWhenRealtimeTimeoutIsZero } from './daemon-rttime-limit'
 import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
 import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
@@ -35,6 +36,7 @@ export function initializeTerminalScopes(
     // Why log every platform: an operator who set a limit must learn when it did nothing.
     log('terminal-memory-limits', { platform: process.platform, ...resolved.memory })
   }
+  warnWhenRealtimeTimeoutIsZero(log)
   return resolved.ceiling
 }
 

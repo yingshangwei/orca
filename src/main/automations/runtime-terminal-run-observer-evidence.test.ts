@@ -16,6 +16,7 @@ type StatusRow = {
   receivedAt: number
   stateStartedAt: number
   sessionBoundary?: boolean
+  providerSessionOnly?: boolean
 }
 
 /** A pane where idle is idle whatever painted it: a ready shell prompt satisfies tui-idle too. */
@@ -58,6 +59,9 @@ function createPane(initial: { idle: boolean; tail: string[]; idleEdgeOnly?: boo
   return {
     runtime,
     agentRows: () => rows,
+    reportRows: (next: StatusRow[]) => {
+      rows = next
+    },
     report: (row: Partial<StatusRow> = {}) =>
       (rows = [{ state: 'done', receivedAt: Date.now(), stateStartedAt: Date.now(), ...row }]),
     setTail: (next: string[]) => (tail = next),
@@ -270,6 +274,50 @@ describe('observing a run with agent evidence', () => {
     await run.promise
     expect(run.settled).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }))
   })
+
+  it("completes on the agent's own done when the screen never reads idle (#34064)", async () => {
+    // A finished pane whose title and screen lost their rest evidence, e.g. after a stream gap.
+    const pane = createPane({ idle: false, tail: ['done', '❯'] })
+    const run = observe(pane)
+    await vi.advanceTimersByTimeAsync(5_000)
+    pane.report()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(run.settled).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await run.promise
+    expect(run.settled).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }))
+  })
+
+  it.each(['stale', 'session-boundary', 'provider-only', 'mixed-working'] as const)(
+    'does not complete a non-idle pane from %s done evidence',
+    async (kind) => {
+      const pane = createPane({ idle: false, tail: ['unrecognized output'] })
+      const run = observe(pane)
+      await vi.advanceTimersByTimeAsync(5_000)
+      const done: StatusRow = {
+        state: 'done',
+        receivedAt: Date.now(),
+        stateStartedAt: Date.now()
+      }
+      const rows: StatusRow[] =
+        kind === 'stale'
+          ? [{ ...done, stateStartedAt: Date.now() - 60_000 }]
+          : kind === 'session-boundary'
+            ? [{ ...done, sessionBoundary: true }]
+            : kind === 'provider-only'
+              ? [{ ...done, providerSessionOnly: true }]
+              : [done, { ...done, state: 'working' }]
+      pane.reportRows(rows)
+      await vi.advanceTimersByTimeAsync(65_000)
+      expect(run.settled).not.toHaveBeenCalled()
+      run.controller.abort()
+      await run.promise
+      expect(run.failed).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'request_aborted' })
+      )
+    }
+  )
 
   it('stops on cancellation without recording any result', async () => {
     const pane = createPane({ idle: true, tail: ['$'] })
