@@ -6,7 +6,7 @@ import {
   type DeviceResumeConfirmed
 } from '@orca-cloud/relay-contract'
 import type { RelayDatabase, SqlRow } from './database.js'
-import { HeapWindowReaper } from './heap-window-reaper.js'
+import { changes, HeapWindowReaper } from './heap-window-reaper.js'
 import { ResumeConfirmedAuditBuffer } from './resume-confirmed-audit-buffer.js'
 
 const CREDENTIAL_GRACE_MS = 24 * 60 * 60 * 1000
@@ -31,8 +31,9 @@ export const AUDIT_EVENT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 // Bounded so one cycle cannot hold row locks or grow WAL without limit; the backlog drains over
 // however many cycles it takes.
 const REAP_BATCH_ROWS = 5000
-// ~14 rows per page. With ~9 director ticks a minute the row cap is ~3M rows a day, so the 7.4M-row
-// backlog drains over two to three days; a walk that finds nothing reads ~1 MB a tick.
+// Unindexed, a drained reap rescans the whole heap; retention is days, so minutes of reap lag are harmless.
+const UNINDEXED_REAP_PAUSE_MS = 5 * 60 * 1000
+// At ~14 rows/page and ~9 ticks/min, budget reaps ~3M rows/day (~2–3 days for 7.4M backlog); empty walks read ~1MB/tick.
 const CONFIRM_RESULT_REAP_BUDGET = {
   pagesPerStatement: 16,
   maxPagesPerTick: 128,
@@ -161,6 +162,7 @@ export class RelayCredentialStore {
     'committed_at <= ?',
     CONFIRM_RESULT_REAP_BUDGET
   )
+  private readonly unindexedReapResumesAt = new Map<string, number>()
 
   // Only memory confirms add to it, so its flush timer never starts on a director.
   readonly resumeAudit: ResumeConfirmedAuditBuffer
@@ -785,10 +787,11 @@ export class RelayCredentialStore {
   // Outside the sweep transaction on purpose: each delete is idempotent and independent of the
   // state transitions above, so batching them in would only hold their row locks for longer.
   private async reapSettledCredentials(now: number): Promise<void> {
-    await this.reapBatch(
+    await this.reapUnindexed(
       'relay_invites',
       'state IN (?, ?, ?) AND updated_at <= ?',
-      ['expired', 'consumed', 'invalidated', now - TERMINAL_INVITE_RETENTION_MS]
+      ['expired', 'consumed', 'invalidated', now - TERMINAL_INVITE_RETENTION_MS],
+      now
     )
     // deadline, not created_at: it is the second column of relay_connection_bases_active_deadline,
     // so once the backlog is drained this batch learns there is nothing left to do from the index
@@ -800,10 +803,11 @@ export class RelayCredentialStore {
     ])
     // consumed_at, not deadline: consumption is what settles this row, and it can happen well
     // before the deadline, so measuring from it retains the row for the full window either way.
-    await this.reapBatch(
+    await this.reapUnindexed(
       'relay_direct_authorizations',
       'consumed_at IS NOT NULL AND consumed_at <= ?',
-      [now - INACTIVE_AUTHORIZATION_RETENTION_MS]
+      [now - INACTIVE_AUTHORIZATION_RETENTION_MS],
+      now
     )
     await this.confirmResultReaper.reap(this.database, [now - CONFIRM_RESULT_RETENTION_MS])
     // Ordered so the plan walks relay_audit_events_at from its oldest entry: unordered, a LIMIT
@@ -811,25 +815,40 @@ export class RelayCredentialStore {
     await this.reapBatch('relay_audit_events', 'at <= ?', [now - AUDIT_EVENT_RETENTION_MS], 'at')
   }
 
-  // ctid/rowid, not the primary key: the physical address lets the delete re-find exactly the batch
-  // the subquery located instead of re-matching the predicate per row. On Postgres an array of TIDs,
-  // not `IN`: IN can plan as a hash join over a sequential scan of the whole table.
+  // Paused before the delete, so an overlapping or failed reap waits too; only a full batch (a backlog) clears it.
+  private async reapUnindexed(
+    table: string,
+    predicate: string,
+    params: unknown[],
+    now: number
+  ): Promise<void> {
+    if (now < (this.unindexedReapResumesAt.get(table) ?? 0)) {
+      return
+    }
+    this.unindexedReapResumesAt.set(table, now + UNINDEXED_REAP_PAUSE_MS)
+    if ((await this.reapBatch(table, predicate, params)) >= REAP_BATCH_ROWS) {
+      this.unindexedReapResumesAt.delete(table)
+    }
+  }
+
+  // Delete located physical ctid/rowid; PostgreSQL ANY(TID array) guarantees TID scan, while IN can hash-join a full heap scan.
   private async reapBatch(
     table: string,
     predicate: string,
     params: unknown[],
     orderBy?: string
-  ): Promise<void> {
+  ): Promise<number> {
     const sqlite = this.database.dialect === 'sqlite'
     const address = sqlite ? 'rowid' : 'ctid'
     const order = orderBy ? `ORDER BY ${orderBy} ` : ''
     const batch = `SELECT ${address} FROM ${table} WHERE ${predicate} ${order}LIMIT ${REAP_BATCH_ROWS}`
-    await this.database.query(
+    const rows = await this.database.query(
       sqlite
         ? `DELETE FROM ${table} WHERE rowid IN (${batch})`
         : `DELETE FROM ${table} WHERE ctid = ANY(ARRAY(${batch}))`,
       params
     )
+    return changes(rows)
   }
 
   private async installStatusWith(

@@ -35,9 +35,14 @@ export abstract class AgentBrowserBridgeCoreCommands extends AgentBrowserBridgeQ
     worktreeId?: string,
     browserPageId?: string
   ): Promise<BrowserClickResult> {
-    return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      return (await this.execAgentBrowser(sessionName, ['click', element])) as BrowserClickResult
-    })
+    return this.enqueueTargetedCommand(
+      worktreeId,
+      browserPageId,
+      async (sessionName) => {
+        return (await this.execAgentBrowser(sessionName, ['click', element])) as BrowserClickResult
+      },
+      { elements: [element] }
+    )
   }
 
   async dblclick(
@@ -45,9 +50,18 @@ export abstract class AgentBrowserBridgeCoreCommands extends AgentBrowserBridgeQ
     worktreeId?: string,
     browserPageId?: string
   ): Promise<BrowserClickResult> {
-    return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      return (await this.execAgentBrowser(sessionName, ['dblclick', element])) as BrowserClickResult
-    })
+    return this.enqueueTargetedCommand(
+      worktreeId,
+      browserPageId,
+      async (sessionName) => {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: agent-browser's dblclick --json answers the BrowserClickResult shape.
+        return (await this.execAgentBrowser(sessionName, [
+          'dblclick',
+          element
+        ])) as BrowserClickResult
+      },
+      { elements: [element] }
+    )
   }
 
   async goto(url: string, worktreeId?: string, browserPageId?: string): Promise<BrowserGotoResult> {
@@ -163,7 +177,7 @@ export abstract class AgentBrowserBridgeCoreCommands extends AgentBrowserBridgeQ
         await this.fillExplicitContentEditable(sessionName, element, value)
         return { filled: element } as BrowserFillResult
       },
-      { requireScopedTarget: true }
+      { requireScopedTarget: true, elements: [element] }
     )
   }
 }

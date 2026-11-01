@@ -49,6 +49,8 @@ import {
 } from '../runtime/runtime-browser-commands-factory'
 
 vi.mock('./orcad-browser-provider', () => ({ resolveOrcadBrowserProvider: vi.fn() }))
+// The fixture's /Applications/Orca.app path would open a real macOS install park.
+vi.mock('./orcad-browser-install-park', () => ({ openOrcadBrowserInstallPark: () => null }))
 
 const FAKE_SIDECAR = join(import.meta.dirname, '__fixtures__', 'fake-orcad-electron-sidecar.cjs')
 const INSTALLED_EXECUTABLE = join('/Applications', 'Orca.app', 'Contents', 'MacOS', 'Orca')

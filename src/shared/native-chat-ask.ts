@@ -164,14 +164,15 @@ function scanPendingAsks(messages: readonly NativeChatMessage[]): {
     // transcript and strands an answered ask as a permanent card over the
     // composer (#11761). Claude's tool-result turns decode as role 'tool'.
     const interrupted = isInterruptedStatusMessage(message)
-    if (message.role === 'user' || interrupted) {
+    if (
+      interrupted ||
+      (message.role === 'user' && reachedAgent(message) && message.from?.kind !== 'agent')
+    ) {
       outstanding = 0
       pendingDepth = -1
       pending = null
-      if (interrupted || reachedAgent(message)) {
-        asyncQuestions = []
-        asyncCallIds.clear()
-      }
+      asyncQuestions = []
+      asyncCallIds.clear()
     }
     for (const block of message.blocks) {
       if (block.type === 'tool-call') {

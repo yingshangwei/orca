@@ -182,7 +182,7 @@ export function SshTargetCard({
     // Why: a column of identical "Connect" words on resting rows scans as noise; it appears on
     // hover or keyboard focus and keeps its width so nothing shifts.
     return (
-      <span className="opacity-0 transition-opacity group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100">
+      <span className="opacity-0 transition-opacity group-hover/row:opacity-100 [[class~='group/row']:has(:focus-visible)_&]:opacity-100">
         {button}
       </span>
     )

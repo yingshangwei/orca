@@ -16,6 +16,8 @@ const paletteMeasurementFile =
   'src/renderer/src/lib/palette-match/palette-match-performance.test.ts'
 const measurementFiles = [measurementFile, paletteMeasurementFile]
 const transforms = {
+  // Auto-discovery climbs past the repo for files no in-repo tsconfig owns, into an enclosing checkout.
+  tsconfig: resolve(import.meta.dirname, 'tsconfig.vitest-transform.json'),
   plugins: [
     {
       // Unit tests have no asset server; retain real catalog parsing through fetch(data:).

@@ -102,6 +102,7 @@ export abstract class BrowserManagerRegistration extends BrowserManagerGuestPoli
     // Why: teardown mid-grab must cancel it so the renderer gets a signal, not a dangling Promise.
     this.cancelGrabOp(browserTabId, 'evicted')
     cancelBrowserPagePrompts(browserTabId)
+    this.agentActivity.end(browserTabId)
 
     // Why: remove attachGuestPolicies listeners so their guest-WebContents closures don't block GC.
     const guestWebContentsId = this.webContentsIdByTabId.get(browserTabId)

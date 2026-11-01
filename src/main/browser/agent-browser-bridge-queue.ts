@@ -40,13 +40,9 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
         )
       }
       const [tabId, wcId] = liveEntries[switchedIndex]
-      this.activeWebContentsId = wcId
-      // Why: resolveActiveTab prefers the per-worktree map, so update it or later commands keep routing to the old tab.
       const owningWorktreeId = worktreeId ?? this.browserManager.getWorktreeIdForTab(tabId)
-      // Why: `tab switch --page` may omit --worktree, so still update the owning worktree's active slot for later scoped commands.
-      if (owningWorktreeId) {
-        this.activeWebContentsPerWorktree.set(owningWorktreeId, wcId)
-      }
+      // Page-only switches must also update the owning workspace for later scoped commands.
+      this.pointAgentAt(wcId, owningWorktreeId ?? undefined)
       this.options.onTabsChanged?.(owningWorktreeId ?? undefined)
       return { switched: switchedIndex, browserPageId: tabId }
     })
@@ -75,7 +71,11 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       browserPageId,
       options.requireScopedTarget
     )
+    if (!browserPageId && options.elements) {
+      this.assertRefsFromPage(pageId, options.elements)
+    }
     const sessionName = `${ORCA_TAB_SESSION_PREFIX}${pageId}`
+    const agentCommand = this.browserManager.beginAgentCommand(pageId)
 
     return new Promise<T>((resolve, reject) => {
       let queue = this.commandQueues.get(sessionName)
@@ -101,13 +101,13 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
               },
               options
             )
-          return origin.run(run)
+          return origin.run(() => agentCommand.run(run))
         },
         resolve: resolve as (value: unknown) => void,
         reject
       })
       this.processQueue(sessionName)
-    })
+    }).finally(agentCommand.end)
   }
 
   protected async executeQueuedCommand<T>(

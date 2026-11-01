@@ -18,6 +18,7 @@ export function mockBrowserManager(
   worktrees = new Map<string, string>(),
   overrides: Partial<BrowserManager> = {}
 ): BrowserManager {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture implements only the BrowserManager methods exercised by AgentBrowserBridge.
   return {
     getWebContentsIdByTabId: () => tabs,
     getTabIdForWebContentsId: (webContentsId: number) => {
@@ -33,6 +34,11 @@ export function mockBrowserManager(
     getBrowserPageLoadError: vi.fn(() => null),
     getBrowserPageCertificateFailure: vi.fn(() => null),
     unregisterGuest: vi.fn(),
+    beginAgentCommand: () => ({
+      run: (execute: () => Promise<unknown>) => execute(),
+      end: () => {}
+    }),
+    isAgentUsingPage: () => false,
     ...overrides
   } as unknown as BrowserManager
 }

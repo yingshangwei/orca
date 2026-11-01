@@ -1,3 +1,4 @@
+import { BrowserAgentActivity, type AgentCommandLease } from './browser-agent-activity'
 import { rendererPublicationThrottle } from '../window/renderer-publication-throttle'
 import { BrowserManagerState } from './browser-manager-state'
 import { focusGuardUnavailableError, guardPaneFocusForAgentInput } from './agent-input-focus-guard'
@@ -5,6 +6,15 @@ import { focusGuardUnavailableError, guardPaneFocusForAgentInput } from './agent
 export abstract class BrowserManagerVisibility extends BrowserManagerState {
   // Why: page id -> active capture count; the renderer hears only the first hold and the last release.
   private readonly capturePaintHolds = new Map<string, number>()
+  protected readonly agentActivity = new BrowserAgentActivity()
+
+  beginAgentCommand(browserPageId: string): AgentCommandLease {
+    return this.agentActivity.beginCommand(browserPageId)
+  }
+
+  isAgentUsingPage(browserPageId: string): boolean {
+    return this.agentActivity.isActive(browserPageId)
+  }
 
   // Why: only pixel capture needs a drawn guest. One-way so a minimized or throttled desktop renderer
   // can't stall the capture; the capture itself retries until the page produces a frame.

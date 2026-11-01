@@ -120,6 +120,7 @@ describe('AgentBrowserBridge', () => {
     await bridge.click('@e1')
     await bridge.scroll('down')
     await bridge.setOffline('on')
+    succeedWith({ messages: [] })
     await bridge.consoleLog()
     await bridge.exec('get title')
 
@@ -379,6 +380,14 @@ describe('AgentBrowserBridge', () => {
     await expect(bridge.snapshot()).rejects.toThrow('Command failed')
   })
 
+  // agent-browser 0.39.2+ wording when it cannot re-resolve a ref by role and name.
+  it.each([
+    'Stale ref for role=button name=Approve cannot be recovered: several elements now match. Run snapshot again and use a fresh ref.',
+    'Could not locate element with role=link name=Back to basic'
+  ])('reports a ref whose element is gone as stale: %s', async (message) => {
+    failWith(message)
+    await expect(bridge.click('@e2')).rejects.toMatchObject({ code: 'browser_stale_ref' })
+  })
   // ── Malformed JSON returns BrowserError ──
 
   it('returns browser_error with truncated output for malformed JSON', async () => {

@@ -483,6 +483,26 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
     ).rejects.toMatchObject({ code: 1 })
   })
 
+  it('lists exact and descendant refs from batched for-each-ref probes', async () => {
+    const head = (await runGit(['rev-parse', 'HEAD'])).stdout.trim()
+    const presentRef = 'refs/remotes/origin/compat-batch'
+    const nestedRef = 'refs/remotes/origin/compat-batch-parent/nested'
+    await runGit(['update-ref', presentRef, head])
+    await runGit(['update-ref', nestedRef, head])
+
+    // A miss still exits 0; callers keep only exact lines, so the parent stays absent.
+    await expect(
+      runGit([
+        'for-each-ref',
+        '--format=%(refname)',
+        '--',
+        presentRef,
+        'refs/remotes/origin/compat-batch-parent',
+        'refs/remotes/missing/compat-batch'
+      ])
+    ).resolves.toMatchObject({ stdout: `${presentRef}\n${nestedRef}\n` })
+  })
+
   it('packs loose refs and reads the maintenance opt-out at the baseline', async () => {
     // Why: idle ref maintenance runs `pack-refs --all --prune` on every supported
     // Git rather than the 2.45+ `--auto` form, and reads `maintenance.auto` to

@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Globe } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
-import { destroyPersistentWebview } from '../host-guest/webview-registry'
+import { DOC_PREVIEW_PARTITION } from '../../../../../shared/doc-preview-scheme'
+import { destroyPersistentWebview, webviewRegistry } from '../host-guest/webview-registry'
 import {
   useSshWorkspaceBrowserRoute,
   type SshWorkspaceBrowserRouteErrorKind
@@ -24,7 +25,7 @@ export function SshRoutedBrowserPageGate({
 }: {
   worktreeId: string
   sessionProfileId: string | null
-  /** Pages this gate guards; their guests are destroyed whenever mounting is not allowed. */
+  /** Pages this gate guards; their guests are destroyed whenever they could browse off the verified route. */
   pageIds: readonly string[]
   children: (routedPartition: string | null) => React.JSX.Element
 }): React.JSX.Element {
@@ -32,18 +33,30 @@ export function SshRoutedBrowserPageGate({
     worktreeId,
     sessionProfileId
   )
-  const mountable = state.kind === 'unrouted' || state.kind === 'ready'
+  const unrouted = state.kind === 'unrouted'
+  const routedPartition = state.kind === 'ready' ? state.partition : null
   useEffect(() => {
-    if (mountable) {
+    if (unrouted) {
       return
     }
     // Why (review P1-1): chrome unmount only PARKS guests to survive worktree
     // switches; a guest created before routing engaged would keep loading with
     // local egress behind the card unless it is destroyed outright.
     for (const pageId of pageIds) {
+      if (routedPartition) {
+        const partition = webviewRegistry.get(pageId)?.getAttribute('partition')
+        // Guests already on the verified route (or a local doc preview) survive remounts without reloading.
+        if (
+          partition === undefined ||
+          partition === routedPartition ||
+          partition === DOC_PREVIEW_PARTITION
+        ) {
+          continue
+        }
+      }
       void destroyPersistentWebview(pageId)
     }
-  }, [mountable, pageIds])
+  }, [unrouted, routedPartition, pageIds])
 
   if (state.kind === 'unrouted') {
     return children(null)

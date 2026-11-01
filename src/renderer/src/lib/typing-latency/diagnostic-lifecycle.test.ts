@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installTypingLatencyDiagnostic, type TypingDiagnosticBridge } from './diagnostic'
-import type { PreventedKeystrokeDiscard } from './echo-instrumentation'
+import { instrumentPaneEcho, type PreventedKeystrokeDiscard } from './echo-instrumentation'
+import { createEchoCandidate, createEchoObservation } from './echo-observation'
 import type { TypingInputRegistration, TypingInputSignal } from './input-events'
 
 const mocks = vi.hoisted(() => {
@@ -96,6 +97,49 @@ describe('typing latency diagnostic lifecycle', () => {
     expect(bridge.report().sampling.unmatchedKeystrokes).toBe(1)
     expect(bridge.report().sampling.unmatchedKeystrokes).toBe(1)
     bridge.stop()
+  })
+
+  it('reports echo timings without retaining typed text after the diagnostic stops', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    installTypingLatencyDiagnostic()
+    const bridge = (window as DiagnosticWindow).__orcaTypingDiagnostic
+    if (!bridge) {
+      throw new Error('Typing latency diagnostic bridge was not installed')
+    }
+    bridge.start()
+    const onObservation = vi.mocked(instrumentPaneEcho).mock.lastCall?.[1]
+    if (!onObservation) {
+      throw new Error('Pane echo instrumentation was not installed')
+    }
+    for (const source of ['direct', 'ime'] as const) {
+      const observation = createEchoObservation(
+        {
+          candidates: [{ ...createEchoCandidate(110, source), dispatchedAt: 120 }],
+          hasAttributionGap: false,
+          outputBytes: 1,
+          outputWrites: 1,
+          parsedAt: 150
+        },
+        160
+      )
+      if (!observation) {
+        throw new Error('Echo observation was not created')
+      }
+      expect(observation).not.toHaveProperty('text')
+      const observationWithLegacyText = { ...observation, text: 'private-typed-content' }
+      onObservation(observationWithLegacyText)
+    }
+    const runningReport = bridge.report()
+    expect(runningReport).toMatchObject({
+      sampling: { exactInputs: 2 },
+      exact: { inputToPaintMs: { count: 2, p50: 50 } },
+      byInputSource: { direct: { exactInputs: 1 }, ime: { exactInputs: 1 } }
+    })
+    expect(JSON.stringify(runningReport)).not.toContain('private-typed-content')
+    bridge.stop()
+    const stoppedReport = bridge.report()
+    expect(stoppedReport.exact).toEqual(runningReport.exact)
+    expect(JSON.stringify(stoppedReport)).not.toContain('private-typed-content')
   })
 
   it('reverses a timeout count when the IME commit later settles prevented', () => {

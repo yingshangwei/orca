@@ -6,7 +6,7 @@ import {
   getAzureDevOpsPullRequestForBranchOrThrow,
   normalizeAzureDevOpsApiBaseUrl
 } from './client'
-import { _resetAzureDevOpsPreviewApiVersionCache } from './azure-devops-api-request'
+import { _resetAzureDevOpsApiVersionCache } from './azure-devops-api-request'
 import { _resetAzureDevOpsRepoRefCache } from './repository-ref'
 import { __resetRepoDefaultBranchCacheForTests } from '../source-control/repo-default-branch'
 
@@ -37,7 +37,7 @@ describe('Azure DevOps client', () => {
     process.env = { ...OLD_ENV, ORCA_AZURE_DEVOPS_TOKEN: 'pat-token' }
     gitExecFileAsyncMock.mockReset()
     _resetAzureDevOpsRepoRefCache()
-    _resetAzureDevOpsPreviewApiVersionCache()
+    _resetAzureDevOpsApiVersionCache()
     __resetRepoDefaultBranchCacheForTests()
   })
 

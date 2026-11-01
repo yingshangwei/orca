@@ -25,16 +25,10 @@ export function resolveNativeChatHookState(
 export function useNativeChatHookStatus(
   paneKey: string
 ): readonly [AgentStatusState | null, number | null, boolean] {
-  // Freshness is time-based; subscribe to the scheduler epoch so a silent
-  // working row stops driving Native Chat when its TTL expires.
-  const agentStatusEpoch = useAppStore((store) => store.agentStatusEpoch)
-  void agentStatusEpoch
-  // Why: primitive selectors keep unrelated pane/status updates from rerendering
-  // native chat while still exposing the three fields used for reconciliation.
-  const state = useAppStore((store) => {
-    const entry = store.agentStatusByPaneKey[paneKey]
-    return resolveNativeChatHookState(entry)
-  })
+  // Primitive selectors avoid rerenders for unrelated status changes.
+  const state = useAppStore((store) =>
+    resolveNativeChatHookState(store.agentStatusByPaneKey[paneKey])
+  )
   const stateStartedAt = useAppStore(
     (store) => store.agentStatusByPaneKey[paneKey]?.stateStartedAt ?? null
   )

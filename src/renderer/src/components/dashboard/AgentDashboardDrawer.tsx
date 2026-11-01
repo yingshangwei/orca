@@ -18,6 +18,7 @@ import { AgentDashboardSettingsMenu } from './AgentDashboardSettingsMenu'
 import { useLiveDashboardSnapshot } from './useLiveDashboardSnapshot'
 import { useAgentDashboardTelemetry } from '../dashboard-popout/use-agent-dashboard-telemetry'
 import { translate } from '@/i18n/i18n'
+import { trackSidebarLiveWidth } from '@/components/sidebar/sidebar-live-width'
 
 // Why: Escape should dismiss interactive nested overlays (e.g. the terminal
 // preview dialog) before this companion sheet, which is excluded by its own
@@ -197,6 +198,7 @@ export function AgentDashboardDrawer({
       <SheetContent
         side="left"
         showCloseButton={false}
+        ref={trackSidebarLiveWidth}
         aria-describedby={undefined}
         className="workspace-kanban-sheet-content bg-worktree-sidebar p-0 sm:max-w-none"
         overlayStyle={{

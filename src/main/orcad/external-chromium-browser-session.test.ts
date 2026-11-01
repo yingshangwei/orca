@@ -151,8 +151,33 @@ describe('orcad external-chromium agent-browser environment', () => {
     expect(issued).not.toContain('open')
   })
 
-  // Why: a name that answers nothing is wedged or half-dead, so reclaiming it is correct —
-  // that is the killed-orcad case the stable session name exists to recover.
+  it('selects a tab only when it is not already active, keeping the snapshot refs', async () => {
+    runProcessMock.mockImplementation(() => {
+      const tabs = [
+        { active: true, tabId: 't1', title: 'a', url: 'about:blank' },
+        { active: false, tabId: 't2', title: 'b', url: 'about:blank' }
+      ]
+      return Promise.resolve({
+        code: 0,
+        signal: null,
+        stdout: JSON.stringify({ success: true, data: { tabs } }),
+        stderr: '',
+        timedOut: false
+      })
+    })
+    const session = new ExternalChromiumBrowserSession(
+      '/opt/orca/agent-browser',
+      { executablePath: BASE.executablePath, provider: 'chromium' },
+      '/state'
+    )
+
+    const issued = (): string[][] => commands()
+    await session.selectPage('t1')
+    expect(issued()).toEqual([['tab']])
+    await session.selectPage('t2')
+    expect(issued()).toEqual([['tab'], ['tab'], ['tab', 't2']])
+  })
+
   it('reclaims a session that answers nothing, then opens', async () => {
     let listed = 0
     runProcessMock.mockImplementation((spec: Spec) => {
