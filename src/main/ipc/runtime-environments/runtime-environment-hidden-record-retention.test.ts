@@ -15,7 +15,7 @@ import { pairingCode } from './runtime-environments-ipc-test-harness'
 const state = vi.hoisted(() => ({
   userDataPath: '',
   bindings: new Map<string, { fingerprint: string; storageScope: string | null }>(),
-  cleared: [] as string[]
+  cleared: new Array<string>()
 }))
 vi.mock('electron', () => ({ app: { getPath: () => state.userDataPath } }))
 vi.mock('../../browser/browser-route-partition-binding-runtime', () => ({
@@ -26,7 +26,9 @@ vi.mock('../../browser/browser-route-partition-storage-dependencies', () => ({
     bindings: {
       listBindings: () => state.bindings,
       remove: (partitions: readonly string[]) => {
-        for (const partition of partitions) state.bindings.delete(partition)
+        for (const partition of partitions) {
+          state.bindings.delete(partition)
+        }
         return partitions.length
       }
     },

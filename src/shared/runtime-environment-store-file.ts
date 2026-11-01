@@ -65,7 +65,9 @@ export function listRegisteredEnvironmentIds(
   const { environments, unreadable } = readEnvironmentStoreRecords(userDataPath, options)
   const ids = new Set(environments.map((environment) => environment.id))
   for (const record of unreadable) {
-    if (record.id !== undefined) ids.add(record.id)
+    if (record.id !== undefined) {
+      ids.add(record.id)
+    }
   }
   return ids
 }
