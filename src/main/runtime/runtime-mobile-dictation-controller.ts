@@ -144,7 +144,9 @@ export class RuntimeMobileDictationController {
     ) {
       session.state = 'closing'
       try {
-        await getSpeechSttService(this.requireStore()).stopDictation(session.owner)
+        await getSpeechSttService(this.requireStore()).stopDictation(session.owner, {
+          discard: true
+        })
       } finally {
         if (this.session?.id === session.id) {
           this.session = null
@@ -211,7 +213,7 @@ export class RuntimeMobileDictationController {
     }
     session.state = 'closing'
     void getSpeechSttService(this.requireStore())
-      .stopDictation(session.owner)
+      .stopDictation(session.owner, { discard: true })
       .finally(() => {
         if (this.session?.id === session.id) {
           this.session = null

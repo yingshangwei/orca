@@ -47,6 +47,7 @@ export function useEmulatorVideoStream(
   const onSizeRef = useRef(onSize)
   onSizeRef.current = onSize
 
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup -- cleanup() clears the first-frame timeout.
   useEffect(() => {
     const api = (window as { api?: { emulator?: EmulatorVideoApi } }).api?.emulator
     if (!enabled || !deviceId) {
@@ -69,6 +70,14 @@ export function useEmulatorVideoStream(
     let configured = false
     let timestamp = 0
     let configBytes: Uint8Array | null = null
+    let reportedSize: StreamSize | null = null
+    const reportSize = (width: number, height: number): void => {
+      if (reportedSize?.width === width && reportedSize.height === height) {
+        return
+      }
+      reportedSize = { width, height }
+      onSizeRef.current?.(reportedSize)
+    }
     const currentStreamId = newVideoStreamId()
     let streamId: string | null = currentStreamId
     let unsubMeta: (() => void) | undefined
@@ -90,6 +99,7 @@ export function useEmulatorVideoStream(
             canvas.width = frame.displayWidth
             canvas.height = frame.displayHeight
           }
+          reportSize(frame.displayWidth, frame.displayHeight)
           ctx.drawImage(frame, 0, 0)
         }
         frame.close()
@@ -141,7 +151,7 @@ export function useEmulatorVideoStream(
 
     unsubMeta = api.onVideoStreamMeta?.((msg) => {
       if (!disposed && msg.streamId === streamId && msg.deviceId === deviceId) {
-        onSizeRef.current?.({ width: msg.meta.width, height: msg.meta.height })
+        reportSize(msg.meta.width, msg.meta.height)
       }
     })
 

@@ -73,6 +73,7 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   '.php': 'php',
   '.swift': 'swift',
   '.sh': 'shell',
+  '.just': 'shell',
   '.bash': 'shell',
   '.zsh': 'shell',
   '.fish': 'shell',
@@ -125,6 +126,8 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
 const FILENAME_TO_LANGUAGE: Record<string, string> = {
   Dockerfile: 'dockerfile',
   Makefile: 'makefile',
+  Justfile: 'shell',
+  '.justfile': 'shell',
   'CMakeLists.txt': 'cmake',
   '.gitignore': 'ini',
   '.gitattributes': 'ini',

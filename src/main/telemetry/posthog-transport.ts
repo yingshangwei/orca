@@ -1,6 +1,7 @@
 import { arch as osArch, platform as osPlatform, release as osRelease } from 'node:os'
 import { PostHog } from 'posthog-node'
 import { getAppEnvironment } from '../../shared/app-environment'
+import { getMainHttpClient } from '../network/http-client'
 import type { CommonProps, EventName } from '../../shared/telemetry-events'
 import type { ConsentState } from './consent'
 
@@ -83,8 +84,11 @@ export function createPostHogClient(writeKey: string, consent: ConsentState): Po
     flushInterval: 10_000,
     // Strip SDK-auto GeoIP / client-IP enrichment; our wire is exactly CommonProps ∪ EventProps ∪ a small allow-list.
     disableGeoip: true,
-    // Bumped from the default 1000 (drops oldest-first past cap) to 5000 to tolerate long-offline sessions.
-    maxQueueSize: 5000
+    // Increase offline buffer from 1000 to 5000; overflow drops oldest events.
+    maxQueueSize: 5000,
+    // The SDK's default global fetch skips the desktop session's proxy; resolved per send.
+    // Omit credentials so the desktop session never attaches its cookies to telemetry.
+    fetch: (url, options) => getMainHttpClient().fetch(url, { ...options, credentials: 'omit' })
   })
 
   if (shouldOptOutSdkAtInit(consent)) {

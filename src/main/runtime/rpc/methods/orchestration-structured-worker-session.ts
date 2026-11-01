@@ -16,6 +16,8 @@
 import { randomUUID } from 'node:crypto'
 import { isDefinitiveAgentSessionCreateRefusal } from '../../../../shared/agent-session-definitive-refusal'
 import type { AgentMessageSource } from '../../../../shared/agent-session-message-source'
+import { readAgentSessionFailureFact } from '../../../../shared/agent-session-failure'
+import { quotedProviderDetail } from '../../../../shared/agent-session-failure-words'
 import type {
   AgentJournalMessageItem,
   AgentJournalSubmission
@@ -283,16 +285,21 @@ export function preambleDispatchState(
     return submission.dispatchState
   }
   if (submission?.dispatchState === 'rejected') {
-    // A rejection is a verdict, not a mystery: the preamble provably did not happen.
-    // `dispatch_preamble_undelivered` says exactly that, and says it as a code rather
-    // than as prose, so a coordinator can tell "we could not send it" apart from
-    // `operation_unknown`'s "it may be running and you must go look". Both discard the
-    // pending receipt; only this one lets the caller retry knowing nothing landed.
+    // Name the failure detail unless the reason already quotes it.
+    const failure = readAgentSessionFailureFact(submission.rejection)
+    const detail = failure?.detail
+    const quoted =
+      detail && !(detail.audience === 'log' && failure?.kind === 'providerRetrying')
+        ? quotedProviderDetail(detail.text)
+        : ''
+    const detailClause =
+      quoted && !submission.reason?.includes(quoted) ? ` Details: ${quoted}.` : ''
+    // Definitive rejection gets a typed non-delivery code so the coordinator can retry without a duplicate turn.
     throw new OrchestrationError(
       'dispatch_preamble_undelivered',
       `The dispatch preamble was not delivered${
         submission.rejection ? ` (${submission.rejection.kind})` : ''
-      }: ${reasonClause(submission.reason)}.`
+      }: ${reasonClause(submission.reason)}.${detailClause}`
     )
   }
   // Only `accepted` is an acknowledgement — the same rule the mail lane already applies. A thrown

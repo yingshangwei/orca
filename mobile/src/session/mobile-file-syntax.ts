@@ -49,7 +49,9 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   shellscript: 'bash',
   zsh: 'bash',
   fish: 'bash',
-  yml: 'yaml'
+  yml: 'yaml',
+  // HCL assignments, strings and comments use the bundled ini grammar on mobile.
+  hcl: 'ini'
 }
 
 export function resolveMobileSyntaxLanguage(filePath: string, preferredLanguage?: string): string {

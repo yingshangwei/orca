@@ -17,6 +17,7 @@ type WorkerMessage =
     }
   | { type: 'feed'; samples: Float32Array; sampleRate: number }
   | { type: 'stop' }
+  | { type: 'discard' }
   | { type: 'teardown' }
 
 // Why: the main sherpa-onnx npm package uses WASM which cannot access the host
@@ -188,16 +189,20 @@ function decodeOfflineChunk(samples: Float32Array): string {
   }
 }
 
-// Why: warm-worker reuse must not see residual audio or a spent offline stream.
-// Recovery failures are swallowed so they cannot skip the stopped lifecycle signal.
-function resetOfflineSessionState(): void {
+// Discard residual audio and spent streams so a warm worker never carries one session into the next.
+function resetSessionState(): void {
   try {
-    offlineChunker = new OfflineAudioChunker(offlineSampleRate)
+    if (!isStreaming) {
+      offlineChunker = new OfflineAudioChunker(offlineSampleRate)
+    }
     if (sherpa && recognizer) {
-      stream = sherpa.createOfflineStream(recognizer)
+      stream = isStreaming
+        ? sherpa.createOnlineStream(recognizer)
+        : sherpa.createOfflineStream(recognizer)
     }
   } catch {
-    // Non-fatal: prefer posting stopped over stranding stopDictation for 60s.
+    // The old stream still holds the last session's audio; exiting settles stop and forces a fresh worker.
+    process.exit(1)
   }
 }
 
@@ -280,7 +285,6 @@ function handleStop(): void {
       if (text) {
         parentPort?.postMessage({ type: 'final', text })
       }
-      stream = sherpa.createOnlineStream(recognizer)
     } else {
       // Why: the remainder is below the chunk limit by construction, so this
       // last decode is bounded too.
@@ -291,17 +295,20 @@ function handleStop(): void {
           parentPort?.postMessage({ type: 'final', text })
         }
       }
-      resetOfflineSessionState()
     }
   } catch (err) {
-    if (!isStreaming) {
-      resetOfflineSessionState()
-    }
     parentPort?.postMessage({ type: 'error', error: String(err) })
   } finally {
-    // Why: stopDictation waits on this signal; recovery must never prevent it.
+    resetSessionState()
+    // Recovery must not suppress the stopped signal awaited by stopDictation.
     parentPort?.postMessage({ type: 'stopped' })
   }
+}
+
+// A canceled dictation drops its audio undecoded so the warm worker is free at once.
+function handleDiscard(): void {
+  resetSessionState()
+  parentPort?.postMessage({ type: 'stopped' })
 }
 
 function handleTeardown(): void {
@@ -322,6 +329,9 @@ parentPort?.on('message', (msg: WorkerMessage) => {
       break
     case 'stop':
       handleStop()
+      break
+    case 'discard':
+      handleDiscard()
       break
     case 'teardown':
       handleTeardown()

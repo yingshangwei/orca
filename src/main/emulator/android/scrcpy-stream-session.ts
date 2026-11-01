@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
+import { spawnProcess } from '@orca/process-host'
 import { connect, type Socket } from 'node:net'
 import { randomBytes } from 'node:crypto'
 import { RelayFrameBuffer } from '../../../shared/relay-frame-buffer'
@@ -119,9 +120,10 @@ export class ScrcpyStreamSession {
 
   private spawnServer(): void {
     const { sdk, serial, maxSize } = this.options
-    // The server is long-running, so spawn it directly rather than via the
-    // request/response command runner.
-    this.server = spawn(sdk.adb, startScrcpyServerArgs(serial, { scid: this.scid, maxSize }), {
+    // The command runner's timeout is unsuitable for the long-running server.
+    this.server = spawnProcess({
+      program: sdk.adb,
+      args: startScrcpyServerArgs(serial, { scid: this.scid, maxSize }),
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let serverLog = ''
