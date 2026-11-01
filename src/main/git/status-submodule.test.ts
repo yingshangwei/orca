@@ -122,11 +122,11 @@ describe('submodule diff routing', () => {
     const result = await getDiff(PARENT, 'flutter_mine/lib/main.dart', false)
 
     expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(
-      ['show', '--end-of-options', `${OLD_OID}:lib/main.dart`],
+      ['cat-file', 'blob', '--', `${OLD_OID}:lib/main.dart`],
       { cwd: SUBMODULE, maxBuffer: 10 * 1024 * 1024, preferWslDirectGit: true }
     )
     expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(
-      ['show', '--end-of-options', `${NEW_OID}:lib/main.dart`],
+      ['cat-file', 'blob', '--', `${NEW_OID}:lib/main.dart`],
       { cwd: SUBMODULE, maxBuffer: 10 * 1024 * 1024, preferWslDirectGit: true }
     )
     expect(result.kind).toBe('text')
@@ -166,11 +166,11 @@ describe('submodule diff routing', () => {
     const result = await getDiff(PARENT, 'flutter_mine/lib/main.dart', true)
 
     expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(
-      ['show', '--end-of-options', `${OLD_OID}:lib/main.dart`],
+      ['cat-file', 'blob', '--', `${OLD_OID}:lib/main.dart`],
       { cwd: SUBMODULE, maxBuffer: 10 * 1024 * 1024, preferWslDirectGit: true }
     )
     expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(
-      ['show', '--end-of-options', `${NEW_OID}:lib/main.dart`],
+      ['cat-file', 'blob', '--', `${NEW_OID}:lib/main.dart`],
       { cwd: SUBMODULE, maxBuffer: 10 * 1024 * 1024, preferWslDirectGit: true }
     )
     expect(result.kind).toBe('text')
@@ -200,11 +200,14 @@ describe('submodule diff routing', () => {
 
     const result = await getDiff(PARENT, 'flutter_mine/lib/main.dart', false)
 
-    expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(['show', ':lib/main.dart'], {
-      cwd: SUBMODULE,
-      maxBuffer: 10 * 1024 * 1024,
-      preferWslDirectGit: true
-    })
+    expect(gitExecFileAsyncBufferMock).toHaveBeenCalledWith(
+      ['cat-file', 'blob', '--', ':lib/main.dart'],
+      {
+        cwd: SUBMODULE,
+        maxBuffer: 10 * 1024 * 1024,
+        preferWslDirectGit: true
+      }
+    )
     expect(readFileMock).toHaveBeenCalledWith(path.join(SUBMODULE, 'lib/main.dart'))
     expect(result.kind).toBe('text')
     expect(result.originalContent).toBe('old\n')

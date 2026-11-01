@@ -8,8 +8,6 @@ export type StatsEventType =
 export type StatsEvent = {
   type: StatsEventType
   at: number // Date.now() timestamp
-  // Optional context for future per-repo/per-worktree breakdowns.
-  // Not used for v1 aggregation but captured now to avoid retrofitting.
   repoId?: string
   worktreeId?: string
   meta?: Record<string, string | number>
@@ -28,10 +26,7 @@ export type StatsAggregates = {
   // Set of PR URLs already counted, to deduplicate across restarts.
   // Bounded in practice (a few hundred at most).
   countedPRs: string[]
-  // Why persisted here instead of derived from events[0].at:
-  // The event log is bounded to 10K entries. Once trimmed, events[0].at
-  // would jump forward, making "tracking since..." inaccurate. This field
-  // is set once on the very first event and never updated.
+  // Persisted because raw events are not retained.
   firstEventAt: number | null
 }
 
@@ -39,6 +34,7 @@ export type StatsAggregates = {
 
 export type StatsFile = {
   schemaVersion: number
+  // Always written empty since #35544; older files may still carry events, which load ignores.
   events: StatsEvent[]
   aggregates: StatsAggregates
 }

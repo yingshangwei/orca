@@ -1,3 +1,4 @@
+import { stripAnsiEscapeSequences } from '../../../shared/ansi-escape-sequences'
 import {
   GIT_AUTHENTICATION_FAILED_MESSAGE,
   formatSubmodulePushFailureDetail,
@@ -27,7 +28,7 @@ function truncateDetail(detail: string): string {
 function extractPublishFailureDetail(message: string): string | null {
   let remoteDetail: string | null = null
 
-  for (const rawLine of iterateRemoteErrorLines(message)) {
+  for (const rawLine of iterateRemoteErrorLines(stripAnsiEscapeSequences(message))) {
     const line = rawLine.trim()
     if (!line) {
       continue
@@ -78,8 +79,9 @@ function isNonFastForwardRemoteError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false
   }
+  const message = stripAnsiEscapeSequences(error.message)
   return (
-    /non-fast-forward|fetch first|updates were rejected|stale info/i.test(error.message) ||
+    /non-fast-forward|fetch first|updates were rejected|stale info/i.test(message) ||
     formatSubmodulePushFailureDetail(error.message)?.includes('has remote changes') === true
   )
 }
@@ -125,7 +127,9 @@ export function resolveRemoteOperationErrorMessage(
     return REMOTE_OPERATION_FAILED_MESSAGE
   }
 
-  if (UNCONCLUDED_MERGE_ERROR_PATTERN.test(error.message)) {
+  const message = stripCredentialsFromMessage(stripAnsiEscapeSequences(error.message))
+
+  if (UNCONCLUDED_MERGE_ERROR_PATTERN.test(message)) {
     if (options?.isRebase) {
       return 'Rebase blocked — resolve existing conflicts first.'
     }
@@ -134,7 +138,7 @@ export function resolveRemoteOperationErrorMessage(
       : 'Pull blocked — resolve existing merge conflicts first.'
   }
 
-  if (FRESH_MERGE_CONFLICT_ERROR_PATTERN.test(error.message)) {
+  if (FRESH_MERGE_CONFLICT_ERROR_PATTERN.test(message)) {
     if (options?.isRebase) {
       return 'Rebase stopped with conflicts. Resolve them in Source Control, then continue the rebase.'
     }
@@ -144,28 +148,28 @@ export function resolveRemoteOperationErrorMessage(
   }
 
   if (options?.publish) {
-    const submoduleMessage = resolveSubmodulePushFailureMessage(error.message, 'Publish Branch')
+    const submoduleMessage = resolveSubmodulePushFailureMessage(message, 'Publish Branch')
     if (submoduleMessage) {
       return submoduleMessage
     }
   }
 
   if (options?.isSync) {
-    const submoduleMessage = resolveSubmodulePushFailureMessage(error.message, 'Sync')
+    const submoduleMessage = resolveSubmodulePushFailureMessage(message, 'Sync')
     if (submoduleMessage) {
       return submoduleMessage
     }
   }
 
   if (options?.isForcePush) {
-    const submoduleMessage = resolveSubmodulePushFailureMessage(error.message, 'Force Push')
+    const submoduleMessage = resolveSubmodulePushFailureMessage(message, 'Force Push')
     if (submoduleMessage) {
       return submoduleMessage
     }
   }
 
   if (options?.isPush) {
-    const submoduleMessage = resolveSubmodulePushFailureMessage(error.message, 'Push')
+    const submoduleMessage = resolveSubmodulePushFailureMessage(message, 'Push')
     if (submoduleMessage) {
       return submoduleMessage
     }
@@ -173,8 +177,8 @@ export function resolveRemoteOperationErrorMessage(
 
   const isPushLikeOperation =
     options?.isPush || options?.isForcePush || options?.publish || options?.isSyncPushStage
-  if (isPushLikeOperation && isPushHookFailure(error.message)) {
-    const summary = summarizePushFailure(error.message)
+  if (isPushLikeOperation && isPushHookFailure(message)) {
+    const summary = summarizePushFailure(message)
     const operationLabel = options?.publish
       ? 'Publish Branch'
       : options?.isSyncPushStage
@@ -190,10 +194,7 @@ export function resolveRemoteOperationErrorMessage(
   // fetch and push — not "user forgot to pull". Saying "Pull first" would
   // be wrong (sync just did). Branch isSync above the shared NFF path so
   // sync gets a sync-shaped message instead of inheriting the push wording.
-  if (
-    options?.isSync &&
-    /non-fast-forward|fetch first|updates were rejected/i.test(error.message)
-  ) {
+  if (options?.isSync && /non-fast-forward|fetch first|updates were rejected/i.test(message)) {
     return 'Sync failed — remote moved while syncing. Try again.'
   }
 
@@ -202,14 +203,14 @@ export function resolveRemoteOperationErrorMessage(
   // path and can reintroduce commits they meant to replace.
   if (
     options?.isForcePush &&
-    /non-fast-forward|fetch first|updates were rejected|stale info/i.test(error.message)
+    /non-fast-forward|fetch first|updates were rejected|stale info/i.test(message)
   ) {
     return 'Force push rejected — remote changed since last fetch. Fetch first, then try again.'
   }
 
   // Why: non-fast-forward/rejected detection is shared across publish and push so
   // both paths surface the same actionable toast regardless of operation type.
-  if (/non-fast-forward|fetch first|updates were rejected/i.test(error.message)) {
+  if (/non-fast-forward|fetch first|updates were rejected/i.test(message)) {
     return 'Push rejected — remote has changes. Pull first, then try again.'
   }
 
@@ -217,9 +218,7 @@ export function resolveRemoteOperationErrorMessage(
   // that would be overwritten; surface a single readable line instead of the
   // multi-line git stderr (which lists every affected path).
   if (
-    /local changes.*would be overwritten|Please commit your changes or stash them/i.test(
-      error.message
-    )
+    /local changes.*would be overwritten|Please commit your changes or stash them/i.test(message)
   ) {
     if (options?.isRebase) {
       return 'Rebase blocked — commit or stash your local changes first.'
@@ -230,7 +229,7 @@ export function resolveRemoteOperationErrorMessage(
     return 'Pull blocked — commit or stash your local changes first.'
   }
 
-  if (/Pull would overwrite local changes/i.test(error.message)) {
+  if (/Pull would overwrite local changes/i.test(message)) {
     if (options?.isRebase) {
       return 'Rebase blocked — commit or stash your local changes first.'
     }
@@ -240,7 +239,7 @@ export function resolveRemoteOperationErrorMessage(
     return 'Pull blocked — commit or stash your local changes first.'
   }
 
-  if (/Pull would overwrite untracked files/i.test(error.message)) {
+  if (/Pull would overwrite untracked files/i.test(message)) {
     if (options?.isRebase) {
       return 'Rebase blocked — move, remove, or add untracked files first.'
     }
@@ -251,7 +250,7 @@ export function resolveRemoteOperationErrorMessage(
   }
 
   // Why: the normalized auth message has no `fatal:` line and usually arrives IPC/RPC-wrapped.
-  if (error.message.includes(GIT_AUTHENTICATION_FAILED_MESSAGE)) {
+  if (message.includes(GIT_AUTHENTICATION_FAILED_MESSAGE)) {
     const operationLabel = options?.publish
       ? 'Publish Branch'
       : options?.isSync
@@ -273,7 +272,7 @@ export function resolveRemoteOperationErrorMessage(
   if (options?.publish) {
     // Why: publish failures often bubble up as raw wrapped git/IPC payloads; this
     // keeps the toast human-readable while preserving the actionable fatal reason.
-    const detail = extractPublishFailureDetail(error.message)
+    const detail = extractPublishFailureDetail(message)
     if (detail) {
       return `Publish Branch failed. ${detail}. Check your remote access and try again.`
     }
@@ -285,7 +284,7 @@ export function resolveRemoteOperationErrorMessage(
     // Why: the user invoked Sync — surface "Sync failed" rather than leaking
     // the inner-step name ("Push failed"). Detail extraction matches push so
     // auth / protected-branch reasons stay actionable.
-    const detail = extractPublishFailureDetail(error.message)
+    const detail = extractPublishFailureDetail(message)
     if (detail) {
       return `Sync failed. ${detail}. Check your remote access and try again.`
     }
@@ -293,7 +292,7 @@ export function resolveRemoteOperationErrorMessage(
   }
 
   if (options?.isForcePush) {
-    const detail = extractPublishFailureDetail(error.message)
+    const detail = extractPublishFailureDetail(message)
     if (detail) {
       return `Force Push failed. ${detail}. Check your remote access and try again.`
     }
@@ -303,7 +302,7 @@ export function resolveRemoteOperationErrorMessage(
   if (options?.isPush) {
     // Why: surfacing fatal/remote lines from git is more actionable than a generic
     // connection message for auth errors, protected branches, etc.
-    const detail = extractPublishFailureDetail(error.message)
+    const detail = extractPublishFailureDetail(message)
     if (detail) {
       return `Push failed. ${detail}. Check your remote access and try again.`
     }
@@ -311,27 +310,21 @@ export function resolveRemoteOperationErrorMessage(
   }
 
   if (options?.isFetch) {
-    const detail =
-      extractPublishFailureDetail(error.message) ??
-      truncateDetail(stripCredentialsFromMessage(error.message))
+    const detail = extractPublishFailureDetail(message) ?? truncateDetail(message)
     return `Fetch failed. ${detail}`
   }
 
   if (options?.isFastForward) {
-    const detail =
-      extractPublishFailureDetail(error.message) ??
-      truncateDetail(stripCredentialsFromMessage(error.message))
+    const detail = extractPublishFailureDetail(message) ?? truncateDetail(message)
     return `Fast-forward failed. ${detail}`
   }
 
   if (options?.isRebase) {
-    const detail =
-      extractPublishFailureDetail(error.message) ??
-      truncateDetail(stripCredentialsFromMessage(error.message))
+    const detail = extractPublishFailureDetail(message) ?? truncateDetail(message)
     return `Rebase failed. ${detail}`
   }
 
-  return error.message
+  return message
 }
 
 export { isNonFastForwardRemoteError }
