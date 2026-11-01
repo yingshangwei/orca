@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
+import { withTimeout } from '../../shared/promise-timeout-fallback'
 
 export type ClipboardFileResult = { ok: boolean; reason?: string }
 
@@ -20,6 +21,7 @@ export type ClipboardFileDeps = {
 }
 
 const WINDOWS_CLIPBOARD_FILE_ENV = 'ORCA_CLIPBOARD_FILE'
+export const CLIPBOARD_FILE_RESOLUTION_TIMEOUT_MS = 5_000
 
 // Put a real OS-level file reference on the clipboard so pasting in Finder /
 // Explorer / a file manager drops the actual file (not its path as text). Only
@@ -32,7 +34,12 @@ export async function writeFileToClipboard(
   if (typeof filePath !== 'string' || !isAbsolute(filePath)) {
     return { ok: false, reason: 'invalid-path' }
   }
-  const resolvedFile = await deps.resolveFilePath(filePath)
+  // Copies share one ordered queue, so a hung mount must not block every later clipboard write.
+  const resolvedFile = await withTimeout(
+    deps.resolveFilePath(filePath),
+    CLIPBOARD_FILE_RESOLUTION_TIMEOUT_MS,
+    { ok: false, reason: 'clipboard-write-failed' }
+  )
   if (!resolvedFile.ok) {
     return { ok: false, reason: resolvedFile.reason }
   }
