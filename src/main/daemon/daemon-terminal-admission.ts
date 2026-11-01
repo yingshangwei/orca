@@ -183,7 +183,8 @@ export class DaemonTerminalAdmission {
       ...(result.agentSessionEnsure ? { agentSessionEnsure: result.agentSessionEnsure } : {}),
       ...(result.cwdReadableByDaemon !== undefined
         ? { cwdReadableByDaemon: result.cwdReadableByDaemon }
-        : {})
+        : {}),
+      ...(result.inputClosed ? { inputClosed: true as const } : {})
     }
   }
 
@@ -207,6 +208,16 @@ export class DaemonTerminalAdmission {
           transformed,
           seq
         })
+      },
+      onInputClosed: (incarnationId) => {
+        const routedSessionId = sessionId()
+        this.options.streamDataBatcher.enqueueControlEvent(clientId, routedSessionId, {
+          type: 'event',
+          event: 'inputClosed',
+          sessionId: routedSessionId,
+          payload: { incarnationId }
+        })
+        this.options.streamDataBatcher.flush(clientId)
       },
       onExit: (code, incarnationId, cause) => {
         const routedSessionId = sessionId()

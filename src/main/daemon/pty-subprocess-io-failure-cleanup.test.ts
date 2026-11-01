@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as pty from 'node-pty'
-import { createDaemonPtySubprocessHandle } from './pty-subprocess/subprocess-handle'
+import {
+  createDaemonPtySubprocessHandle,
+  MASTER_CLOSE_EXIT_GRACE_MS
+} from './pty-subprocess/subprocess-handle'
 import { mockPtyProcess } from './pty-subprocess-test-harness'
 import { TerminalHost } from './terminal-host'
 import { HeadlessEmulator } from './headless-emulator'
@@ -211,4 +214,95 @@ describe.each(['darwin', 'linux', 'win32'] as const)('%s native-handle contract'
       }
     })
   })
+
+  it("treats a master-retiring stream error as closed input when node-pty emits no 'close'", () => {
+    vi.useFakeTimers()
+    try {
+      const errorListeners: ((error: unknown) => void)[] = []
+      const proc = {
+        ...mockPtyProcess(4242),
+        destroy: vi.fn(),
+        _writable: true,
+        on: (event: string, listener: (error: unknown) => void) => {
+          if (event === 'error') {
+            errorListeners.push(listener)
+          }
+        }
+      }
+      const handle = createDaemonPtySubprocessHandle({
+        process: proc as unknown as pty.IPty,
+        shellPath: 'pwsh.exe',
+        spawnCwd: process.cwd(),
+        env: {},
+        startupCommandDeliveredInShellArgs: false,
+        reportsChildExitStatus: true,
+        sessionId: 'io-failure',
+        startupAgentRecognition: null
+      })
+      const onInputClosed = vi.fn()
+      handle.onInputClosed?.(onInputClosed)
+      errorListeners.forEach((listener) => listener(new Error('read EAGAIN')))
+      expect(handle.isInputClosed?.()).toBe(false)
+      // node-pty's own handler runs first and retires the master before ours.
+      proc._writable = false
+      errorListeners.forEach((listener) => listener(new Error('read ECONNRESET')))
+      expect(handle.isInputClosed?.()).toBe(true)
+      handle.write('dropped')
+      expect(proc.write).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(MASTER_CLOSE_EXIT_GRACE_MS)
+      expect(onInputClosed).toHaveBeenCalledWith('master_closed: read ECONNRESET')
+      handle.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['exit', 'dispose'] as const)(
+    'cancels the input-closed grace when normal %s wins',
+    (completion) => {
+      vi.useFakeTimers()
+      try {
+        const closeListeners: (() => void)[] = []
+        const proc = {
+          ...mockPtyProcess(4242),
+          destroy: vi.fn(),
+          on: (event: string, listener: () => void) => {
+            if (event === 'close') {
+              closeListeners.push(listener)
+            }
+          }
+        }
+        const handle = createDaemonPtySubprocessHandle({
+          // SAFETY: the fixture implements the node-pty members the handle reads.
+          process: proc as unknown as pty.IPty,
+          shellPath: 'bash',
+          spawnCwd: process.cwd(),
+          env: {},
+          startupCommandDeliveredInShellArgs: false,
+          reportsChildExitStatus: true,
+          sessionId: 'normal-close',
+          startupAgentRecognition: null
+        })
+        const onInputClosed = vi.fn()
+        const onExit = vi.fn()
+        handle.onInputClosed?.(onInputClosed)
+        handle.onExit(onExit)
+        closeListeners.forEach((listener) => listener())
+        expect(handle.isInputClosed?.()).toBe(true)
+        expect(onInputClosed).not.toHaveBeenCalled()
+        if (completion === 'exit') {
+          proc._simulateExit(0)
+          expect(onExit).toHaveBeenCalledOnce()
+        } else {
+          handle.dispose()
+          expect(onExit).not.toHaveBeenCalled()
+        }
+        vi.advanceTimersByTime(MASTER_CLOSE_EXIT_GRACE_MS)
+        expect(onInputClosed).not.toHaveBeenCalled()
+        handle.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
 })

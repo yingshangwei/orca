@@ -38,6 +38,8 @@ export type CreateOrAttachOptions = {
   streamClient: {
     onData: (data: string, rawLength?: number, transformed?: boolean, seq?: number) => void
     onExit: (code: number, incarnationId: PtyIncarnationId, cause?: TerminalExitCause) => void
+    /** The child may still run, but its PTY master no longer takes input. */
+    onInputClosed?: (incarnationId: PtyIncarnationId) => void
   }
   /** Lets the daemon route output under the adopted owner's canonical id before
    *  attaching its stream callbacks. */
@@ -57,4 +59,6 @@ export type CreateOrAttachResult = {
   agentSessionEnsure?: AgentSessionClaimedSpawnResult
   /** Daemon-process verdict on the spawn cwd; only set on a fresh spawn that was given a cwd. */
   cwdReadableByDaemon?: boolean
+  /** The live child can no longer take input through its PTY master. */
+  inputClosed?: true
 }
