@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiVaultListResult } from '../../shared/ai-vault-types'
+import { invalidateAiVaultHostLegCache } from './ai-vault-host-leg-cache'
+import { invalidateAiVaultSessionListCache } from '../ai-vault/cached-session-list'
 
 const mocks = vi.hoisted(() => ({
   scanAiVaultSessionsInService: vi.fn(),
@@ -102,6 +104,34 @@ describe('Agent Session History scan coalescing', () => {
     resolveScan?.(EMPTY_RESULT)
     await expect(second).resolves.toMatchObject(EMPTY_RESULT)
   })
+
+  it.each([
+    ['local', 'desktop', mocks.scanAiVaultSessionsInService],
+    ['local', 'remote-client', mocks.scanAiVaultSessionsInService],
+    ['runtime:remote-server', 'desktop', mocks.scanRuntimeAiVaultSessions]
+  ] as const)(
+    'does not let a %s read after a %s delete join a scan that began before it',
+    async (scope, deleter, scan) => {
+      registerRuntimeHost()
+      let finishBeforeDelete = (_result: AiVaultListResult): void => {}
+      scan
+        .mockReturnValueOnce(new Promise((resolve) => (finishBeforeDelete = resolve)))
+        .mockResolvedValueOnce({ ...EMPTY_RESULT, scannedAt: '2026-07-28T00:00:00.000Z' })
+      const beforeDelete = _internals.listAiVaultSessions({ executionHostScope: scope })
+      await vi.waitFor(() => expect(scan).toHaveBeenCalledTimes(1))
+
+      // Remote-client deletes skip the desktop host-leg cache.
+      if (deleter === 'desktop') {
+        invalidateAiVaultHostLegCache()
+      }
+      invalidateAiVaultSessionListCache()
+      const afterDelete = _internals.listAiVaultSessions({ executionHostScope: scope })
+      finishBeforeDelete(EMPTY_RESULT)
+
+      await expect(afterDelete).resolves.toMatchObject({ scannedAt: '2026-07-28T00:00:00.000Z' })
+      await expect(beforeDelete).resolves.toMatchObject({ scannedAt: EMPTY_RESULT.scannedAt })
+    }
+  )
 
   it('reports a failed local scan as a host issue rather than rejecting', async () => {
     mocks.scanAiVaultSessionsInService.mockRejectedValue(new Error('transcript root is unreadable'))
