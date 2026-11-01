@@ -46,6 +46,14 @@ look:
 ORCA orchestration check --terminal <worker_handle> --json
 ```
 
+Process every message in the batch, then acknowledge it with the returned
+`deliveryId`, which also reads the next batch; repeat until `count` is 0. An
+unacknowledged batch replays and hides newer mail:
+
+```text
+ORCA orchestration check --terminal <worker_handle> --ack <delivery_id> --json
+```
+
 Run it at each natural checkpoint — before starting a new file, after a test
 run — and once more immediately before `worker_done`, so a redirect or a
 cancellation lands before the Task settles. `check` names its caller with

@@ -325,7 +325,7 @@ test('a phone can read a Codex chat it resumed from Session History before its f
     // The phone's own builder, with the agent command pointed at the fake.
     const launch = buildMobileAiVaultResumeLaunch({
       session: session!,
-      hostPlatform: process.platform,
+      workspacePlatform: process.platform,
       settings: { agentCmdOverrides: { codex: resumedCodex } }
     })
     const { tab } = await phone.call<{ tab: { parentTabId: string } }>(

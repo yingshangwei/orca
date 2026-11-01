@@ -51,6 +51,11 @@ function createStructuredChatPresenceSelector(
   }
 }
 
+/** Unknown chats remain awake for display. */
+export const hasAwakeStructuredChat = createStructuredChatPresenceSelector(
+  (sleptAt) => typeof sleptAt !== 'number'
+)
+
 /** Missing is unknown; null keeps the chat awake for display, without proving execution. */
 export const hasUnknownStructuredChat = createStructuredChatPresenceSelector(
   (sleptAt) => sleptAt === undefined

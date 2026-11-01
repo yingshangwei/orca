@@ -26,8 +26,7 @@ import {
   clearMobileNativeChatDraftForSend,
   editMobileNativeChatDraft,
   readMobileNativeChatDraftEditGeneration,
-  setMobileNativeChatDraftText,
-  useMobileNativeChatDraft
+  setMobileNativeChatDraftText
 } from './mobile-native-chat-draft-store'
 
 export type { MobileNativeChatPendingMessage, MobileNativeChatSendOrigin }
@@ -56,7 +55,8 @@ export function useMobileNativeChatDrafts(args: {
    *  does a send's captured tail describe a real boundary. */
   transcriptSettled: boolean
 }): {
-  composerText: string
+  // Subscribe where the text is drawn; a subscriber here redraws the session screen per keystroke.
+  draftKey: string | null
   setComposerText: Dispatch<SetStateAction<string>>
   /** Append after existing typing (newline-joined); a queued card's Edit copy lands here.
    *  False when nothing was appended: no active draft, or no text. */
@@ -97,7 +97,6 @@ export function useMobileNativeChatDrafts(args: {
   } = args
   const draftKey = mobileNativeChatScopeKey(hostId, worktreeId, tabId)
   const pendingKey = draftKey && sessionId ? `${draftKey}\0${sessionId}` : null
-  const composerText = useMobileNativeChatDraft(draftKey)
   const [pendingBySession, setPendingBySession] = useState<
     Record<string, MobileNativeChatPendingMessage[]>
   >({})
@@ -278,7 +277,7 @@ export function useMobileNativeChatDrafts(args: {
   }, [messages, pending, pendingKey, transcriptSettled])
 
   return {
-    composerText,
+    draftKey,
     setComposerText,
     appendComposerText,
     getComposerEditGeneration,

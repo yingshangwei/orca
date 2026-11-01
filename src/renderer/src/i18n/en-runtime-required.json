@@ -2926,6 +2926,13 @@
           }
         }
       },
+      "dropFailureReason": {
+        "changed": "The file changed while it was uploading. Try again.",
+        "disconnected": "The host is disconnected.",
+        "hostUnreachable": "The connection to the host changed or dropped. Try again.",
+        "noSpace": "The host is out of disk space.",
+        "tooLarge": "Too large to upload to this host."
+      },
       "dropSkipReason": {
         "missing": "No longer at its original path.",
         "permissionDenied": "Permission denied.",
@@ -3359,6 +3366,18 @@
           "managePullRequests": "Read, comment on, and merge pull requests without leaving Orca",
           "reviewStatus": "See issue state, review status, and CI checks on every worktree",
           "startWorkspaceFromIssue": "Start a workspace from any GitHub issue or pull request, prefilled with its title and context"
+        }
+      }
+    },
+    "tab": {
+      "bar": {
+        "bulkClose": {
+          "confirm": "Close tabs",
+          "description": "The selected tabs will be closed. Pinned tabs will stay open.",
+          "editors": "Close all editor tabs?",
+          "left": "Close tabs to the left?",
+          "others": "Close other tabs?",
+          "right": "Close tabs to the right?"
         }
       }
     },

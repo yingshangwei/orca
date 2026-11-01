@@ -5,7 +5,6 @@ import type { BrowserError } from './cdp-bridge'
 // Why: must exceed agent-browser's internal timeouts (goto 30s, wait 60s) so the bridge never kills a command before its own timeout fires.
 export const EXEC_TIMEOUT_MS = 90_000
 export const CONSECUTIVE_TIMEOUT_LIMIT = 3
-export const WAIT_PROCESS_TIMEOUT_GRACE_MS = 1_000
 export const STALE_SESSION_CLOSE_TIMEOUT_MS = 3_000
 export const AGENT_BROWSER_EXIT_DRAIN_MS = 500
 // Why separate from EXEC_TIMEOUT_MS: a close is a member of the 20s will-quit barrier and must finish well inside it.
@@ -53,7 +52,10 @@ export type AgentBrowserExecOptions = {
   envOverrides?: NodeJS.ProcessEnv
   timeoutMs?: number
   timeoutError?: BrowserError
+  /** The caller owns stdin, so the command goes as argv; only for Orca-authored tokens. */
   stdinText?: string
+  /** Send tokens as argv so global options apply; only for Orca-authored or raw CLI tokens. */
+  cliArgv?: boolean
 }
 
 export type EnqueueTargetedCommandOptions = {

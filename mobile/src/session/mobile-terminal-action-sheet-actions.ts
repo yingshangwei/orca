@@ -27,7 +27,7 @@ export function getMobileTerminalActionSheetActions<
   onCloseSessionTab: (tab: Tab) => void
   /** Appended after Close; receives the pressed tab's id so the session route's
    *  bulk-close builder can resolve the anchor itself. */
-  bulkCloseActions?: (anchorTabId: string | undefined, dismiss: () => void) => ActionSheetAction[]
+  bulkCloseActions?: (anchorTabId: string | undefined) => ActionSheetAction[]
 }): ActionSheetAction[] {
   const { target } = args
   if (!target) {
@@ -79,6 +79,6 @@ export function getMobileTerminalActionSheetActions<
         args.onClose(target)
       }
     },
-    ...(args.bulkCloseActions?.(sessionTab?.id, args.onDismiss) ?? [])
+    ...(args.bulkCloseActions?.(sessionTab?.id) ?? [])
   ]
 }

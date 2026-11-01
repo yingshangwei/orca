@@ -219,7 +219,8 @@
       "refreshFailed": "Preview update failed. Showing the previous version; open source view for current content."
     },
     "fileLoad": {
-      "hostUnresolved": "The host couldn't find this file's workspace. It may have been removed, or the host may not know about it yet. Retry, or close this tab from the tab strip."
+      "hostUnresolved": "The host couldn't find this file's workspace. It may have been removed, or the host may not know about it yet. Retry, or close this tab from the tab strip.",
+      "remoteTooLarge": "This file is too large to open from its host."
     }
   },
   "githubChecks": {
@@ -1326,6 +1327,15 @@
       },
       "clipboardWriteFailure": {
         "tooLarge": "The text is too large to copy."
+      },
+      "dropFailureReason": {
+        "tooLarge": "Too large to upload to this host.",
+        "noSpace": "The host is out of disk space.",
+        "changed": "The file changed while it was uploading. Try again.",
+        "hostUnreachable": "The connection to the host changed or dropped. Try again.",
+        "disconnected": "The host is disconnected.",
+        "unknownOne": "Couldn't upload this file.",
+        "unknownMany": "Couldn't upload these files."
       },
       "dropSkipReason": {
         "missing": "No longer at its original path.",
@@ -3692,7 +3702,10 @@
               "failed": {
                 "toast": {
                   "62a0af2cb4": "Terminal clipboard copy could not be confirmed",
-                  "fdd3e7e977": "The terminal app requested a copy, but Orca could not confirm that it reached the system clipboard."
+                  "fdd3e7e977": "The terminal app requested a copy, but Orca could not confirm that it reached the system clipboard.",
+                  "de286dcfe1": "Terminal copy needs a click",
+                  "84c938ffa2": "The browser blocked a copy from the terminal app. Click Copy to put the text on your clipboard.",
+                  "a73165c6c5": "Copy"
                 }
               }
             }

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission } from '../wait/terminal-wait-permission'
+import { OrcaRuntimeWithTitlelessPaneAgentIdentity } from '../wait/titleless-pane-agent-identity'
 import { agentPromptObservationSignal } from './agent-prompt-signals'
 import type {
   AgentPromptExpectedBinding,
@@ -33,7 +33,7 @@ import {
 import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
 import { AgentPromptPermissionReturnedError } from './agent-prompt-permission-hold'
 
-export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission {
+export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntimeWithTitlelessPaneAgentIdentity {
   protected abstract createAgentPromptRenderGate(
     ptyId: string,
     pasteIngestMs: number

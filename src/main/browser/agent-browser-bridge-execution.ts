@@ -10,6 +10,7 @@ import {
   pageUnavailableMessageForSession
 } from './agent-browser-bridge-process'
 import { translateResult } from './agent-browser-bridge-result'
+import { AGENT_BROWSER_BATCH_ARGS, agentBrowserBatchInput } from './agent-browser-batch-command'
 import { AgentBrowserBridgeTabs } from './agent-browser-bridge-tabs'
 import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
@@ -89,21 +90,13 @@ export abstract class AgentBrowserBridgeExecution extends AgentBrowserBridgeTabs
     this.reinitializeIfDaemonIdledOut(sessionName, session)
     session.lastCommandAt = Date.now()
 
-    const args = ['--session', sessionName]
     const managesInterceptRoutes =
       commandArgs[0] === 'network' && (commandArgs[1] === 'route' || commandArgs[1] === 'unroute')
 
     const needsInit = !session.initialized
     // Why: a restarted named daemon auto-launches Chrome unless every invocation reasserts Orca's CDP owner.
-    args.push('--cdp', String(session.proxy.getPort()))
 
-    // Why: exec passthrough can produce a large argv; spreading into push risks V8 argument limits.
-    for (const commandArg of commandArgs) {
-      args.push(commandArg)
-    }
-    args.push('--json')
-
-    const stdout = await this.runAgentBrowserRaw(sessionName, args, execOptions)
+    const stdout = await this.runAgentBrowserCommand(sessionName, session, commandArgs, execOptions)
     const translated = translateResult(stdout)
 
     if (!translated.ok) {
@@ -127,16 +120,7 @@ export abstract class AgentBrowserBridgeExecution extends AgentBrowserBridgeTabs
         this.pendingInterceptRestore.delete(sessionName)
         try {
           const urlPattern = pendingPatterns[0] ?? '**/*'
-          await this.runAgentBrowserRaw(sessionName, [
-            '--session',
-            sessionName,
-            '--cdp',
-            String(session.proxy.getPort()),
-            'network',
-            'route',
-            urlPattern,
-            '--json'
-          ])
+          await this.runAgentBrowserCommand(sessionName, session, ['network', 'route', urlPattern])
           session.activeInterceptPatterns = pendingPatterns
         } catch {
           // Why: intercept restore is best-effort — don't fail the user's command if the new page can't support it.
@@ -145,6 +129,29 @@ export abstract class AgentBrowserBridgeExecution extends AgentBrowserBridgeTabs
     }
 
     return translated.result
+  }
+
+  private runAgentBrowserCommand(
+    sessionName: string,
+    session: SessionState,
+    commandArgs: string[],
+    execOptions?: AgentBrowserExecOptions
+  ): Promise<string> {
+    // Every invocation must pin CDP ownership or a restarted daemon may launch Chrome.
+    const args = ['--session', sessionName, '--cdp', String(session.proxy.getPort())]
+    // A caller's own stdin (eval --stdin) cannot share the pipe with batch input.
+    if (!execOptions?.cliArgv && execOptions?.stdinText === undefined) {
+      return this.runAgentBrowserRaw(sessionName, [...args, ...AGENT_BROWSER_BATCH_ARGS], {
+        ...execOptions,
+        stdinText: agentBrowserBatchInput(commandArgs)
+      })
+    }
+    // Spreading large passthrough argv can exceed V8's argument limit.
+    for (const commandArg of commandArgs) {
+      args.push(commandArg)
+    }
+    args.push('--json')
+    return this.runAgentBrowserRaw(sessionName, args, execOptions)
   }
 
   protected async isExplicitContentEditableTarget(

@@ -1,3 +1,5 @@
+import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
+import type { AgentForegroundProcessResolution } from './agent-foreground-process'
 import { isShellProcess } from '../../shared/shell-process-detection'
 
 /**
@@ -92,4 +94,29 @@ export function judgeCachedAgentJobEvidence(args: {
     return 'exited'
   }
   return withinAgeBound ? 'unproven' : 'expired'
+}
+
+/** Decision authority comes from fresh recognition or a known anchor not yet proved gone. */
+export function reconcileWindowsAgentDecision(
+  resolution: AgentForegroundProcessResolution,
+  verdict: WindowsCachedAgentJobVerdict,
+  anchor: { processName: string; pid: number | null } | null,
+  shellPid: number
+): string | null {
+  if (resolution.available && recognizeAgentProcessFromCommandLine(resolution.processName ?? '')) {
+    return resolution.processName
+  }
+  if (
+    anchor?.pid != null &&
+    anchor.pid !== shellPid &&
+    recognizeAgentProcessFromCommandLine(anchor.processName) &&
+    !resolution.anchorPidForeign &&
+    (verdict === 'confirmed' ||
+      verdict === 'recheck' ||
+      verdict === 'unavailable' ||
+      verdict === 'unsupported')
+  ) {
+    return anchor.processName
+  }
+  return resolution.available ? resolution.processName : null
 }

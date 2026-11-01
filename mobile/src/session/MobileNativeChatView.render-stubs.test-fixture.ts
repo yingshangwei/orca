@@ -12,6 +12,7 @@ const pageScroller = vi.hoisted(() => ({
   getBoundingClientRect: () => ({ top: 0, bottom: 500 }),
   getAttribute: () => null,
   querySelectorAll: () => [],
+  querySelector: () => null,
   addEventListener: () => {},
   removeEventListener: () => {}
 }))
@@ -66,10 +67,15 @@ export function gestureHandlerStub() {
 }
 
 export async function composerStub() {
+  const { useMobileNativeChatDraft } = await import('./mobile-native-chat-draft-store')
   const React = await import('react')
   const { MobileNativeChatStopButton } = await import('./MobileNativeChatStopButton')
   return {
-    MobileNativeChatComposer: (props: {
+    MobileNativeChatDraftComposer: ({
+      draftKey,
+      ...props
+    }: {
+      draftKey: string | null
       onSend: (text: string) => Promise<boolean>
       disabled?: boolean
       placeholder?: string
@@ -77,7 +83,12 @@ export async function composerStub() {
     }) =>
       React.createElement(
         'Composer',
-        { ...props, accessibilityLabel: 'Send message', onPress: () => props.onSend('hi') },
+        {
+          ...props,
+          value: useMobileNativeChatDraft(draftKey),
+          accessibilityLabel: 'Send message',
+          onPress: () => props.onSend('hi')
+        },
         // The real composer draws Stop in Send's slot while its draft is empty, as here.
         props.stop ? React.createElement(MobileNativeChatStopButton, props.stop) : null
       )

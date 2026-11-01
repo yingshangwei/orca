@@ -60,13 +60,13 @@ import {
   CLIPBOARD_TEXT_WRITE_TOO_LARGE_ERROR
 } from '../../shared/clipboard-text'
 import {
-  createFakeAgentBrowserChild,
+  agentBrowserCommandsIn,
+  answerAgentBrowserCommands,
   createSucceedWith,
   mockBrowserManager,
   mockWebContents,
   overrideBridgeWebContentsLookup,
-  resetAgentBrowserBridgeMocks,
-  type ExecFileCallback
+  resetAgentBrowserBridgeMocks
 } from './agent-browser-bridge-test-harness'
 
 overrideBridgeWebContentsLookup(AgentBrowserBridge.prototype, webContentsFromIdMock)
@@ -74,18 +74,18 @@ overrideBridgeWebContentsLookup(AgentBrowserBridge.prototype, webContentsFromIdM
 const succeedWith = createSucceedWith(execFileMock, stdinWrites)
 
 function succeedForContentEditable(data: unknown = { ok: true }): void {
-  execFileMock.mockImplementation(
-    (_bin: string, args: string[], _opts: unknown, cb: ExecFileCallback) => {
-      const result =
-        args.includes('get') && args.includes('attr') && args.includes('contenteditable')
-          ? { value: 'true' }
-          : data
-      cb(null, JSON.stringify({ success: true, data: result }), '')
-      return createFakeAgentBrowserChild({
-        stdin: { on: vi.fn(), end: (text: string) => stdinWrites.push(text) }
-      })
-    }
-  )
+  answerAgentBrowserCommands(execFileMock, stdinWrites, (command, cb) => {
+    const result =
+      command[0] === 'get' && command[1] === 'attr' && command.includes('contenteditable')
+        ? { value: 'true' }
+        : data
+    cb(null, JSON.stringify({ success: true, data: result }), '')
+  })
+}
+
+// Fill scripts go to `eval --stdin`; every other command arrives as batch JSON.
+function evalScripts(stdin: string[]): string[] {
+  return stdin.filter((text) => !text.startsWith('[['))
 }
 
 class TestEvent {
@@ -177,11 +177,11 @@ function createFillEvalNode(options: {
 }
 
 function runFillEvalExpressions(
-  expressions: string[],
+  stdin: string[],
   document: { activeElement: unknown; getElementById: (id: string) => unknown },
   windowObject: Record<string, unknown> = {}
 ): void {
-  for (const expression of expressions) {
+  for (const expression of evalScripts(stdin)) {
     new Function('document', 'Event', 'window', `return (${expression})`)(
       document,
       TestEvent,
@@ -312,7 +312,7 @@ describe('AgentBrowserBridge', () => {
 
     expect(evalCalls).toHaveLength(1)
     expect(evalCalls[0][1]).toContain('--stdin')
-    expect(stdinWrites).toHaveLength(1)
+    expect(evalScripts(stdinWrites)).toHaveLength(1)
     expect(environment.editor.textContent).toBe(`${firstChunk}tail`)
   })
 
@@ -321,7 +321,7 @@ describe('AgentBrowserBridge', () => {
 
     const result = await bridge.clear('@disabled')
 
-    const commandArgs = execFileMock.mock.calls.map((call: unknown[]) => call[1] as string[])
+    const commandArgs = agentBrowserCommandsIn(stdinWrites)
     expect(commandArgs.some((args) => args.includes('eval'))).toBe(false)
     expect(commandArgs.some((args) => args.includes('fill') && args.includes('@disabled'))).toBe(
       true
@@ -464,7 +464,7 @@ describe('AgentBrowserBridge', () => {
     )
     expect(evalCalls).toHaveLength(1)
     expect(evalCalls[0][1]).toContain('--stdin')
-    expect(stdinWrites).toHaveLength(1)
+    expect(evalScripts(stdinWrites)).toHaveLength(1)
     expect((evalCalls[0][1] as string[]).join('')).not.toContain(text)
     const input = createFillEvalNode({ tagName: 'TEXTAREA' })
     runFillEvalExpressions(stdinWrites, {
@@ -499,20 +499,24 @@ describe('AgentBrowserBridge', () => {
     }
   })
 
+  it('sends option-like text on stdin so agent-browser cannot read it as a flag', async () => {
+    succeedWith({ inserted: true })
+
+    await bridge.keyboardInsertText('--help')
+
+    expect(execFileMock.mock.calls.flatMap((call) => call[1])).not.toContain('--help')
+    expect(agentBrowserCommandsIn(stdinWrites)).toEqual([['keyboard', 'inserttext', '--help']])
+  })
+
   it('chunks large agent-browser type text before keyboard transport', async () => {
     const text = ['y'.repeat(AGENT_BROWSER_TEXT_ARGUMENT_MAX_BYTES), 'zz'].join('')
     succeedWith({ typed: true })
 
     await bridge.type(text)
 
-    const typeCalls = execFileMock.mock.calls.filter((call: unknown[]) => {
-      const args = call[1] as string[]
-      return args.includes('keyboard') && args.includes('type')
-    })
-    const chunks = typeCalls.map((call: unknown[]) => {
-      const args = call[1] as string[]
-      return args[args.indexOf('type') + 1]
-    })
+    const chunks = agentBrowserCommandsIn(stdinWrites)
+      .filter(([name, subcommand]) => name === 'keyboard' && subcommand === 'type')
+      .map(([, , chunk]) => chunk)
 
     expect(chunks).toEqual(['y'.repeat(AGENT_BROWSER_TEXT_ARGUMENT_MAX_BYTES), 'zz'])
   })
@@ -523,14 +527,9 @@ describe('AgentBrowserBridge', () => {
 
     await bridge.keyboardInsertText(text)
 
-    const insertTextCalls = execFileMock.mock.calls.filter((call: unknown[]) => {
-      const args = call[1] as string[]
-      return args.includes('keyboard') && args.includes('inserttext')
-    })
-    const chunks = insertTextCalls.map((call: unknown[]) => {
-      const args = call[1] as string[]
-      return args[args.indexOf('inserttext') + 1]
-    })
+    const chunks = agentBrowserCommandsIn(stdinWrites)
+      .filter(([name, subcommand]) => name === 'keyboard' && subcommand === 'inserttext')
+      .map(([, , chunk]) => chunk)
 
     expect(chunks).toEqual(['z'.repeat(AGENT_BROWSER_TEXT_ARGUMENT_MAX_BYTES), 'qq'])
   })

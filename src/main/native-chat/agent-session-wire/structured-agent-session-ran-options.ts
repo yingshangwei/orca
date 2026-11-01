@@ -1,6 +1,6 @@
 // A chat keeps, for each of its options it has none saved for, what its turn ran: the provider's
-// own evidence of the dispatch, else the message's choice and what its agent reports running. A
-// setting or a default the host filled in is never one.
+// own evidence of the dispatch, else the message's explicit choice. Startup reports and host
+// defaults are not execution evidence.
 
 import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
@@ -19,7 +19,7 @@ type RanOptionsContext = {
   now: () => number
 }
 
-type RanOptions = Partial<Record<'model' | 'effort' | 'serviceTier' | 'fastMode', string>>
+type RanOptions = Partial<Record<'model' | 'effort', string>>
 
 export type StructuredAgentSessionHandedOptions = {
   message?: AgentSessionExecutionOptions
@@ -46,18 +46,12 @@ export function structuredAgentSessionChildRan(
 }
 
 function reportedRan(reported: AgentSessionOptionsResult['current']): RanOptions | null {
-  const { model, effort, serviceTier, fastMode, fastModeState } = reported
+  const { model, effort } = reported
   const filled = reported.defaulted ?? []
   if (!model || model === 'default' || filled.includes('model')) {
     return null
   }
-  return {
-    model,
-    ...(effort && !filled.includes('effort') ? { effort } : {}),
-    ...(serviceTier ? { serviceTier } : {}),
-    // Only Fast routed on ran; an off state may just be Fast unavailable to this account.
-    ...(fastMode && fastModeState === 'on' ? { fastMode: 'true' } : {})
-  }
+  return { model, ...(effort && !filled.includes('effort') ? { effort } : {}) }
 }
 
 /** Notes what a child reports running; a turn handed over before any report records it now. */
@@ -78,7 +72,7 @@ export async function noteStructuredAgentSessionReportedOptions(
     const owed = runs.owed
     await recordStructuredAgentSessionRanOptions(context, sessionId, fence, {
       ...owed,
-      ...(owed.executed ? { executed: { ...owed.executed, model: ran.model } } : {})
+      executed: { ...owed.executed, model: ran.model }
     })
   }
 }
@@ -133,22 +127,19 @@ export async function recordStructuredAgentSessionRanOptions(
   }
   const { message, executed } = handed
   const reported = childRuns.get(child)?.reported
+  // A report only completes an agent's own evidence of the dispatch, never stands in for it.
   const newerModel = checkpoint && reported !== checkpoint.reported ? reported?.model : undefined
-  const model = executed
-    ? (executed.model ?? message?.model ?? newerModel)
-    : (message?.model ?? reported?.model)
-  childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: handed }) })
+  const model = executed ? (executed.model ?? message?.model ?? newerModel) : message?.model
+  childRuns.set(child, {
+    ...(reported ? { reported } : {}),
+    ...(executed && !model ? { owed: handed } : {})
+  })
   if (!model) {
     return
   }
-  // The dispatch's own evidence, where the agent gives it; else the message's effort and what the
-  // report says ran with its own model (a message's tier or Fast may not have run: a steer runs its
-  // turn's).
-  const report: RanOptions = reported?.model === model ? reported : {}
+  // Prefer dispatch proof, else the message's effort; its tier or Fast may not have run.
   const proposed: Readonly<Record<string, string | undefined>> = executed ?? {
-    effort: message?.effort ?? report.effort,
-    serviceTier: report.serviceTier,
-    fastMode: report.fastMode
+    effort: message?.effort
   }
   const ran: Record<string, string> = {}
   for (const [key, value] of Object.entries({ ...proposed, model })) {

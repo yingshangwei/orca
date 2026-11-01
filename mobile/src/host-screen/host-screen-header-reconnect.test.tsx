@@ -35,6 +35,11 @@ function controllerWith(forceReconnectHost: ForceReconnect) {
       navigateFromHostList: () => {},
       openNewWorktreeModal: () => {}
     },
+    connectionVerdict: {
+      kind: 'unreachable',
+      label: "Can't reach desktop",
+      reason: 'never-connected'
+    },
     connState: 'reconnecting',
     embedded: false,
     floatingWorkspaceEnabled: false,
@@ -43,12 +48,6 @@ function controllerWith(forceReconnectHost: ForceReconnect) {
     hostDisplay: resolveHostDisplay({ name: 'Desk' }),
     lastConnectedAt: null,
     onHideSidebar: undefined,
-    reconnectAttempts: 20,
-    relayRecovery: {
-      pendingPath: null,
-      pairingRejected: false,
-      relayHostReachability: 'connecting'
-    },
     settings: { activeFilterCount: 0 },
     state: { hostName: 'Desk', view: { groupBy: 'none' }, showSearch: false }
   }

@@ -175,11 +175,9 @@ function MobileAgentSessionHistoryPanelContent({
       setResumeMessage(null)
       try {
         const {
-          repos,
-          folderWorkspaces,
-          projectGroups,
           settings,
-          worktrees: freshWorktrees
+          worktrees: freshWorktrees,
+          ...catalog
         } = await loadMobileResumeMetadata(client)
         assertCurrentOwner()
         const target = resolveMobileAiVaultSessionResumeTarget({
@@ -189,9 +187,8 @@ function MobileAgentSessionHistoryPanelContent({
           // archived since panel mount can't be picked; the mount-time list is
           // only a fallback when the fresh fetch fails.
           worktrees: freshWorktrees ?? worktrees,
-          repos,
-          folderWorkspaces,
-          projectGroups
+          catalog,
+          hostPlatform: resumeHost.platform
         })
         if (target.status !== 'ready') {
           setResumeMessage(target.message)
@@ -215,7 +212,7 @@ function MobileAgentSessionHistoryPanelContent({
         assertCurrentOwner()
         const launch = buildMobileAiVaultResumeLaunch({
           session: preparedSession,
-          hostPlatform: platform,
+          workspacePlatform: platform,
           isRemote: target.targetStatus === 'ssh',
           hostTerminalWindowsShell,
           settings

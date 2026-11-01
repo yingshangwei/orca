@@ -1,3 +1,4 @@
+import type { AgentSessionSlashCommand } from '../../../src/shared/agent-session-wire'
 import type { RpcClient } from '../transport/rpc-client'
 import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
@@ -61,6 +62,8 @@ export type MobileStructuredAgentSessionArgs = {
   /** Capability facts from the shared runtime status probe; null follows the legacy wire. */
   hostSupport: StructuredAgentSessionHostSupport | null
   agent: string | null
+  /** What the session reported for its `/` menu; undefined until read or on an older host. */
+  sessionCommands?: readonly AgentSessionSlashCommand[]
   /** The active pane's live composer; Edit copies a card's text through it. */
   appendComposerText?: (text: string) => boolean
   onSendError: MobileNativeChatSendErrorReporter

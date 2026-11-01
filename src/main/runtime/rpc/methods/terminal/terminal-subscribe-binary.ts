@@ -159,7 +159,11 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
     outputBatcher?.push(data, meta)
   })
   // Why: capture live bytes before mobile-fit awaits; registering presence first would suppress main while no view held the query.
-  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(ptyId)
+  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(
+    ptyId,
+    undefined,
+    isMobile ? clientId : undefined
+  )
   unsubscribeData = () => {
     releaseViewSubscriber()
     unsubscribeStreamData()

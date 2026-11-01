@@ -11,8 +11,12 @@ const LEGACY_PI_COMPATIBLE_TITLE_RE = /^\s*(?:[\u2800-\u28ff]\s+)?\u03C0(?:\s*[-
 // may already have been swapped for the owner's label, so accept those too — but only in their
 // exact profile casing, since a lowercase `pi - refactor…` is ordinary prose, not a Pi title.
 // The separator must be delimited (`:` attached, or spaced) or `omp-harness` reads as a state.
-const PI_COMPATIBLE_SEPARATOR_RE = /^\s*(?:\u03C0|Pi|OMP)(?::|\s+([!>-]))(?=\s|$)/u
+// A leading spinner needs Orca's ` - ` working frame, so Claude tasks like `⠂ OMP: fix` stay Claude's.
+const PI_COMPATIBLE_SEPARATOR_RE =
+  /^\s*(?:[\u2800-\u28ff]\s+(?=\S+\s+-(?:\s|$)))?(\u03C0|Pi|OMP)(?::|\s+([!>:\-\u2800-\u28ff]))(?=\s|$)/u
 const PI_COMPATIBLE_PERMISSION_TAIL_RE = /\baction required\b/i
+
+const PI_COMPATIBLE_LEADING_BRAND_RE = /^(\s*(?:[\u2800-\u28ff]\s+)?)(?:\u03C0|Pi|OMP)/u
 
 function containsBrailleSpinner(title: string): boolean {
   for (const char of title) {
@@ -92,5 +96,22 @@ export function getPiCompatibleTitleSeparatorStatus(
   if (PI_COMPATIBLE_PERMISSION_TAIL_RE.test(title)) {
     return 'permission'
   }
-  return match[1] === '!' ? 'permission' : 'idle'
+  return match[2] === '!' ? 'permission' : 'idle'
+}
+
+/** Brand a π/Pi/OMP title leads with, so owner-rebranded frames (`⠋ OMP - session - cwd`) keep their identity. */
+export function getPiCompatibleTitleBrand(title: string): PiCompatibleSyntheticAgentLabel | null {
+  const brand = PI_COMPATIBLE_SEPARATOR_RE.exec(title)?.[1]
+  if (!brand) {
+    return null
+  }
+  return brand === 'OMP' ? 'OMP' : 'Pi'
+}
+
+/** Replace the leading brand of a π/Pi/OMP title in place, or null when the title has none. */
+export function rebrandPiCompatibleTitle(title: string, brand: string): string | null {
+  if (!isLegacyPiCompatibleTitle(title) && !getPiCompatibleTitleBrand(title)) {
+    return null
+  }
+  return title.replace(PI_COMPATIBLE_LEADING_BRAND_RE, (_, lead: string) => lead + brand)
 }

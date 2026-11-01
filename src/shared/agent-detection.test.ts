@@ -161,7 +161,10 @@ describe('Pi-compatible title detection', () => {
     // Why: titles stored by the old collapse are still bare "Pi"; re-detection
     // from stored lastOscTitle must still classify idle, not neutral.
     ['Pi', 'Pi', 'idle'],
-    ['Pi - action required', 'Pi', 'permission']
+    ['Pi - action required', 'Pi', 'permission'],
+    // Owner-rebranded session titles must not fall through to Claude's braille heuristic.
+    ['\u280b OMP - fixing the sidebar - orca', 'OMP', 'working'],
+    ['OMP - fixing the sidebar - orca', 'OMP', 'idle']
   ] as const)('classifies synthesized %s', (title, expectedLabel, expectedStatus) => {
     expect(getAgentLabel(title)).toBe(expectedLabel)
     expect(detectAgentStatusFromTitle(title)).toBe(expectedStatus)

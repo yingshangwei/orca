@@ -29,6 +29,17 @@ const report = (payload: Omit<ParsedAgentStatusPayload, 'prompt'>): ParsedAgentS
 })
 
 describe('programStatusHookYieldEndsAt', () => {
+  it("never lets a program's done settle a turn the hooks hold open for children", () => {
+    const heldOpen = row({
+      state: 'working',
+      agentType: 'antigravity',
+      mainAgent: { state: 'done', outcome: 'success', stateStartedAt: NOW }
+    })
+    expect(
+      programStatusHookYieldEndsAt(heldOpen, report({ state: 'done', agentType: 'antigravity' }))
+    ).toBe(Infinity)
+  })
+
   it('applies when no hook row speaks for the pane', () => {
     expect(programStatusHookYieldEndsAt(undefined, report({ state: 'working' }))).toBeUndefined()
     expect(

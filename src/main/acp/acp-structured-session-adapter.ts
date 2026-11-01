@@ -33,7 +33,8 @@ import {
   ACP_STOP_GRACE_MS,
   type AcpStructuredSessionAdapterDeps
 } from './acp-structured-session-adapter-deps'
-import { readAcpLiveOptions, writeAcpSessionOption } from './acp-structured-options'
+import { readAcpLiveOptions } from './acp-structured-options'
+import { writeAcpSessionOption } from './acp-session-option-write'
 import { readAcpRecoveryHistory } from './acp-recovery-history'
 import { stopAcpChildren, acpChildStopCapabilities } from './acp-structured-child-stop'
 import { acpStartupFailure, isAcpReadySession } from './acp-structured-child'

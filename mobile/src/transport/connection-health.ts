@@ -178,11 +178,22 @@ export function classifyConnection(args: {
 
   return { kind: 'normal', label: state === 'reconnecting' ? 'Reconnecting…' : 'Connecting…' }
 }
+// Retries the user should hear about; auth-failed has its own re-pair remedy.
+export function isConnectionOutage(
+  verdict: ConnectionVerdict
+): verdict is Extract<ConnectionVerdict, { kind: 'warning' | 'unreachable' }> {
+  return verdict.kind === 'warning' || verdict.kind === 'unreachable'
+}
+
+// A normal label ending in an ellipsis is a dial still in progress.
+export function isConnectionDialing(verdict: ConnectionVerdict): boolean {
+  return verdict.kind === 'normal' && verdict.label.endsWith('…')
+}
 
 // Why: single place that turns a verdict into display text so every screen
 // renders the Tailscale hint the same way.
 export function verdictDisplayLabel(verdict: ConnectionVerdict): string {
-  if ((verdict.kind === 'warning' || verdict.kind === 'unreachable') && verdict.hint) {
+  if (isConnectionOutage(verdict) && verdict.hint) {
     return `${verdict.label} — ${verdict.hint}`
   }
   return verdict.label

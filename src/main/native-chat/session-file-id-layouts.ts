@@ -1,6 +1,6 @@
 import { win32 } from 'node:path'
 import { GROK_CHAT_HISTORY_FILE } from '../../shared/grok-session-paths'
-import { OMP_SESSION_ARTIFACT_DIR_PATTERN } from '../ai-vault/session-scanner-omp-subagent-transcripts'
+import { isOmpConversationDirectory } from '../ai-vault/session-scanner-omp-subagent-transcripts'
 
 export type SessionIdLookupAgent = 'claude' | 'codex' | 'grok' | 'omp'
 
@@ -41,6 +41,6 @@ export const SESSION_FILE_ID_LAYOUTS: Record<SessionIdLookupAgent, SessionFileId
     // Why: a session's subagent transcripts live in its same-named `<stamp>_<uuid>/`
     // artifact dir, and one can end in `_<session id>` too — so descending would let
     // it win the suffix match over its own parent. Same prune as AI Vault discovery.
-    directoryPredicate: (name, depth) => depth === 0 || !OMP_SESSION_ARTIFACT_DIR_PATTERN.test(name)
+    directoryPredicate: isOmpConversationDirectory
   }
 }

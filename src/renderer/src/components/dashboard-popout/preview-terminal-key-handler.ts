@@ -31,6 +31,7 @@ export function installPreviewTerminalKeyHandler(args: {
   claimImeKeyEvent: (event: KeyboardEvent) => boolean
   pasteClipboardText: (activeElement: Element | null, source: 'keyboard') => void
   sendInput: (data: string) => void
+  requestClose?: () => void
   /** Everything but optionKeyLocations, which this installer tracks itself. */
   getShortcutContext: () => Omit<PreviewShortcutContext, 'optionKeyLocations'>
 }): () => void {
@@ -204,6 +205,10 @@ export function installPreviewTerminalKeyHandler(args: {
         nativeOnlyShortcutTracker.armKeyDown(event)
         event.stopImmediatePropagation()
         return false
+      // Why: the focused terminal swallows Escape and Tab, so Cmd/Ctrl+W is the only keyboard exit.
+      case 'closeActivePane':
+        args.requestClose?.()
+        return consumeEvent(event)
       // Why: pane-scoped chords have no target in a preview dialog. Swallow them
       // — a pane never sends these bytes to the shell, and xterm would encode
       // e.g. Ctrl+Shift+D as a bare Ctrl+D. Listed one by one rather than under a
@@ -211,7 +216,6 @@ export function installPreviewTerminalKeyHandler(args: {
       // silently swallowed.
       case 'clearActivePane':
       case 'clearPaneTitle':
-      case 'closeActivePane':
       case 'copySelection':
       case 'equalizePaneSizes':
       case 'focusPane':

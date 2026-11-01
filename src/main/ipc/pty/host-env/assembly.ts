@@ -32,7 +32,7 @@ import { restoreOrStripOverlayEnv } from '../../../../shared/agent-overlay-env'
 import { AGENT_HOOK_RUNTIME_ENV_KEYS } from './spawn-env-keys'
 import { applyManagedDataAccountEnvironment } from '../../../managed-data-accounts/launch-environment'
 import { applyOpenCodeStatusPluginEnv, captureOpenCodeSourceConfig } from './opencode-config'
-import { applyCodexRemoteViewerClipboardEnv } from './codex-terminal-clipboard'
+import { applyRemoteViewerClipboardEnv } from './remote-viewer-clipboard-env'
 
 /**
  * Mutates `baseEnv` in place with all host-local PTY env vars and returns it.
@@ -306,7 +306,7 @@ export function buildPtyHostEnv(
     baseEnv.BROWSER = `${cliCommand} open-url --url %s`
   }
   // Why the browser-relay flag: both mean a headless runtime whose viewer is another machine.
-  applyCodexRemoteViewerClipboardEnv(baseEnv, {
+  applyRemoteViewerClipboardEnv(baseEnv, {
     launchAgent: opts.launchAgent,
     viewerIsRemote: opts.routeBrowserOpensToClient === true
   })

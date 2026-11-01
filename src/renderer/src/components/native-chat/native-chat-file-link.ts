@@ -138,8 +138,8 @@ export function createNativeChatFileLinkContextSelector(tabId: string) {
   }
 }
 
-function resolveNativeChatFileLinkContextForOwner(
-  state: NativeChatFileLinkState,
+export function resolveNativeChatFileLinkContextForOwner(
+  state: Omit<NativeChatFileLinkState, 'tabsByWorktree'>,
   terminalTabId: string,
   worktreeId: string | null
 ): NativeChatFileLinkContext | null {
