@@ -18485,6 +18485,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "워크스페이스가 원격 Orca 호스트에 연결되어 있지 않습니다.",
+        "splitSourceUnpublished": "창을 분할하지 못했습니다: 호스트에서 터미널이 아직 시작되지 않았습니다.",
         "terminalCreateUnconfirmed": "Orca가 호스트에서 새 터미널이 열렸는지 확인할 수 없습니다."
       },
       "gitlabJobTraceClient": {

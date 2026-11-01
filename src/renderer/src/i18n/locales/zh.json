@@ -18492,6 +18492,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "工作区未连接到远程 Orca 主机。",
+        "splitSourceUnpublished": "窗格未拆分：其终端尚未在主机上启动。",
         "terminalCreateUnconfirmed": "Orca 无法确认新终端是否在主机上打开。"
       },
       "gitlabJobTraceClient": {

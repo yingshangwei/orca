@@ -18626,6 +18626,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "L'espace de travail n'est pas connecté à un hôte Orca distant.",
+        "splitSourceUnpublished": "Le volet n'a pas été divisé : son terminal n'a pas encore démarré sur l'hôte.",
         "terminalCreateUnconfirmed": "Orca n'a pas pu confirmer que le nouveau terminal s'est ouvert sur l'hôte."
       },
       "gitlabJobTraceClient": {

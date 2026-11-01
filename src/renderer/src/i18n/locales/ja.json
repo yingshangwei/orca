@@ -18485,6 +18485,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "このワークスペースは、リモートの Orca ホストに接続されていません。",
+        "splitSourceUnpublished": "ペインを分割できませんでした: ホスト上でターミナルがまだ起動していません。",
         "terminalCreateUnconfirmed": "Orca は、ホスト上で新規ターミナルが開いたことを確認できませんでした。"
       },
       "gitlabJobTraceClient": {

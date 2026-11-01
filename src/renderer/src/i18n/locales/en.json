@@ -18735,6 +18735,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "The workspace is not connected to a remote Orca host.",
+        "splitSourceUnpublished": "The pane didn’t split: its terminal hasn’t started on the host yet.",
         "terminalCreateUnconfirmed": "Orca couldn’t confirm that the new terminal opened on the host."
       },
       "gitlabJobTraceClient": {

@@ -95,6 +95,17 @@ export const PR_E2E_SOURCE_ROUTES = [
         file === 'src/renderer/src/components/right-sidebar/use-file-explorer-tree-load-effects.ts')
   },
   {
+    // A paired client refuses project setup on its server's SSH host with a clear reason (#33124).
+    id: 'paired.ssh-host-project-setup',
+    specs: ['tests/e2e/headless-paired-ssh-host-project-setup.spec.ts'],
+    matches: (file) =>
+      file === 'tests/e2e/helpers/headless-paired-runtime-host.ts' ||
+      (isProductSource(file) &&
+        /^src\/(?:renderer\/src\/store\/projects\/project-host-setup-actions|main\/runtime\/runtime-project-host-setup-controller|shared\/project-host-setup-target)\.ts$/.test(
+          file
+        ))
+  },
+  {
     id: 'serve.orcad-mode-switch',
     specs: ['tests/e2e/orcad-serve-mode-switch.spec.ts'],
     matches: (file) =>
