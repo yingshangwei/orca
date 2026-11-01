@@ -78,7 +78,7 @@ export function* iterateTerminalOutputFrameChunks(
     }
     return
   }
-  const canPreserveChunkSeq = typeof meta?.seq === 'number' && rawLength === data.length
+  const canPreserveChunkSeq = typeof meta?.seq === 'number' && !rewritten
   // Why: a rewritten chunk sent as text has a seq its offsets can't map; only the last frame carries it.
   const shouldDelayFinalSeq = !canPreserveChunkSeq && typeof meta?.seq === 'number'
   const startSeq = canPreserveChunkSeq ? meta.seq! - rawLength : undefined

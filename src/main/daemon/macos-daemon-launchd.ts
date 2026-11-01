@@ -77,6 +77,8 @@ function buildMacDaemonLaunchJob(
     // A plist job outside SMAppService names its app here so Local Network access resolves to Orca.
     AssociatedBundleIdentifiers: [LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId],
     ProcessType: 'Interactive',
+    // Terminal shells need to materialize cloud-only files when they are opened.
+    MaterializeDatalessFiles: true,
     StandardOutPath: '/dev/null',
     StandardErrorPath: '/dev/null'
   }

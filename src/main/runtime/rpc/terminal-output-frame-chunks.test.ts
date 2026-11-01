@@ -68,21 +68,24 @@ describe('terminal output frame chunks', () => {
       expect(Buffer.from(frames[0]!.bytes).toString('utf8')).toBe('\x1b[?1049l')
     })
 
-    it('splits a large rewrite under the cap with the seq on the last frame only', () => {
-      const data = 'y'.repeat(TERMINAL_STREAM_CHUNK_BYTES * 2 + 1)
-      const frames = [
-        ...iterateTerminalOutputFrameChunks(
-          data,
-          { seq: 5_000, rawLength: data.length + 40, transformed: true },
-          'text'
-        )
-      ]
-      expect(frames.length).toBe(3)
-      for (const frame of frames) {
-        expect(frame.bytes.byteLength).toBeLessThanOrEqual(TERMINAL_STREAM_CHUNK_BYTES)
+    it.each([0, 40])(
+      'splits a large rewrite under the cap with the seq on the last frame only (raw delta %i)',
+      (rawDelta) => {
+        const data = 'y'.repeat(TERMINAL_STREAM_CHUNK_BYTES * 2 + 1)
+        const frames = [
+          ...iterateTerminalOutputFrameChunks(
+            data,
+            { seq: 5_000, rawLength: data.length + rawDelta, transformed: true },
+            'text'
+          )
+        ]
+        expect(frames.length).toBe(3)
+        for (const frame of frames) {
+          expect(frame.bytes.byteLength).toBeLessThanOrEqual(TERMINAL_STREAM_CHUNK_BYTES)
+        }
+        expect(frames.map((frame) => frame.seq)).toEqual([undefined, undefined, 5_000])
       }
-      expect(frames.map((frame) => frame.seq)).toEqual([undefined, undefined, 5_000])
-    })
+    )
 
     it('sends a phone nothing when the rewrite stripped every byte', () => {
       expect([...iterateTerminalOutputFrameChunks('', rewritten, 'text')]).toEqual([])
