@@ -100,6 +100,9 @@ async function subscribePausable(
     outputText,
     remoteViewHoldsAuthority,
     viewSubscribers,
+    runtime: harness.runtime,
+    handlers: harness.handlers,
+    binaryFrames: harness.binaryFrames,
     close
   }
 }
@@ -170,6 +173,61 @@ describe('terminal multiplex paused-output drop notice', () => {
     host.emitOutput('prompt\x1b[c')
     await host.close()
     expect(answerYieldedTerminalQueries).toHaveBeenCalledExactlyOnceWith('pty-1', '\x1b[c')
+  })
+
+  it('does not replay a snapshot-pending query after handing it back on pause', async () => {
+    const answerYieldedTerminalQueries = vi.fn()
+    const host = await subscribePausable(
+      { ackOutput: 1, outputPause: 1, outputPauseDropNotice: 1 },
+      answerYieldedTerminalQueries
+    )
+    const snapshot = Promise.withResolvers<{ data: string; cols: number; rows: number }>()
+    vi.mocked(host.runtime.serializeTerminalBuffer).mockReturnValueOnce(snapshot.promise)
+    host.handlers.get(1)?.(
+      decodeTerminalStreamFrame(
+        encodeTerminalStreamFrame({
+          opcode: TerminalStreamOpcode.SnapshotRequest,
+          streamId: 1,
+          seq: 9,
+          payload: encodeTerminalStreamJson({ requestId: 42 })
+        })
+      )!
+    )
+    await vi.waitFor(() => expect(host.runtime.serializeTerminalBuffer).toHaveBeenCalledTimes(2))
+    host.emitOutput('pending-query\x1b[c')
+    host.setPaused(true)
+    host.setPaused(false)
+    snapshot.resolve({ data: 'snapshot without queries', cols: 120, rows: 40 })
+    try {
+      await vi.waitFor(() =>
+        expect(
+          host.binaryFrames.filter(
+            (bytes) => decodeTerminalStreamFrame(bytes)?.opcode === TerminalStreamOpcode.SnapshotEnd
+          )
+        ).toHaveLength(2)
+      )
+      expect(answerYieldedTerminalQueries).toHaveBeenCalledExactlyOnceWith('pty-1', '\x1b[c')
+      expect(host.outputText()).not.toContain('\x1b[c')
+      expect(host.dropNotices()).toBe(1)
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('keeps mobile query authority after an old remote subscription releases a reused pty id', () => {
+    const subscribers = new RuntimeTerminalViewSubscribers({
+      notifyPresenceChanged: () => {},
+      hasMobileSubscribers: () => true,
+      isUnattachedLocalCandidate: () => false,
+      attachProvider: () => null
+    })
+    const releaseOld = subscribers.registerRemote('pty-1', () => false)
+    subscribers.clearSubscribers('pty-1')
+    const releaseCurrent = subscribers.registerRemote('pty-1', () => true)
+    releaseOld()
+    expect(subscribers.remoteReceivingOutputCount('pty-1')).toBe(1)
+    expect(subscribers.hasRemoteReceivingOutput('pty-1')).toBe(true)
+    releaseCurrent()
   })
 
   it('does not inject a reply after a discarded query has expired', async () => {

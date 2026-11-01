@@ -1,6 +1,5 @@
 /** The daemon's terminal scopes and process ceiling, applied to every PTY spawn it makes. */
 import { existsSync } from 'node:fs'
-import { spawnProcess } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
 import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
@@ -23,22 +22,7 @@ export function initializeTerminalScopes(
     setWindowsLimit: setPtyActiveProcessLimit
   })
   active = 'on' in resolved.scopes ? { scopes: resolved.scopes.on, log } : null
-  if (active && daemonScope) {
-    // Why best-effort: oomd should pick a terminal before the daemon that holds every
-    // terminal's scrollback; older systemd ignores or rejects it, which changes nothing.
-    try {
-      const child = spawnProcess({
-        program: 'systemctl',
-        args: ['--user', 'set-property', '--runtime', daemonScope, 'ManagedOOMPreference=avoid'],
-        env: userManagerEnv(process.env),
-        stdio: 'ignore'
-      })
-      child.on('error', () => {})
-      child.unref()
-    } catch {
-      // Only a spawn refused outright lands here; terminal scopes work without it.
-    }
-  }
+  // No ManagedOOMPreference on the daemon scope: uresourced <0.5.5 loops on its xattr rewrites and wedges systemd --user.
   if (process.platform === 'linux') {
     log(
       'terminal-scopes',

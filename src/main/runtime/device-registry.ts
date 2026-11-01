@@ -3,15 +3,13 @@
 // compromising one device doesn't expose others. The registry is a simple
 // JSON file with hardened permissions matching the runtime metadata pattern.
 import { join } from 'node:path'
-import { writeDurableSecureJsonFile, writeSecureJsonFile } from '../../shared/secure-file'
 import type { DeviceScope } from '../../shared/runtime-types'
 import { removeStaleDurableWriteTempFiles } from '../durable-file-write'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
-import { mintDeviceCredential } from './device-credential'
+import { mintTokenDevice } from './device-credential'
 import { planDeviceKeyFork } from './device-key-fork'
 import { planIdleEphemeralPrune, withoutEphemeralRows } from './ephemeral-device-rows'
-import { quarantineCorruptRegistry } from './device-registry-corruption'
-import { readDeviceRegistryFile } from './device-registry-file-read'
+import { DeviceRegistryWriter } from './device-registry-disk-merge'
 import type { RelayDeviceBinding } from './mobile-cloud-relay/relay-revoke-outbox'
 import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
@@ -25,7 +23,8 @@ import { validGrants } from './device-registry-row-validation'
 import {
   isPendingTokenRow,
   mobilePairingConnectionModeOf,
-  isStillAuthenticated,
+  findPrincipalDevice,
+  findTokenDevice,
   type AuthenticatedPrincipalBinding,
   lookupDeviceKeyRow,
   sameGrants,
@@ -53,10 +52,12 @@ export class DeviceRegistry {
   private registryDoubtful = false
   private corruptFilePending = false
   private pendingLastSeenFlush: NodeJS.Timeout | null = null
+  private readonly writer: DeviceRegistryWriter
 
   constructor(userDataPath: string) {
     this.registryPath = join(userDataPath, DEVICE_REGISTRY_FILENAME)
-    // Why: a write killed between writeFile and rename (e.g. a crash mid-write, #20497) orphans its temp forever.
+    this.writer = new DeviceRegistryWriter(this.registryPath)
+    // #20497: reap temp files orphaned by a crash before rename.
     void removeStaleDurableWriteTempFiles(this.registryPath, {
       minimumAgeMs: STALE_WRITE_TEMP_AGE_MS
     })
@@ -79,20 +80,10 @@ export class DeviceRegistry {
     pairingReach: RuntimePairingReach,
     grants: readonly RuntimeDeviceGrant[]
   ): TokenDeviceEntry {
-    const validatedGrants = validGrants(grants, scope)
-    const entry: TokenDeviceEntry = {
-      ...mintDeviceCredential(),
-      name,
-      scope,
-      pairedAt: Date.now(),
-      lastSeenAt: 0,
-      pairingReach,
-      ...(validatedGrants ? { grants: validatedGrants } : {})
-    }
+    const entry = mintTokenDevice(name, scope, pairingReach, grants)
     const nextDevices = [...existingDevices, entry]
-    // Why: a credential is not valid until its durable registry write succeeds.
-    this.save(nextDevices)
-    this.devices = nextDevices
+    // Credentials become valid only after durable persistence.
+    this.devices = this.save(nextDevices)
     return entry
   }
 
@@ -108,17 +99,19 @@ export class DeviceRegistry {
     pairingReach: RuntimePairingReach = 'network',
     grants: readonly RuntimeDeviceGrant[] = []
   ): TokenDeviceEntry {
-    // Why: a pending token is reused only for the same grants, so re-advertising never widens one.
+    // Never show a QR for an offer an admin removed on disk.
+    this.adoptExternalEdits()
+    // Reuse only identical grants so re-advertisement cannot expand permissions.
     const existing = this.devices.find(
       (d): d is TokenDeviceEntry =>
         isPendingTokenRow(d) && d.scope === scope && sameGrants(d, validGrants(grants, scope) ?? [])
     )
     if (existing) {
-      // Why: the same pending token can be re-advertised at a broader reach; widen it but never narrow it,
-      // or a link already handed out for off-host use would stop being served after the next launch.
-      return pairingReach === 'network' && existing.pairingReach === 'this-computer'
-        ? this.setPairingReach(existing, 'network')
-        : existing
+      // Widen advertised reach, never narrow it and break an off-host link already handed out.
+      const widen = pairingReach === 'network' && existing.pairingReach === 'this-computer'
+      // Removed on disk meanwhile: mint a fresh offer rather than hand out a revoked one.
+      const offered = widen ? this.setPairingReach(existing, 'network') : existing
+      return offered ?? this.addDevice(name, scope, pairingReach, grants)
     }
     return this.addDevice(name, scope, pairingReach, grants)
   }
@@ -126,10 +119,9 @@ export class DeviceRegistry {
   private setPairingReach(
     existing: TokenDeviceEntry,
     pairingReach: RuntimePairingReach
-  ): TokenDeviceEntry {
+  ): TokenDeviceEntry | null {
     const updated: TokenDeviceEntry = { ...existing, pairingReach }
-    this.replaceRow(existing.deviceId, () => updated)
-    return updated
+    return this.replaceRow(existing.deviceId, () => updated) ? updated : null
   }
 
   // Why: explicit rotation path for "Regenerate QR" — invalidates any
@@ -158,12 +150,14 @@ export class DeviceRegistry {
     parent: DeviceEntry,
     phones: readonly DelegatedPhone[]
   ): DelegatedMobileDeviceEntry[] {
+    // Plan over the file as it is: an unchanged child removed on disk would skip the save's merge.
+    this.adoptExternalEdits()
     const { nextDevices, entries } = planDelegatedMobileDevices(this.devices, parent, phones)
     if (nextDevices !== this.devices) {
-      this.save(nextDevices)
-      this.devices = nextDevices
+      this.devices = this.save(nextDevices)
     }
-    return entries
+    // A child the file had already lost is dropped by the save: never hand out its token.
+    return entries.filter((entry) => this.getDevice(entry.deviceId) !== null)
   }
 
   removeDevice(deviceId: string): boolean {
@@ -171,10 +165,8 @@ export class DeviceRegistry {
     if (nextDevices.length === this.devices.length) {
       return false
     }
-    // Why: persist before memory swap so a failed write does not drop a device
-    // only in-process while disk still lists it (and vice versa on reload).
-    this.save(nextDevices)
-    this.devices = nextDevices
+    // Persist before swapping memory so failure cannot revoke a device only until restart.
+    this.devices = this.save(nextDevices)
     return true
   }
 
@@ -183,6 +175,7 @@ export class DeviceRegistry {
   }
 
   getPendingDevice(scope: DeviceScope = 'mobile'): TokenDeviceEntry | null {
+    this.adoptExternalEdits()
     return (
       this.devices.find(
         (device): device is TokenDeviceEntry => isPendingTokenRow(device) && device.scope === scope
@@ -224,14 +217,13 @@ export class DeviceRegistry {
   }
 
   validateToken(token: string): DeviceEntry | null {
-    return (
-      (token && this.devices.find((d) => d.credentialKind === undefined && d.token === token)) ||
-      null
-    )
+    this.adoptExternalEdits()
+    return findTokenDevice(this.devices, token)
   }
 
   // Why: "unknown" must mean "readable and absent" — clients delete their key only on that verdict.
   lookupDeviceKey(deviceId: string): DeviceKeyLookup {
+    this.adoptExternalEdits()
     const lookup = lookupDeviceKeyRow(this.getDevice(deviceId))
     return lookup.kind === 'unknown' && (this.registryUnreadable || this.registryDoubtful)
       ? { kind: 'unavailable' }
@@ -254,8 +246,7 @@ export class DeviceRegistry {
       options
     )
     if (fork.created) {
-      this.save(fork.nextDevices, { durable: true })
-      this.devices = fork.nextDevices
+      this.devices = this.save(fork.nextDevices, { durable: true })
     }
     return fork.entry
   }
@@ -264,16 +255,15 @@ export class DeviceRegistry {
   pruneIdleEphemeralDevices(now: number, isLive: (deviceId: string) => boolean): string[] {
     const plan = planIdleEphemeralPrune(this.devices, now, isLive)
     if (plan.removed.length > 0) {
-      this.save(plan.nextDevices, { durable: true })
-      this.devices = plan.nextDevices
+      this.devices = this.save(plan.nextDevices, { durable: true })
     }
     return plan.removed
   }
 
   /** The row an authenticated socket is still entitled to, or null once revoked or re-credentialed. */
   resolveAuthenticatedPrincipal(principal: AuthenticatedPrincipalBinding): DeviceEntry | null {
-    const device = this.getDevice(principal.deviceId)
-    return device && isStillAuthenticated(device, principal) ? device : null
+    this.adoptExternalEdits()
+    return findPrincipalDevice(this.devices, principal)
   }
 
   updateLastSeen(deviceId: string): void {
@@ -318,9 +308,9 @@ export class DeviceRegistry {
     this.saveOrLog({}, 'persist device lastSeen')
   }
 
-  private saveOrLog(options: { durable?: boolean }, action: string): void {
+  private saveOrLog(options: { durable?: boolean }, action: string, before = this.devices): void {
     try {
-      this.save(this.devices, options)
+      this.devices = this.save(this.devices, options, before)
     } catch (error) {
       console.error(`[runtime] Failed to ${action}:`, error)
     }
@@ -333,15 +323,23 @@ export class DeviceRegistry {
     }
   }
 
+  /** Auth checks see a removal made on disk (an admin revoke) without waiting for orcad's next save. */
+  private adoptExternalEdits(): void {
+    // An unreadable load refuses everything until restart; there is nothing to merge into.
+    if (!this.registryUnreadable) {
+      this.devices = this.writer.adoptExternalEdits(this.devices) ?? this.devices
+    }
+  }
+
   private load(): void {
-    const read = readDeviceRegistryFile(this.registryPath)
+    const read = this.writer.read()
     this.registryUnreadable = read.unreadable
     this.registryDoubtful = read.doubtful
     this.corruptFilePending = read.corruptFilePending
     this.devices = withoutEphemeralRows(read.devices)
     // Why: a session-only browser's key died with the last host process; its row must not outlive it.
     if (this.devices.length !== read.devices.length) {
-      this.saveOrLog({ durable: true }, 'drop session-only devices after restart')
+      this.saveOrLog({ durable: true }, 'drop session-only devices after restart', read.devices)
     }
   }
 
@@ -354,9 +352,9 @@ export class DeviceRegistry {
     const nextDevices = this.devices.map((device, candidateIndex) =>
       candidateIndex === index ? update(device) : device
     )
-    this.save(nextDevices)
-    this.devices = nextDevices
-    return true
+    this.devices = this.save(nextDevices)
+    // False when the file had already lost the row: the update did not apply.
+    return this.devices.some((candidate) => candidate.deviceId === deviceId)
   }
 
   private assertReadable(): void {
@@ -366,17 +364,21 @@ export class DeviceRegistry {
       )
     }
     if (this.corruptFilePending) {
-      quarantineCorruptRegistry(this.registryPath)
+      this.writer.quarantineCorrupt()
       this.corruptFilePending = false
     }
   }
 
-  // Why: durable (fsync'd) for security transitions such as a device-key fork.
-  private save(devices: DeviceEntry[], options: { durable?: boolean } = {}): void {
+  /** Writes `devices` merged over the file as it is now; memory takes the result. */
+  private save(
+    devices: readonly DeviceEntry[],
+    options: { durable?: boolean } = {},
+    before: readonly DeviceEntry[] = this.devices
+  ): DeviceEntry[] {
     this.assertReadable()
-    const write = options.durable ? writeDurableSecureJsonFile : writeSecureJsonFile
-    write(this.registryPath, devices)
-    // Why: every registry save includes the latest in-memory timestamps, so a later timer would rewrite it.
+    const written = this.writer.write(before, devices, options)
+    // Every save includes current timestamps, making a pending refresh redundant.
     this.cancelPendingLastSeenFlush()
+    return written
   }
 }

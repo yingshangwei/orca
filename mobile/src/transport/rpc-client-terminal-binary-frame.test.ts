@@ -4,6 +4,7 @@ import { TerminalUnreadableFrameResets } from './terminal-unreadable-frame-reset
 import { RpcClientTerminalStreamRouter } from './rpc-client-terminal-stream-router'
 import {
   encodeTerminalStreamFrame,
+  TERMINAL_STREAM_JSON_MAX_BYTES,
   TerminalStreamOpcode
 } from '../../../src/shared/terminal-stream-protocol'
 
@@ -130,6 +131,30 @@ describe('handleTerminalBinaryFrame', () => {
     } finally {
       warn.mockRestore()
       vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    ['malformed', '{'],
+    ['oversized', JSON.stringify({ padding: 'x'.repeat(TERMINAL_STREAM_JSON_MAX_BYTES) })]
+  ])('resets a stream whose snapshot metadata is %s', (_kind, payload) => {
+    const listener = vi.fn()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const terminalSnapshots = new Map([
+      [42, { streamId: 42, meta: {}, chunks: ['stale snapshot'] }]
+    ])
+    try {
+      handleTerminalBinaryFrame(encodeFrame(TerminalStreamOpcode.SnapshotStart, 42, payload), {
+        terminalSnapshots,
+        unreadableFrames: new TerminalUnreadableFrameResets(),
+        getListener: () => listener
+      })
+      expect(listener).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ type: 'error', streamId: 42 })
+      )
+      expect(terminalSnapshots.has(42)).toBe(false)
+    } finally {
+      warn.mockRestore()
     }
   })
 
