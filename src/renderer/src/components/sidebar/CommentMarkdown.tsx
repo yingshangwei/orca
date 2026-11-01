@@ -3,7 +3,11 @@ import {
   CommentMarkdownMermaidContext,
   CommentMarkdownMermaidSourceContext
 } from './comment-markdown-mermaid-policy'
-import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
+import {
+  defaultUrlTransform,
+  type Components,
+  type Options as MarkdownOptions
+} from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly'
@@ -24,11 +28,7 @@ import {
 import { CommentMarkdownBlockLineContext } from './comment-markdown-code-renderers'
 import { rehypeWordFade } from './comment-markdown-word-fade'
 import { CommentMarkdownWords } from './CommentMarkdownWords'
-import {
-  splitMarkdownTopLevelBlocks,
-  type MarkdownBlock,
-  type MarkdownBlockSplit
-} from './markdown-top-level-blocks'
+import { MemoizedMarkdown, useMarkdownBlocks } from './comment-markdown-block-pipeline'
 import {
   GITHUB_CALLOUT_SANITIZE_ATTRIBUTE,
   remarkGitHubCallouts
@@ -37,9 +37,9 @@ import { remarkAutolinkLiteralProseBoundary } from '@/lib/remark-autolink-litera
 
 export type { CommentMarkdownLinkClickHandler } from './comment-markdown-element-renderers'
 
-type MarkdownPlugins = NonNullable<React.ComponentProps<typeof Markdown>['rehypePlugins']>
-type RemarkPlugins = NonNullable<React.ComponentProps<typeof Markdown>['remarkPlugins']>
-type UrlTransform = NonNullable<React.ComponentProps<typeof Markdown>['urlTransform']>
+type MarkdownPlugins = NonNullable<MarkdownOptions['rehypePlugins']>
+type RemarkPlugins = NonNullable<MarkdownOptions['remarkPlugins']>
+type UrlTransform = NonNullable<MarkdownOptions['urlTransform']>
 
 type GitHubRepoReference = {
   owner: string
@@ -218,6 +218,8 @@ const rehypePlugins: MarkdownPlugins = [rehypeRaw, [rehypeSanitize, commentMarkd
  */
 export type CommentMarkdownExtension = {
   remarkPlugins: RemarkPlugins
+  /** Extra flow syntax requires one of these markers; omitted means unknown grammar. */
+  extraFlowSyntaxMarkers?: readonly string[]
   sanitizeAttributes: Record<string, readonly string[]>
   components: Components
 }
@@ -251,24 +253,6 @@ type CommentMarkdownProps = React.ComponentPropsWithoutRef<'div'> & {
   /** Give each word its own `data-word` element, for a stylesheet to animate as words arrive. */
   fadeWords?: boolean
   extension?: CommentMarkdownExtension
-}
-
-/** One render of the pipeline; memoized so an unchanged block is not parsed again. */
-const MemoizedMarkdown = React.memo(Markdown)
-
-/** The content as the blocks to render. Cut into blocks from the first time it is growing, and
- *  from then on, so the stream ending does not redraw what is already there. */
-function useMarkdownBlocks(content: string, growing: boolean): readonly MarkdownBlock[] {
-  const [previous, setPrevious] = React.useState<MarkdownBlockSplit | null>(null)
-  if (!growing && previous === null) {
-    return [{ start: 0, line: 1, text: content }]
-  }
-  if (previous?.source === content) {
-    return previous.blocks
-  }
-  const next = splitMarkdownTopLevelBlocks(content, previous)
-  setPrevious(next)
-  return next.blocks
 }
 
 // Why forwardRef + rest props: Radix's HoverCardTrigger asChild merges a ref
@@ -324,7 +308,7 @@ const CommentMarkdown = React.memo(
       const withExtension = extension ? [...plugins, ...extension.remarkPlugins] : plugins
       return githubRepo ? [...withExtension, remarkGitHubReferences(githubRepo)] : withExtension
     }, [extension, fileLinkExists, githubRepo])
-    const blocks = useMarkdownBlocks(content, growing)
+    const blocks = useMarkdownBlocks(content, growing, activeRemarkPlugins, extension)
     const [hadWordFade, setHadWordFade] = React.useState(fadeWords)
     if (fadeWords && !hadWordFade) {
       setHadWordFade(true)
@@ -353,6 +337,7 @@ const CommentMarkdown = React.memo(
             {blocks.map((block, index) => (
               <CommentMarkdownBlockLineContext.Provider key={block.start} value={block.line}>
                 <MemoizedMarkdown
+                  block={block.tree ? block : undefined}
                   remarkPlugins={activeRemarkPlugins}
                   rehypePlugins={wrapsWords ? fadingRehypePlugins : activeRehypePlugins}
                   components={wrapsWords ? fadingComponents : components}

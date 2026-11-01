@@ -64,7 +64,7 @@ export function useAddRepoCloneFlow({
   const cloneGenRef = useRef(0)
   // Why: track whether we've already auto-filled for this entry into the clone step,
   // so a late settings hydration still gets a chance to set the default.
-  const cloneStepAutoFilledRef = useRef(false)
+  const [cloneStepAutoFilled, setCloneStepAutoFilled] = useState(false)
 
   useEffect(() => {
     if (!isCloning) {
@@ -78,14 +78,16 @@ export function useAddRepoCloneFlow({
     cloneDestination,
     activeRuntimeEnvironmentId,
     workspaceDir,
-    cloneStepAutoFilled: cloneStepAutoFilledRef.current
+    cloneStepAutoFilled
   })
   if (step !== 'clone') {
-    cloneStepAutoFilledRef.current = false
+    if (cloneStepAutoFilled) {
+      setCloneStepAutoFilled(false)
+    }
   } else if (cloneDestinationAutoFill) {
     // Why: late settings hydration should still seed the local clone path,
     // but runtime/server clone flows must keep their destination user-entered.
-    cloneStepAutoFilledRef.current = true
+    setCloneStepAutoFilled(true)
     setCloneDestination(cloneDestinationAutoFill.destination)
   }
 

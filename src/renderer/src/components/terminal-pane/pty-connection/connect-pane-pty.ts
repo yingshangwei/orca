@@ -160,6 +160,8 @@ export function connectPanePty(
   // Why the session holds it until a spawn request carries it: the pane already dropped every other
   // reference to this PTY, so the stop is owed until main takes it or dispose kills it.
   session.pendingReplacedPtyId = session.deps.replacesPtyId ?? null
+  // Why: the first spawn claims the PTY, but a deferred retry is still the same user restart.
+  session.userRestart = session.pendingReplacedPtyId !== null
   session.deps.replacesPtyId = undefined
   session.claimPendingReplacedPtyId = (): string | null => {
     const ptyId: string | null = session.pendingReplacedPtyId

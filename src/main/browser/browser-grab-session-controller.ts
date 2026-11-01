@@ -168,15 +168,14 @@ export class BrowserGrabSessionController {
         }
       }
 
-      // Why: only cancel on main-frame navigations. Subframe navigations
-      // (e.g., iframe ads loading) should not spuriously cancel the grab.
+      // Subframe loads and in-place URL updates (scroll spies) keep the overlay's document.
       const handleNavigation = (
         _event: unknown,
         _url: unknown,
-        _isInPlace: unknown,
+        isInPlace: boolean,
         isMainFrame: boolean
       ): void => {
-        if (isMainFrame) {
+        if (isMainFrame && !isInPlace) {
           settleOnce({ opId, kind: 'cancelled', reason: 'navigation' })
         }
       }

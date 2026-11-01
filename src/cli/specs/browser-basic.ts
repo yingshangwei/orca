@@ -1,7 +1,8 @@
 import type { CommandSpec } from '../args'
 import { GLOBAL_FLAGS } from '../args'
+import { withBrowserPageTarget } from './browser-page-target'
 
-export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
+export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = withBrowserPageTarget([
   {
     path: ['browser', 'identity', 'get'],
     summary: 'Show the browser identity configured on this Orca host',
@@ -256,4 +257,4 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     usage: 'orca exec --command "<agent-browser command>" [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'command', 'worktree']
   }
-]
+])

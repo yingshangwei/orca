@@ -7,6 +7,13 @@ import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
+// Short calls that stop on disconnect without long-poll keepalives or admission slots.
+const DISCONNECT_FORWARDED_METHODS = new Set([
+  'browser.eval',
+  'linear.commentEdit',
+  'linear.commentDelete'
+])
+
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
@@ -38,9 +45,7 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     try {
       return await this.dispatcher.dispatch(request, {
         signal:
-          longPoll ||
-          request.method === 'linear.commentEdit' ||
-          request.method === 'linear.commentDelete'
+          longPoll || DISCONNECT_FORWARDED_METHODS.has(request.method)
             ? context?.signal
             : undefined,
         callerScope

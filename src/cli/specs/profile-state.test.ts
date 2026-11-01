@@ -1,8 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { parseArgs, validateCommandAndFlags } from '../args'
+import { formatCommandHelp } from '../help'
 import { PROFILE_STATE_COMMAND_SPECS } from './profile-state'
 
 describe('profile state rollback discovery', () => {
+  it.each(PROFILE_STATE_COMMAND_SPECS)('renders supported flags for $path', (spec) => {
+    const help = formatCommandHelp(spec)
+
+    expect(help).toContain('--help')
+    expect(help).toContain('--json')
+    expect(help).toContain('--profile-id')
+    expect(help).not.toContain('--environment')
+    expect(help).not.toContain('--pairing-code')
+    expect(help).not.toContain('--page')
+  })
+
+  it.each(PROFILE_STATE_COMMAND_SPECS)('rejects --page for $path', (spec) => {
+    const parsed = parseArgs([...spec.path, '--page', '1'])
+
+    expect(() => validateCommandAndFlags(PROFILE_STATE_COMMAND_SPECS, parsed)).toThrow(
+      `Unknown flag --page for command: ${spec.path.join(' ')}`
+    )
+  })
+
   it.each(['exports', 'rollback'])('accepts an explicit profile for %s', (command) => {
     const parsed = parseArgs(['profile', 'state', command, '--profile-id', 'inactive'])
     expect(parsed.flags.get('profile-id')).toBe('inactive')
