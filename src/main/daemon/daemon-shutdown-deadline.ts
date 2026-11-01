@@ -18,9 +18,9 @@ export function createDaemonShutdownDeadline(
       }
       timer = setTimeout(() => {
         log.log('shutdown-error', { message: 'shutdown timeout' })
-        log.close()
         // Async teardown may still be reading the process table; never exit with its PTYs unsignalled.
         liveSessions()?.killLiveSessionGroupsSync()
+        log.close()
         exit()
       }, DAEMON_SHUTDOWN_TIMEOUT_MS)
       timer.unref()
