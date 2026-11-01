@@ -188,3 +188,12 @@ it('preserves all resources when an unreadable record has no identifiable owner'
   expect(state.cleared).toEqual([])
   expect(state.bindings.has(PARTITION)).toBe(true)
 })
+
+it('preserves browser storage when the main registry file is missing', async () => {
+  rmSync(getEnvironmentStorePath(state.userDataPath))
+  await expect(collectOrphanedBrowserRoutePartitionStorage(() => [])).rejects.toThrow(
+    'Could not read Orca environments'
+  )
+  expect(state.cleared).toEqual([])
+  expect(state.bindings.has(PARTITION)).toBe(true)
+})
