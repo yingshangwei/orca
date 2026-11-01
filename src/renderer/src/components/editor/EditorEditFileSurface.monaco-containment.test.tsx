@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableRenderErrorBoundary'
 import { EditorEditFileSurface } from './EditorEditFileSurface'
+import { scrollTopCache } from '@/lib/scroll-cache'
 import type { OpenFile } from '@/store/slices/editor'
 import type { useMarkdownDocuments } from './useMarkdownDocuments'
 import type { MarkdownDocument } from '../../../../shared/filesystem-entry-types'
@@ -25,7 +26,10 @@ vi.mock('@/lib/react-error-boundary-reporting', () => ({
   reportReactErrorBoundaryCrash: reportCrashMock
 }))
 
-vi.mock('./editor-lazy-views', () => {
+vi.mock('./MermaidBlock', () => ({ default: () => <div /> }))
+
+vi.mock('./editor-lazy-views', async () => {
+  const { default: MermaidViewer } = await import('./MermaidViewer')
   function MonacoEditorStub(): ReactElement {
     // Why: @monaco-editor/react calls editor.create() and then onMount from its own mount
     // effect, so both cited failures surface here — as a direct throw and as a callback throw.
@@ -49,7 +53,7 @@ vi.mock('./editor-lazy-views', () => {
     CsvViewer: unusedViewer,
     ImageViewer: unusedViewer,
     IpynbViewer: unusedViewer,
-    MermaidViewer: unusedViewer
+    MermaidViewer
   }
 })
 
@@ -77,7 +81,7 @@ const activeFile: OpenFile = {
   mode: 'edit'
 }
 
-function Harness(): ReactElement {
+function Harness({ mermaid = false, pane = 'view-state-1' } = {}): ReactElement {
   return (
     <RecoverableRenderErrorBoundary
       boundaryId="page.terminal"
@@ -88,7 +92,7 @@ function Harness(): ReactElement {
       <EditorEditFileSurface
         activeFile={activeFile}
         viewStateScopeId="scope-1"
-        editorViewStateKey="view-state-1"
+        editorViewStateKey={pane}
         diffViewStateKey="diff-view-state-1"
         pdfViewStateKey="pdf-view-state-1"
         pdfPreferenceKey="pdf-pref-1"
@@ -98,10 +102,10 @@ function Harness(): ReactElement {
         activeConflictEntry={null}
         monacoLanguage="typescript"
         isMarkdown={false}
-        isMermaid={false}
+        isMermaid={mermaid}
         isCsv={false}
         isNotebook={false}
-        mdViewMode="source"
+        mdViewMode={mermaid ? 'rich' : 'source'}
         inlineMarkdownRenderState={null}
         isChangesMode={false}
         sideBySide={false}
@@ -190,4 +194,40 @@ describe('Monaco editor failure containment', () => {
     expect(container?.querySelector('[data-testid="monaco-editor"]')).not.toBeNull()
     expect(container?.textContent).not.toContain(PAGE_BOUNDARY_TITLE)
   })
+})
+
+it('restores independent diagram scroll positions for two panes showing the same file', () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.body.appendChild(document.createElement('div'))
+  const root = createRoot(container)
+  const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000)
+  const viewport = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100)
+  scrollTopCache.clear()
+  const panes = () => (
+    <>
+      <Harness mermaid pane="left-pane" />
+      <Harness mermaid pane="right-pane" />
+    </>
+  )
+  try {
+    act(() => root.render(panes()))
+    const [left, right] = container.querySelectorAll<HTMLElement>('.mermaid-viewer')
+    expect(left).toBeDefined()
+    expect(right).toBeDefined()
+    left.scrollTop = 120
+    right.scrollTop = 350
+    act(() => root.render(null))
+    expect(scrollTopCache.get('left-pane:mermaid-diagram')).toBe(120)
+    expect(scrollTopCache.get('right-pane:mermaid-diagram')).toBe(350)
+
+    act(() => root.render(panes()))
+    const restored = [...container.querySelectorAll<HTMLElement>('.mermaid-viewer')]
+    expect(restored.map((pane) => pane.scrollTop)).toEqual([120, 350])
+  } finally {
+    act(() => root.unmount())
+    container.remove()
+    height.mockRestore()
+    viewport.mockRestore()
+    scrollTopCache.clear()
+  }
 })

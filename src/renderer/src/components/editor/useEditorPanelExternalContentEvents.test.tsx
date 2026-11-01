@@ -11,7 +11,10 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
-import { useEditorPanelExternalContentEvents } from './useEditorPanelExternalContentEvents'
+import {
+  useEditorPanelExternalContentEvents,
+  usePruneClosedEditorContent
+} from './useEditorPanelExternalContentEvents'
 
 const markChangedOnDisk = vi.hoisted(() => vi.fn())
 vi.mock('./editor-changed-on-disk-mark', () => ({ markFileChangedOnDisk: markChangedOnDisk }))
@@ -457,4 +460,41 @@ describe('useEditorPanelExternalContentEvents', () => {
     expect(contents.current.preview?.content).toBe('saved')
     expect(contents.current.unrelated?.content).toBe('old disk')
   })
+})
+
+it('prunes a closing tab once without discarding a later conflict-review read under the same ID', () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.body.appendChild(document.createElement('div'))
+  const root = createRoot(container)
+  const fileReadGenerationRef: { current: Record<string, number> } = { current: { reused: 1 } }
+  const diffReadGenerationRef: { current: Record<string, number> } = { current: { reused: 2 } }
+  const retries = { current: {} }
+  const setContents = vi.fn()
+  const setDiffs = vi.fn()
+  function Prune({ files }: { files: OpenFile[] }): null {
+    usePruneClosedEditorContent(
+      files,
+      retries,
+      fileReadGenerationRef,
+      diffReadGenerationRef,
+      setContents,
+      setDiffs
+    )
+    return null
+  }
+  try {
+    act(() => root.render(<Prune files={[makeFile('reused')]} />))
+    act(() => root.render(<Prune files={[]} />))
+    expect(fileReadGenerationRef.current.reused).toBeUndefined()
+    expect(diffReadGenerationRef.current.reused).toBeUndefined()
+
+    fileReadGenerationRef.current.reused = 3
+    diffReadGenerationRef.current.reused = 4
+    act(() => root.render(<Prune files={[makeFile('other')]} />))
+    expect(fileReadGenerationRef.current.reused).toBe(3)
+    expect(diffReadGenerationRef.current.reused).toBe(4)
+  } finally {
+    act(() => root.unmount())
+    container.remove()
+  }
 })

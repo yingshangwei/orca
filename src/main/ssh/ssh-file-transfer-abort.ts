@@ -42,7 +42,8 @@ export function isSftpSessionClosedError(error: unknown): boolean {
 export function raceSftpFileTransferWithAbort<T>(
   operation: Promise<T>,
   signal: AbortSignal,
-  closeSftp: (onClose: () => void) => (() => void) | void
+  closeSftp: (onClose: () => void) => (() => void) | void,
+  createAbortError: () => Error = createSshOperationAbortError
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -70,9 +71,8 @@ export function raceSftpFileTransferWithAbort<T>(
       fn(value as never)
     }
     const onAbort = (): void => {
-      // Why: rejecting the caller is insufficient; ending SFTP stops the
-      // abandoned transfer from mutating a successor relay install.
-      abortError = Object.assign(createSshOperationAbortError(), {
+      // End SFTP as well as rejecting so abandoned transfers cannot mutate a successor install.
+      abortError = Object.assign(createAbortError(), {
         sshChannelCloseConfirmed: false,
         sshTransferTeardownConfirmed: false
       })

@@ -13,7 +13,6 @@ export type MonacoContentSyncBridge = {
   lastSyncedContentRef: MutableRefObject<string>
   contentSyncModeRef: MutableRefObject<MonacoContentSyncMode>
   isApplyingProgrammaticContentRef: MutableRefObject<boolean>
-  isApplyingLargePasteRef: MutableRefObject<boolean>
   handleChange: (value: string | undefined) => void
 }
 
@@ -37,17 +36,11 @@ export function useMonacoContentSyncBridge(params: {
 
   // Why: reconciliation uses real edit ops (to keep undo sane), so these programmatic edits must suppress onChange or they'd mark the file dirty.
   const isApplyingProgrammaticContentRef = useRef(false)
-  const isApplyingLargePasteRef = useRef(false)
 
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value !== undefined) {
         if (editorRef.current?.getModel()?.uri.toString() !== modelKey) {
-          return
-        }
-        // Why: split panes share one retained model, so a sibling must ignore the echoed programmatic-sync onChange or it marks the file dirty.
-        if (isApplyingLargePasteRef.current) {
-          lastSyncedContentRef.current = value
           return
         }
         if (
@@ -92,7 +85,6 @@ export function useMonacoContentSyncBridge(params: {
     lastSyncedContentRef,
     contentSyncModeRef,
     isApplyingProgrammaticContentRef,
-    isApplyingLargePasteRef,
     handleChange
   }
 }

@@ -110,9 +110,11 @@ export function getLockedWorktreeRemovalReason(error: string): string | null {
 export const SUBMODULE_DIRTY_REMOVAL_DETAIL =
   'Worktree has uncommitted or untracked changes, and it contains submodules.'
 
-// Why: non-force `git worktree remove` refuses any checkout with an initialized submodule, clean or
-// not; only --force deletes it, and with it the submodule's never-pushed history. Git output is
-// pinned to English on every host, and the renderer classifies, so older hosts get this too.
+// Carries Git's own refusal text so every client version classifies it as the submodule Force Delete reason.
+export const SUBMODULE_REMOVAL_REFUSAL =
+  'This checkout contains submodule repositories, and Git refuses to remove it without force (working trees containing submodules cannot be moved or removed). Force also deletes anything in those submodules that was never pushed: commits, local branches and stashes.'
+
+// Git refuses initialized submodules even when clean; force deletes their unpushed history too. English output lets clients classify older hosts.
 export function isSubmoduleWorktreeRemovalRefusal(error: string): boolean {
   return (
     error.includes('working trees containing submodules cannot be moved or removed') ||

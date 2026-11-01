@@ -276,30 +276,27 @@ export function usePruneClosedEditorContent(
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>,
   setDiffContents: Dispatch<SetStateAction<Record<string, DiffContent>>>
 ): void {
-  const knownOpenFileIdsRef = useRef<Set<string>>(new Set())
+  const previousOpenFileIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const openIds = new Set(openFiles.map((f) => f.id))
-    for (const fileId of openIds) {
-      knownOpenFileIdsRef.current.add(fileId)
-    }
     for (const fileId of Object.keys(fileLoadRetryAttemptsRef.current)) {
       if (!openIds.has(fileId)) {
         delete fileLoadRetryAttemptsRef.current[fileId]
       }
     }
-    // Why: conflict-review entry loads use absolute paths as content ids; only
-    // ids that have belonged to tabs are safe to prune as closed tabs.
+    // Conflict-review IDs can lack tabs; prune generations only when their tab closes.
     for (const fileId of Object.keys(fileReadGenerationRef.current)) {
-      if (knownOpenFileIdsRef.current.has(fileId) && !openIds.has(fileId)) {
+      if (previousOpenFileIdsRef.current.has(fileId) && !openIds.has(fileId)) {
         delete fileReadGenerationRef.current[fileId]
       }
     }
     for (const fileId of Object.keys(diffReadGenerationRef.current)) {
-      if (knownOpenFileIdsRef.current.has(fileId) && !openIds.has(fileId)) {
+      if (previousOpenFileIdsRef.current.has(fileId) && !openIds.has(fileId)) {
         delete diffReadGenerationRef.current[fileId]
       }
     }
+    previousOpenFileIdsRef.current = openIds
     setFileContents((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([key]) => openIds.has(key)))
     )
@@ -310,7 +307,7 @@ export function usePruneClosedEditorContent(
     diffReadGenerationRef,
     fileLoadRetryAttemptsRef,
     fileReadGenerationRef,
-    knownOpenFileIdsRef,
+    previousOpenFileIdsRef,
     openFiles,
     setDiffContents,
     setFileContents
