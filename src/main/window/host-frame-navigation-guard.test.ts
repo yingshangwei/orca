@@ -56,6 +56,22 @@ describe('HostFrameNavigationRegistry', () => {
     expect(registry.shouldBlock(child, visual, 'https://example.com')).toBe(true)
   })
 
+  it('preserves a frame identity when Electron replaces its wrapper', () => {
+    const registry = new HostFrameNavigationRegistry()
+    const original = frame({ id: 1, name: `${PLUGIN_PANEL_FRAME_NAME_PREFIX}demo` })
+    registry.register(original)
+    original.destroy()
+    const replacement = frame({ id: 1, name: 'changed-after-parse' })
+    const unrelated = frame({ id: 2 })
+
+    expect(registry.shouldBlock(replacement, null, 'about:srcdoc')).toBe(false)
+    expect(registry.shouldBlock(replacement, null, 'https://example.com')).toBe(true)
+    expect(registry.shouldBlock(unrelated, replacement, 'https://example.com')).toBe(true)
+    expect(registry.shouldBlock(unrelated, unrelated, 'https://example.com')).toBe(false)
+    registry.clear()
+    expect(registry.shouldBlock(replacement, replacement, 'https://example.com')).toBe(false)
+  })
+
   it('does not inspect unrelated guarded frames during registration or navigation', () => {
     const registry = new HostFrameNavigationRegistry()
     let livenessChecks = 0
