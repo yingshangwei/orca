@@ -2,6 +2,8 @@ import {
   TerminalStreamOpcode,
   encodeTerminalStreamJson
 } from '../../../../../shared/terminal-stream-protocol'
+import { recordYieldedTerminalQueries } from './terminal-multiplex-yielded-queries'
+import { EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE } from '../../../../../shared/terminal-reply-query-scan'
 import { iterateTerminalOutputFrameChunks } from '../../terminal-output-frame-chunks'
 import { TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES } from '../../../../../shared/terminal-multiplex-flow-control'
 import { createTerminalOutputBatcher } from './terminal-output-batcher'
@@ -54,6 +56,8 @@ export async function initializeMultiplexStream(
     ackPendingOutputBytes: 0,
     ackPendingOutputOverflowed: false,
     ackRecoverySnapshotInFlight: false,
+    yieldedQueries: [],
+    yieldedQueryScan: EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE,
     ackRecoveryHistoryOwed: false,
     pendingOutput: [],
     pendingOutputBytes: 0,
@@ -94,14 +98,18 @@ export async function initializeMultiplexStream(
       notePausedOutputDropped(state, stream)
       return
     }
+    recordYieldedTerminalQueries(runtime, stream, data, meta)
     if (stream.buffering) {
       appendPendingMultiplexOutput(stream, data, meta)
       return
     }
     stream.outputBatcher.push(data, meta)
   })
-  // Why: a multiplexed stream feeds a remote xterm view with query authority, so the main model responder yields while attached (terminal-query-authority.md).
-  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(ptyId)
+  // Why: a multiplexed stream feeds a remote xterm view with query authority, so the main model responder yields while it receives output; a paused stream drops it, so main answers.
+  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(
+    ptyId,
+    () => stream.outputPaused
+  )
   // Why: the pane must hear its daemon died now, not when its next keystroke is refused.
   const unsubscribeEndpointLoss = stream.supportsEndpointLossNotice
     ? subscribeToPtyEndpointLoss(ptyId, () => {

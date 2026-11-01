@@ -223,6 +223,7 @@ it('launches the copied helper on plain Node and leaves no inherited credentials
     KeepAlive: false,
     // Local Network access for a plist-launched job resolves through its associated app.
     AssociatedBundleIdentifiers: ['com.stablyai.orca'],
+    MaterializeDatalessFiles: true,
     EnvironmentVariables: { ORCA_TEST_SECRET: 'test-value' }
   })
   expect(JSON.stringify(job)).not.toContain('NODE_CHANNEL_FD')
