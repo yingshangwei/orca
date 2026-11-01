@@ -57,11 +57,7 @@ export function readPersistedEnvironmentStore(
   }
 }
 
-/** Persisted environments with their sidecar state overlaid; stale sidecar entries are ignored. */
-/**
- * Only an open internal gate fails closed on WSL state this build cannot read (a corrupt file, a
- * newer record). Closed, that state is ignored, so it can never hide an SSH or paired server.
- */
+/** Unreadable WSL state hides only possible WSL hosts while their gate is open; writes still refuse it. */
 function readWslHostDeploymentsForRegistry(
   userDataPath: string
 ): ReturnType<typeof readWslHostDeployments> {
@@ -70,11 +66,11 @@ function readWslHostDeploymentsForRegistry(
     const read = readWslHostDeployments(userDataPath)
     return gateOpen ? read : { deployments: read.deployments, unreadableEnvironmentIds: new Set() }
   } catch (error) {
-    if (!(error instanceof WslHostDeploymentStoreInvalidError) || gateOpen) {
+    if (!(error instanceof WslHostDeploymentStoreInvalidError)) {
       throw error
     }
     warnUnreadableEnvironmentState(error.message)
-    return { deployments: [], unreadableEnvironmentIds: new Set() }
+    return { deployments: [], unreadableEnvironmentIds: new Set(), fileUnreadable: gateOpen }
   }
 }
 
