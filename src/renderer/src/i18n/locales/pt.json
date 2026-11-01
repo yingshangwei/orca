@@ -8703,7 +8703,7 @@
         "wslHosts": {
           "title": "Hosts WSL",
           "experimental": "Experimental",
-          "description": "O Orca executa um servidor dentro de cada distribuição. Uma distribuição parada só é iniciada quando você abre um dos projetos dela ou a conecta aqui.",
+          "description": "O Orca executa um servidor dentro de cada distribuição. Iniciar, Novo terminal ou Conectar aqui inicia uma distribuição parada. Abrir ou restaurar um projeto não a inicia.",
           "add": "Adicionar distribuição WSL",
           "connect": "Conectar",
           "remove": "Remover",
@@ -15637,7 +15637,8 @@
             "disconnectedBody": "As tentativas automáticas foram interrompidas. Reconecte para retomar esta sessão de terminal.",
             "reconnectButton": "Reconectar",
             "pairingRefusedTitle": "Este host não aceita mais este computador",
-            "pairingRefusedBody": "O Orca não conseguiu parear com ele novamente via SSH. Nada no host foi interrompido. Reconecte para tentar novamente."
+            "pairingRefusedBody": "O Orca não conseguiu parear com ele novamente via SSH. Nada no host foi interrompido. Reconecte para tentar novamente.",
+            "wslStoppedBody": "Inicie esta distribuição para continuar trabalhando aqui."
           },
           "TerminalPane": {
             "ac112e9036": "Remover título",
@@ -19864,7 +19865,9 @@
       "hostOutage": {
         "offline": "{{hostName}} está offline",
         "reconnecting": "{{hostName}} está reconectando…",
-        "reconnect": "Reconectar"
+        "reconnect": "Reconectar",
+        "stopped": "{{distro}} está parada",
+        "start": "Iniciar"
       },
       "interruptedContinue": {
         "continue": "Continuar",

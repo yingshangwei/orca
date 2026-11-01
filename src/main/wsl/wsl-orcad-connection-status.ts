@@ -21,7 +21,7 @@ export type WslOrcadConnectionStatus =
   | {
       state: 'distro-stopped'
       terminals: 'exited'
-      /** False: nothing user-visible needs it, so it is not booted; it reconnects once running. */
+      /** False: the distro is not booted automatically; it reconnects once running. */
       recovering: boolean
     }
   | {

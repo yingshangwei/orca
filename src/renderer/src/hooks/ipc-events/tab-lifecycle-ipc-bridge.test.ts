@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as WebRuntimeTerminalCreation from '@/runtime/web-runtime-terminal-creation'
 
 const mocks = vi.hoisted(() => {
   const state: Record<string, unknown> = {}
   const listeners: Record<string, (...args: unknown[]) => void> = {}
   const createWebRuntimeSessionTerminal = vi.fn()
-  return { state, listeners, createWebRuntimeSessionTerminal }
+  return {
+    state,
+    listeners,
+    createWebRuntimeSessionTerminal,
+    createResult: vi.fn(),
+    connectWslHost: vi.fn(),
+    reloadProjects: vi.fn()
+  }
 })
 
 vi.mock('../../store', () => ({ useAppStore: { getState: () => mocks.state } }))
@@ -14,6 +22,19 @@ vi.mock('@/runtime/web-runtime-terminal-creation', () => ({
 }))
 vi.mock('@/runtime/web-runtime-session-environment', () => ({
   isWebRuntimeSessionActive: () => false
+}))
+vi.mock('@/runtime/web-runtime-terminal-create-operation', () => ({
+  createWebRuntimeSessionTerminalResult: mocks.createResult
+}))
+vi.mock('@/runtime/web-runtime-terminal-create-failure-notice', () => ({
+  notifyWebRuntimeTerminalCreateFailure: vi.fn()
+}))
+vi.mock('@/lib/agent-launch-prompt-delivery', () => ({
+  deliverLaunchPromptToAgentTab: vi.fn(),
+  seedNativeChatLaunchDraftForAgentTab: vi.fn()
+}))
+vi.mock('@/components/status-bar/runtime-environment-explicit-connect', () => ({
+  connectRuntimeHostAndReloadProjects: mocks.reloadProjects
 }))
 vi.mock('@/lib/workspace-tab-commands', () => ({ dispatchWorkspaceTabCommand: vi.fn() }))
 vi.mock('@/lib/floating-workspace-terminal-actions', () => ({
@@ -42,10 +63,15 @@ describe('registerTabLifecycleIpcBridge new terminal tab', () => {
         }
       }
     )
-    vi.stubGlobal('window', { api: { ui } })
+    vi.stubGlobal('window', {
+      api: { ui, runtimeEnvironments: { wslHosts: { connect: mocks.connectWslHost } } }
+    })
     mocks.createWebRuntimeSessionTerminal
       .mockReset()
       .mockResolvedValue({ status: 'failed', message: '' })
+    mocks.createResult.mockReset().mockResolvedValue({ outcome: { status: 'created' } })
+    mocks.connectWslHost.mockReset().mockResolvedValue(undefined)
+    mocks.reloadProjects.mockReset().mockResolvedValue(true)
   })
 
   function ownerRows(...hostIds: ('local' | 'runtime:env-b')[]): Record<string, unknown> {
@@ -101,8 +127,46 @@ describe('registerTabLifecycleIpcBridge new terminal tab', () => {
     mocks.listeners.onNewTerminalTab()
     await vi.waitFor(() => expect(mocks.createWebRuntimeSessionTerminal).toHaveBeenCalled())
     expect(mocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith(
-      expect.objectContaining({ worktreeId: WORKTREE_ID, environmentId: 'env-b' })
+      expect.objectContaining({ worktreeId: WORKTREE_ID, environmentId: 'env-b' }),
+      { userAct: true }
     )
+    expect(createTab).not.toHaveBeenCalled()
+  })
+
+  it('starts a stopped WSL host from the guest shortcut before asking it for a terminal', async () => {
+    const creation = await vi.importActual<typeof WebRuntimeTerminalCreation>(
+      '@/runtime/web-runtime-terminal-creation'
+    )
+    mocks.createWebRuntimeSessionTerminal.mockImplementation(
+      creation.createWebRuntimeSessionTerminal
+    )
+    let connected!: () => void
+    mocks.connectWslHost.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          connected = resolve
+        })
+    )
+    const createTab = vi.fn()
+    mocks.state = {
+      ...ownerRows('runtime:env-b'),
+      activeWorktreeId: WORKTREE_ID,
+      wslHostStatuses: { 'env-b': { state: 'distro-stopped', distro: 'Ubuntu' } },
+      createTab
+    }
+    registerTabLifecycleIpcBridge([])
+    mocks.listeners.onNewTerminalTab()
+    await vi.waitFor(() => expect(mocks.connectWslHost).toHaveBeenCalledOnce())
+    expect(mocks.createResult).not.toHaveBeenCalled()
+    expect(createTab).not.toHaveBeenCalled()
+
+    connected()
+    await vi.waitFor(() => expect(mocks.createResult).toHaveBeenCalledOnce())
+    expect(mocks.createResult).toHaveBeenCalledWith({
+      worktreeId: WORKTREE_ID,
+      environmentId: 'env-b',
+      activate: true
+    })
     expect(createTab).not.toHaveBeenCalled()
   })
 

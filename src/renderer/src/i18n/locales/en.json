@@ -3791,7 +3791,8 @@
             "disconnectedTitle": "Remote runtime disconnected",
             "retryingBody": "Orca is retrying automatically. This terminal will resume if the connection returns.",
             "disconnectedBody": "Automatic retries stopped. Reconnect to resume this terminal session.",
-            "reconnectButton": "Reconnect"
+            "reconnectButton": "Reconnect",
+            "wslStoppedBody": "Start this distro to resume work here."
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "Host unavailable",
@@ -13149,7 +13150,7 @@
         "wslHosts": {
           "title": "WSL hosts",
           "experimental": "Experimental",
-          "description": "Orca runs a server inside each distro. A stopped distro starts only when you open one of its projects or connect it here.",
+          "description": "Orca runs a server inside each distro. Start, New Terminal, or Connect here starts a stopped distro. Opening or restoring a project does not.",
           "add": "Add WSL distro",
           "connect": "Connect",
           "remove": "Remove",
@@ -19597,7 +19598,9 @@
       "hostOutage": {
         "offline": "{{hostName}} is offline",
         "reconnecting": "{{hostName}} is reconnecting…",
-        "reconnect": "Reconnect"
+        "reconnect": "Reconnect",
+        "stopped": "{{distro}} is stopped",
+        "start": "Start"
       },
       "interruptedContinue": {
         "continue": "Continue",

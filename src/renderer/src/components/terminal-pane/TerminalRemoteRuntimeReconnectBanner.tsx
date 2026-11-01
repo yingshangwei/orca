@@ -38,24 +38,28 @@ export function TerminalRemoteRuntimeReconnectBanner({
   phase,
   onReconnect,
   wslHostUnavailable = null,
+  wslHostStopped = null,
   pairingRefused = false
 }: {
   phase: VisibleRecoveryPhase
   onReconnect: () => void
   /** The pane's WSL host cannot run: nothing is retrying, so say why instead. */
   wslHostUnavailable?: WslHostUnavailableReason | null
+  wslHostStopped?: string | null
   /** The pane's managed server refuses this desktop and pairing again over SSH failed. */
   pairingRefused?: boolean
 }): React.JSX.Element {
   if (wslHostUnavailable) {
     return <WslHostUnavailableBanner reason={wslHostUnavailable} />
   }
-  const retrying = phase !== 'disconnected' && !pairingRefused
+  const retrying = phase !== 'disconnected' && !pairingRefused && !wslHostStopped
 
   return (
     <div
       className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center"
-      data-terminal-remote-runtime-reconnect-banner={pairingRefused ? 'pairing-refused' : phase}
+      data-terminal-remote-runtime-reconnect-banner={
+        wslHostStopped ? 'wsl-host-stopped' : pairingRefused ? 'pairing-refused' : phase
+      }
     >
       <div
         className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-md border border-border bg-card/95 px-3 py-3 text-card-foreground shadow-xs backdrop-blur-[1px]"
@@ -71,44 +75,55 @@ export function TerminalRemoteRuntimeReconnectBanner({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">
-            {pairingRefused
-              ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedTitle',
-                  'This host no longer accepts this computer'
-                )
-              : retrying
+            {wslHostStopped
+              ? translate('components.native-chat.hostOutage.stopped', '{{distro}} is stopped', {
+                  distro: wslHostStopped
+                })
+              : pairingRefused
                 ? translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingTitle',
-                    'Reconnecting to remote runtime'
+                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedTitle',
+                    'This host no longer accepts this computer'
                   )
-                : translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
-                    'Remote runtime disconnected'
-                  )}
+                : retrying
+                  ? translate(
+                      'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingTitle',
+                      'Reconnecting to remote runtime'
+                    )
+                  : translate(
+                      'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
+                      'Remote runtime disconnected'
+                    )}
           </div>
           <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {pairingRefused
+            {wslHostStopped
               ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedBody',
-                  "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
+                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.wslStoppedBody',
+                  'Start this distro to resume work here.'
                 )
-              : retrying
+              : pairingRefused
                 ? translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
-                    'Orca is retrying automatically. This terminal will resume if the connection returns.'
+                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedBody',
+                    "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
                   )
-                : translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
-                    'Automatic retries stopped. Reconnect to resume this terminal session.'
-                  )}
+                : retrying
+                  ? translate(
+                      'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
+                      'Orca is retrying automatically. This terminal will resume if the connection returns.'
+                    )
+                  : translate(
+                      'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
+                      'Automatic retries stopped. Reconnect to resume this terminal session.'
+                    )}
           </div>
         </div>
         {!retrying ? (
           <Button size="sm" onClick={onReconnect}>
-            {translate(
-              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
-              'Reconnect'
-            )}
+            {wslHostStopped
+              ? translate('components.native-chat.hostOutage.start', 'Start')
+              : translate(
+                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
+                  'Reconnect'
+                )}
           </Button>
         ) : null}
       </div>
@@ -126,6 +141,7 @@ export function DelayedRemoteRuntimeReconnectBanner({
   const revealed = useRemoteRuntimeRecoveryBannerRevealed(
     props.phase === 'disconnected' ||
       Boolean(props.wslHostUnavailable) ||
+      Boolean(props.wslHostStopped) ||
       Boolean(props.pairingRefused)
   )
   return revealed ? <TerminalRemoteRuntimeReconnectBanner key={epoch} {...props} /> : null

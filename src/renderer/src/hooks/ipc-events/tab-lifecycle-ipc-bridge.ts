@@ -38,11 +38,10 @@ export function registerTabLifecycleIpcBridge(unsubs: (() => void)[]): void {
       }
       const environmentId = owner.environmentId
       void (async () => {
-        const outcome = await createWebRuntimeSessionTerminal({
-          worktreeId,
-          environmentId,
-          activate: true
-        })
+        const outcome = await createWebRuntimeSessionTerminal(
+          { worktreeId, environmentId, activate: true },
+          { userAct: true }
+        )
         if (outcome.status === 'created' || isWebRuntimeSessionActive(environmentId)) {
           return
         }

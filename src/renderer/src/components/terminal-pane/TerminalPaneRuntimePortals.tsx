@@ -1,4 +1,11 @@
 import { createPortal } from 'react-dom'
+import { useAppStore } from '@/store'
+import { startWslHostAndReloadProjects } from '@/lib/wsl-host-user-start'
+import {
+  paneShowsWslHostStoppedCard,
+  selectStoppedWslDistro,
+  selectWorkspaceRuntimeEnvironmentId
+} from '@/lib/wsl-host-stopped-status'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import CodexRestartChip from '../CodexRestartChip'
 import { CodexSharedServerBanner } from './CodexSharedServerBanner'
@@ -178,6 +185,10 @@ export function TerminalPaneRecoveryPortals({
   const { managedPanes, paneTransportsRef, ptyRecoveryStatesByPaneId, showSshReconnectOverlay } =
     controller
   const wslHostUnavailable = useWslHostUnavailableReason(controller.worktreeId)
+  const ownerEnvironmentId = useAppStore((state) =>
+    selectWorkspaceRuntimeEnvironmentId(state, controller.worktreeId)
+  )
+  const stoppedDistro = useAppStore((state) => selectStoppedWslDistro(state, ownerEnvironmentId))
   const pairingRefusedEnvironmentId = useManagedPairingRefusedEnvironmentId(controller.worktreeId)
   if (showSshReconnectOverlay) {
     return null
@@ -186,18 +197,32 @@ export function TerminalPaneRecoveryPortals({
     <>
       {managedPanes.map((pane) => {
         const recoveryState = ptyRecoveryStatesByPaneId[pane.id]
-        if (!recoveryState || recoveryState.reason === 'ownership') {
+        const showStopped = paneShowsWslHostStoppedCard({
+          wslHostUnavailable: wslHostUnavailable !== null,
+          stoppedWslDistro: stoppedDistro,
+          ownerEnvironmentId,
+          paneEnvironmentId: paneTransportsRef.current.get(pane.id)?.getRuntimeEnvironmentId?.()
+        })
+        if ((!recoveryState && !showStopped) || recoveryState?.reason === 'ownership') {
           return null
         }
         return createPortal(
           <DelayedRemoteRuntimeReconnectBanner
             // Why per pane, not per epoch: a Reconnect click opens a new epoch and must not hide the banner again.
             key={`remote-runtime-reconnect-${pane.id}`}
-            epoch={recoveryState.epoch}
-            phase={recoveryState.phase}
+            epoch={recoveryState?.epoch ?? 0}
+            phase={showStopped ? 'disconnected' : (recoveryState?.phase ?? 'disconnected')}
             onReconnect={() => {
               const retry = (): void => {
                 paneTransportsRef.current.get(pane.id)?.retryRecovery?.()
+              }
+              if (showStopped && ownerEnvironmentId) {
+                void startWslHostAndReloadProjects(ownerEnvironmentId).then((started) => {
+                  if (started) {
+                    retry()
+                  }
+                })
+                return
               }
               // Why connect first: it asks Orca to pair again, which a pane retry alone does not.
               if (pairingRefusedEnvironmentId) {
@@ -209,6 +234,7 @@ export function TerminalPaneRecoveryPortals({
               }
               retry()
             }}
+            wslHostStopped={showStopped ? stoppedDistro : null}
             wslHostUnavailable={wslHostUnavailable}
             pairingRefused={pairingRefusedEnvironmentId !== null}
           />,

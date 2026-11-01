@@ -262,6 +262,7 @@ export class WslOrcadConnectionManager {
       transport,
       {
         environmentId,
+        distro,
         remotePort: launch.port,
         localPort: preferredLocalPort,
         label: `Orca server in WSL: ${label}`

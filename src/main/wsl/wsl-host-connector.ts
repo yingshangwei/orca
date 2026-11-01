@@ -8,7 +8,7 @@ import { resolveEnvironmentPairingOffer } from '../../shared/runtime-environment
 import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
-import type { WslHostConnector } from './wsl-host-service'
+import type { WslHostConnector, WslHostReachability } from './wsl-host-service'
 import { readWslDistroOrcadPublicKey } from './wsl-host-ssh-orcad-conflict'
 import {
   WslOrcadConnectionManager,
@@ -36,8 +36,6 @@ function targetFor(distro: string): WslOrcadHostTarget {
 function transportFor(distro: string) {
   return createWslOrcadHostTransport({ target: targetFor(distro) })
 }
-
-type Reachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
 
 export function createWslHostConnector(options: {
   userDataPath: string
@@ -88,14 +86,14 @@ export function createWslHostConnector(options: {
     {
       connection: WslOrcadConnection | null
       pairingOffer: string | undefined
-      result: Promise<Reachability>
+      result: Promise<WslHostReachability>
     }
   >()
   const probe = async (
     distro: string,
     environmentId: string,
     connection: WslOrcadConnection | null
-  ): Promise<Reachability> => {
+  ): Promise<WslHostReachability> => {
     // Dialing the bridge starts wsl.exe, so passive checks must first confirm the distro runs.
     const running = await readConfirmedRunningWslDistros()
     if (running.status === 'unavailable') {
@@ -124,7 +122,10 @@ export function createWslHostConnector(options: {
       ? 'available'
       : 'unreachable'
   }
-  const coldReachability = (distro: string, environmentId: string): Promise<Reachability> => {
+  const coldReachability = (
+    distro: string,
+    environmentId: string
+  ): Promise<WslHostReachability> => {
     const key = `${wslDistroHolderKey(distro)}\0${environmentId}`
     const connection = manager.get(distro)
     const pairingOffer = connection?.pairingOffer
@@ -146,9 +147,10 @@ export function createWslHostConnector(options: {
     connect: (distro, connectOptions) => liveness.connect(distro, connectOptions),
     forgetPairingFailures: (environmentId) => pairingRecovery.repairs.forgetFailures(environmentId),
     get: (distro) => manager.get(distro),
-    isReachable: async (distro, environmentId) =>
-      options.runtime.isReady?.(environmentId) ||
-      (await coldReachability(distro, environmentId)) === 'available',
+    reachability: async (distro, environmentId) =>
+      options.runtime.isReady?.(environmentId)
+        ? 'available'
+        : coldReachability(distro, environmentId),
     disconnect: (distro) => liveness.stop(distro),
     stopServer: async (distro, environmentId) => {
       const reachability = await coldReachability(distro, environmentId)

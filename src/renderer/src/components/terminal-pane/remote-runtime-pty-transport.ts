@@ -1054,6 +1054,18 @@ export function createRemoteRuntimePtyTransport(
     replayLastTransportEntryPoint()
   }
 
+  function parkStoppedWslHost(error: unknown): boolean {
+    if (toRemoteRuntimeClientErrorLike(error).code !== 'wsl_host_stopped') {
+      return false
+    }
+    connecting = false
+    recovery.markDisconnected()
+    recovery.parkRetryAfterDeadline(retryAfterRecoverableConnectFailure)
+    emitRecoveryState(true)
+    surfaceErrorMessage(runtimeTerminalErrorMessage(error))
+    return true
+  }
+
   // Why: schedule() both auto-retries inside the window and leaves the retry parked when the deadline
   // latches, so online/resume and the Reconnect button always find something to fire.
   function scheduleConnectRetryAfterRecoverableFailure(): void {
@@ -2486,6 +2498,9 @@ export function createRemoteRuntimePtyTransport(
       recoverExpiredHostPane()
       return
     }
+    if (parkStoppedWslHost(error)) {
+      return
+    }
     const clientError = toRemoteRuntimeClientErrorLike(error)
     if (isRuntimeRpcQueueOverloadError(clientError)) {
       scheduleResubscribeAfterBackoff()
@@ -3549,6 +3564,8 @@ export function createRemoteRuntimePtyTransport(
         } else if (isRemoteTerminalGoneMessage(message)) {
           recovery.cancel()
           handleRemoteTerminalError(error)
+        } else if (parkStoppedWslHost(error)) {
+          // Start replays this request; passive recovery never boots the distro.
         } else if (isRecoverablePaneBindingError(error)) {
           scheduleConnectRetryAfterRecoverableFailure()
         } else {

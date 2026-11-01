@@ -11,9 +11,16 @@ import {
   type OrcadStdioBridgeDependencies
 } from '../managed-server/lifecycle/orcad-stdio-bridge-provider'
 import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
+import {
+  readConfirmedRunningWslDistros,
+  type WslRunningDistrosRead
+} from '../wsl-background-distro-gate'
+import { wslDistroHolderKey } from './wsl-distro-holder-record'
+import { confirmsRunning } from './wsl-orcad-liveness-evidence'
 
 export type WslOrcadStdioBridgeOptions = {
   environmentId: string
+  distro: string
   /** orcad's loopback port inside the distro. */
   remotePort: number
   /** 0 picks a free one. */
@@ -24,7 +31,8 @@ export type WslOrcadStdioBridgeOptions = {
 export function listenWslOrcadStdioBridge(
   transport: OrcadHostTransport,
   options: WslOrcadStdioBridgeOptions,
-  dependencies: OrcadStdioBridgeDependencies = ORCAD_STDIO_BRIDGE_DEPENDENCIES
+  dependencies: OrcadStdioBridgeDependencies = ORCAD_STDIO_BRIDGE_DEPENDENCIES,
+  readRunning: () => Promise<WslRunningDistrosRead> = readConfirmedRunningWslDistros
 ): Promise<StartedPortForward> {
   return startOrcadStdioBridge(
     transport,
@@ -37,7 +45,13 @@ export function listenWslOrcadStdioBridge(
       remotePort: options.remotePort,
       label: options.label
     },
-    dependencies
+    dependencies,
+    async () => {
+      const running = await readRunning()
+      if (!confirmsRunning(running, wslDistroHolderKey(options.distro))) {
+        throw new Error(`WSL distro ${options.distro} is not confirmed running`)
+      }
+    }
   )
 }
 

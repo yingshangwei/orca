@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useWslHostStartCardReplacesPaneError } from './use-wsl-host-stopped-pane'
 import { TerminalPaneFileDropOwner } from './TerminalPaneFileDropOwner'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import TerminalSearch from '@/components/TerminalSearch'
@@ -120,6 +121,12 @@ export function TerminalPaneSurface({
     visibleTerminalError,
     worktreeId
   } = controller
+  const errorReplacedByStartCard = useWslHostStartCardReplacesPaneError(
+    worktreeId,
+    activePane && controller.ptyRecoveryStatesByPaneId[activePane.id]?.reason !== 'ownership'
+      ? (paneTransportsRef.current.get(activePane.id)?.getRuntimeEnvironmentId?.() ?? null)
+      : undefined
+  )
   // Why: an SSH, runtime, or not-yet-known host must not be described with this client's OS/shell.
   const paneOnClient = useAppStore(
     (state) => getKnownExecutionHostIdForWorktree(state, worktreeId) === LOCAL_EXECUTION_HOST_ID
@@ -194,7 +201,11 @@ export function TerminalPaneSurface({
       />
       {/* Why: the reconnect banner already owns SSH recovery UX; the z-50 error
           toast was painting over it (same bottom strip) with the raw ssh:connect failure. */}
-      {visibleTerminalError && isActive && !showSshReconnectOverlay && activePane
+      {visibleTerminalError &&
+      isActive &&
+      !showSshReconnectOverlay &&
+      !errorReplacedByStartCard &&
+      activePane
         ? createPortal(
             <TerminalErrorToast
               error={visibleTerminalError}

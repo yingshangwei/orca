@@ -4,8 +4,7 @@
  * list and the guest's process identity, and the verdict drives recovery. Every status change
  * goes out through the connection manager's `onChange`.
  *
- * Never boots a distro for background work: a stopped distro comes back only while a user-visible
- * WSL project or terminal needs it, otherwise once the background gate next sees it running.
+ * Never boots a stopped distro: recovery waits until the background gate confirms it running.
  * Timers are monotonic, and a power resume re-verifies instead of trusting them.
  */
 import type { WslOrcadConnection } from './wsl-orcad-connection'
@@ -298,15 +297,11 @@ export class WslOrcadLivenessSupervisor {
 
   private async onDistroStopped(entry: Supervised): Promise<void> {
     disarmSupervised(entry)
-    const recovering = this.deps.hasUserVisibleWork(entry.distro)
     // The holder and the watch both exit on a stop; report it once.
-    if (recovering || entry.state !== 'distro-stopped') {
-      this.publish(entry, { state: 'distro-stopped', terminals: 'exited', recovering })
+    if (entry.state !== 'distro-stopped') {
+      this.publish(entry, { state: 'distro-stopped', terminals: 'exited', recovering: false })
     }
-    if (recovering) {
-      return this.recover(entry, 'distro-stopped')
-    }
-    // Never boot it for background work; the gate runs this once something else starts it.
+    // Start is explicit; the gate runs this once the user or something else starts the distro.
     const generation = entry.generation
     this.deps.deferUntilRunning(entry.distro, `wsl-orcad-liveness:${entry.key}`, () => {
       if (entry.generation === generation) {
@@ -328,7 +323,6 @@ export class WslOrcadLivenessSupervisor {
         ensure: (options) => this.deps.manager.ensure(entry.distro, options),
         collectCensus: this.deps.collectCensus,
         arm: (connection) => this.arm(entry, connection),
-        hasUserVisibleWork: () => this.deps.hasUserVisibleWork(entry.distro),
         readRunning: this.deps.readRunning
       },
       reason
