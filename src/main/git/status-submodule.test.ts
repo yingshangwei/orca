@@ -83,7 +83,7 @@ describe('submodule diff routing', () => {
         // Only the parent worktree declares the submodule; the recursion into the
         // submodule worktree must see no nested submodules.
         return Promise.resolve({
-          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path flutter_mine\n' : ''
+          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path\nflutter_mine\0' : ''
         })
       }
       if (args[0] === 'ls-files') {
@@ -138,7 +138,7 @@ describe('submodule diff routing', () => {
     gitExecFileAsyncMock.mockImplementation((args: string[], options?: { cwd?: string }) => {
       if (args[0] === 'config' && args.includes('.gitmodules')) {
         return Promise.resolve({
-          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path flutter_mine\n' : ''
+          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path\nflutter_mine\0' : ''
         })
       }
       if (args[0] === 'ls-files') {
@@ -184,7 +184,7 @@ describe('submodule diff routing', () => {
     gitExecFileAsyncMock.mockImplementation((args: string[], options?: { cwd?: string }) => {
       if (args[0] === 'config' && args.includes('.gitmodules')) {
         return Promise.resolve({
-          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path flutter_mine\n' : ''
+          stdout: options?.cwd === PARENT ? 'submodule.flutter_mine.path\nflutter_mine\0' : ''
         })
       }
       if (args[0] === 'ls-files') {
@@ -220,7 +220,7 @@ describe('submodule diff routing', () => {
     gitExecFileAsyncMock.mockImplementation((args: string[], options?: { cwd?: string }) => {
       if (args[0] === 'config' && args.includes('.gitmodules')) {
         return Promise.resolve({
-          stdout: options?.cwd === PARENT ? 'submodule.evil.path ../evil\n' : ''
+          stdout: options?.cwd === PARENT ? 'submodule.evil.path\n../evil\0' : ''
         })
       }
       return Promise.resolve({ stdout: '' })
@@ -233,7 +233,7 @@ describe('submodule diff routing', () => {
     gitExecFileAsyncMock.mockImplementation((args: string[], options?: { cwd?: string }) => {
       if (args[0] === 'config' && args.includes('.gitmodules')) {
         return Promise.resolve({
-          stdout: options?.cwd === PARENT ? 'submodule.evil.path ../evil\n' : ''
+          stdout: options?.cwd === PARENT ? 'submodule.evil.path\n../evil\0' : ''
         })
       }
       return Promise.resolve({ stdout: '' })
@@ -269,8 +269,8 @@ describe('listSubmodulePaths', () => {
       Promise.resolve({
         stdout:
           options?.wslDistro === 'debian'
-            ? 'submodule.lib.path debian-lib\n'
-            : 'submodule.lib.path ubuntu-lib\n'
+            ? 'submodule.lib.path\ndebian-lib\0'
+            : 'submodule.lib.path\nubuntu-lib\0'
       })
     )
 
@@ -282,6 +282,12 @@ describe('listSubmodulePaths', () => {
     ])
 
     expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads submodule names and paths that contain spaces', async () => {
+    gitExecFileAsyncMock.mockResolvedValue({ stdout: 'submodule.my lib.path\nmy lib\0' })
+
+    await expect(listSubmodulePaths('/repo')).resolves.toEqual(['my lib'])
   })
 })
 

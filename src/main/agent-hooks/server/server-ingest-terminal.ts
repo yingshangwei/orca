@@ -292,7 +292,6 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     // never evidence that the session ended — yet overwriting the row dropped the cached identity.
     // That erased it from persisted rows (lost across restart) and from headless `orca serve`, which
     // serves these rows to mobile directly instead of the renderer store, blanking Chat UI (#10630).
-    // A new turn after `done` still starts clean so a reused pane cannot inherit a finished session.
     // Why: mirror resolveAgentStatusIdentity, which treats a literal 'unknown' exactly like an
     // omitted type — an OSC ping that names no agent makes no claim about the pane's identity, so
     // it must not be read as a mismatch and strip the session the renderer would have kept.
@@ -300,13 +299,15 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       event.payload.agentType && event.payload.agentType !== 'unknown'
         ? event.payload.agentType
         : undefined
-    // A launch seed's `done` is a placeholder, not a finished turn, so its session carries over.
+    // A live agent keeps its session between turns; a new process run or exited resume-only row does not.
+    // A launch seed's `done` is a placeholder, not a completed turn.
     const inheritedProviderSession =
       previous?.providerSession &&
       (claimedAgentType === undefined || claimedAgentType === previous.payload.agentType) &&
       (previous.payload.state !== 'done' ||
         event.payload.state === 'done' ||
-        previous.observation?.origin === 'launch')
+        previous.observation?.origin === 'launch' ||
+        (!newRun && previous.providerSessionOnly !== true))
         ? previous.providerSession
         : undefined
     const preservedProviderSession = event.providerSession ?? inheritedProviderSession

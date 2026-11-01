@@ -67,6 +67,10 @@ describe('sanitizeWorktreeName', () => {
     expect(sanitizeWorktreeName('a..b...c')).toBe('a.b.c')
   })
 
+  it('keeps a trailing .lock so the folder name matches the request', () => {
+    expect(sanitizeWorktreeName('mise.lock')).toBe('mise.lock')
+  })
+
   it('preserves non-ASCII letters and numbers', () => {
     // Why: users name workspaces in their own language (CJK, accented Latin,
     // Cyrillic, etc.). Stripping these to ASCII left the name empty and threw
@@ -312,6 +316,26 @@ describe('getConfiguredBranchPrefix', () => {
 })
 
 describe('computeValidatedBranchName', () => {
+  it('rewrites a trailing .lock so git check-ref-format accepts the branch', () => {
+    const none = { branchPrefix: 'none' } as const
+    expect(computeValidatedBranchName(sanitizeWorktreeName('adopt mise.lock'), none, null)).toBe(
+      'adopt-mise-lock'
+    )
+    expect(computeValidatedBranchName(sanitizeWorktreeName('mise.lock!'), none, null)).toBe(
+      'mise-lock'
+    )
+    expect(computeValidatedBranchName('mise-.lock', none, null)).toBe('mise-lock')
+    expect(computeValidatedBranchName('mise.lock.json', none, null)).toBe('mise.lock.json')
+    expect(computeValidatedBranchName('mise.LOCK', none, null)).toBe('mise.LOCK')
+    expect(
+      computeValidatedBranchName(
+        'mise.lock',
+        { branchPrefix: 'custom', branchPrefixCustom: 'team' },
+        null
+      )
+    ).toBe('team/mise-lock')
+  })
+
   it('returns the computed branch name when the prefix is valid', () => {
     expect(
       computeValidatedBranchName(

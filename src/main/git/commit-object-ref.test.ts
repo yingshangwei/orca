@@ -5,6 +5,9 @@ describe('commit object refs', () => {
   it('recognizes only complete git object IDs', () => {
     expect(isFullGitObjectId('a'.repeat(40))).toBe(true)
     expect(isFullGitObjectId('A'.repeat(40))).toBe(true)
+    expect(isFullGitObjectId('A'.repeat(64))).toBe(true)
+    expect(isFullGitObjectId('a'.repeat(63))).toBe(false)
+    expect(isFullGitObjectId('a'.repeat(65))).toBe(false)
     expect(isFullGitObjectId('abc123')).toBe(false)
     expect(isFullGitObjectId('origin/main')).toBe(false)
     expect(isFullGitObjectId('g'.repeat(40))).toBe(false)

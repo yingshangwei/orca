@@ -42,10 +42,12 @@ export function computeBranchName(
  * an opaque git check-ref-format failure.
  */
 export function computeValidatedBranchName(
-  sanitizedName: string,
+  sanitizedWorktreeName: string,
   settings: BranchPrefixSettings,
   gitUsername: string | null
 ): string {
+  // Git rejects a ref component ending in .lock; only the branch is rewritten so the folder keeps its name.
+  const sanitizedName = sanitizedWorktreeName.replace(/-?\.lock$/, '-lock')
   const prefix = getConfiguredBranchPrefix(settings, gitUsername)
   if (prefix === null) {
     return sanitizedName
