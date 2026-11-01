@@ -2,8 +2,8 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
+import { stubRuntime } from './terminal-multiplex-test-harness'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
 import {
   TerminalStreamOpcode,
@@ -53,7 +53,7 @@ async function setupMultiplexStream(): Promise<{
     return { data: snapshot.data, cols: 80, rows: 24, seq: snapshot.seq }
   })
 
-  const runtime = {
+  const runtime = stubRuntime({
     getRuntimeId: () => 'test-runtime',
     resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
     readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),
@@ -63,6 +63,7 @@ async function setupMultiplexStream(): Promise<{
     getMobileDisplayMode: vi.fn().mockReturnValue('auto'),
     getLayout: vi.fn().mockReturnValue({ seq: 1 }),
     registerRemoteTerminalViewSubscriber: vi.fn(() => () => {}),
+    isSoleRemoteTerminalQueryOwner: () => false,
     subscribeToTerminalData: vi.fn(
       (_ptyId: string, cb: (data: string, meta?: OutputMeta) => void) => {
         emitOutput = cb
@@ -84,7 +85,7 @@ async function setupMultiplexStream(): Promise<{
     }),
     waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
     updateDesktopViewport: vi.fn().mockResolvedValue(true)
-  } as unknown as OrcaRuntimeService
+  })
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
   const request: RpcRequest = {
