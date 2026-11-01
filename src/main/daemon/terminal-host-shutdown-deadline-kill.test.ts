@@ -30,6 +30,7 @@ describe.skipIf(process.platform === 'win32')('daemon shutdown deadline', () => 
   let host: TerminalHost
   let exit: ReturnType<typeof vi.fn<() => void>>
   let cancelDeadline: () => void
+  let shutdownOrder: string[]
 
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -40,9 +41,12 @@ describe.skipIf(process.platform === 'win32')('daemon shutdown deadline', () => 
       rows: 24,
       streamClient: { onData: () => {}, onExit: () => {} }
     })
-    exit = vi.fn<() => void>()
+    shutdownOrder = []
+    exit = vi.fn<() => void>(() => {
+      shutdownOrder.push('exit')
+    })
     const deadline = createDaemonShutdownDeadline(
-      { log: () => {}, close: () => {} },
+      { log: () => {}, close: () => shutdownOrder.push('close') },
       () => host,
       exit
     )
@@ -57,12 +61,16 @@ describe.skipIf(process.platform === 'win32')('daemon shutdown deadline', () => 
   })
 
   it('SIGKILLs the PTY process group before exiting while the async sweep is still pending', async () => {
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      shutdownOrder.push('kill')
+      return true
+    })
     void host.dispose()
 
     await vi.advanceTimersByTimeAsync(DAEMON_SHUTDOWN_TIMEOUT_MS)
 
     expect(kill.mock.calls).toEqual([[-ROOT_PID, 'SIGKILL']])
+    expect(shutdownOrder).toEqual(['kill', 'close', 'exit'])
     expect(exit).toHaveBeenCalledOnce()
   })
 
