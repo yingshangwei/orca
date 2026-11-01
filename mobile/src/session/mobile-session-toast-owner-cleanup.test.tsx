@@ -1,3 +1,7 @@
+vi.mock('expo-router', async () => {
+  const { useEffect } = await import('react')
+  return { useFocusEffect: (effect: () => () => void) => useEffect(effect, [effect]) }
+})
 import { createElement, StrictMode } from 'react'
 import { act, create } from 'react-test-renderer'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -17,6 +21,7 @@ const boundary = vi.hoisted(() => {
   }
 })
 vi.mock('react-native', () => ({
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: vi.fn() }) },
   View: 'View',
   Platform: { OS: 'ios' },
   Keyboard: { dismiss: vi.fn() },

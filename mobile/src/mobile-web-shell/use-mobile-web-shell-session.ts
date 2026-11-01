@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MobileWebShellFailureReason } from '../../modules/orca-mobile-web-shell/src/load-state'
 import { useHostProtocolGates } from '../components/host-protocol-gates-context'
 import { useHostClient } from '../transport/host-client-hooks'
 import {
@@ -32,6 +31,7 @@ import {
   reduceMobileWebShellSession
 } from './mobile-web-shell-session'
 import type {
+  MobileWebShellReportedFailure,
   MobileWebShellSessionEffect,
   MobileWebShellSessionEvent,
   MobileWebShellSessionState,
@@ -51,9 +51,7 @@ export type MobileWebShellSessionView = {
    *  to say so beside the page rather than instead of it. */
   readonly updateNotice: MobileWebShellUpdateNotice | null
   readonly retry: () => void
-  /** B3's failure reasons, forwarded verbatim; the reducer owns what each one means. */
-  readonly reportShellFailure: (reason: MobileWebShellFailureReason) => void
-  /** The native view began a document; drops what the document it replaces said about itself. */
+  readonly reportShellFailure: (reason: MobileWebShellReportedFailure) => void
   readonly reportDocumentStarted: () => void
   /** The native view finished a document; starts the wait for the page's first word. */
   readonly reportDocumentLoaded: () => void
@@ -318,7 +316,7 @@ export function useMobileWebShellSession(args: {
   }, [dispatch, invalidate, runtime])
 
   const reportShellFailure = useCallback(
-    (reason: MobileWebShellFailureReason) => {
+    (reason: MobileWebShellReportedFailure) => {
       dispatch(epochRef.current, { type: 'shell-failed', reason })
     },
     [dispatch]

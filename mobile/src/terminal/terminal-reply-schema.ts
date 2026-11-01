@@ -50,12 +50,9 @@ export const terminalViewportUpdatedSchema = z
 /** The host's saved phone-fit restore delay; `null` keeps the terminal at phone size. */
 export const terminalAutoRestoreFitSchema = z.looseObject({ ms: z.number().nullable() })
 
-/**
- * The two terminal writes whose reply body no call site reads.
- *
- * The worker-takeover report is decided by acceptance alone — worker-terminal-takeover-report.ts:46
- * reads `accepted` and raises a fixed sentence of its own — and the buffer clear reports success on
- * any fulfilled reply. The host does answer `{ changed }` and `{ clear }`; declaring either would be
- * a requirement with no reader behind it.
- */
+export const terminalBufferClearedSchema = z
+  .looseObject({ clear: z.looseObject({ cleared: z.boolean() }) })
+  .transform((reply) => reply.clear.cleared)
+
+// The worker-takeover report's `{ changed }` payload is unread; requiring it would reject hosts without affecting any consumer.
 export const terminalWriteUnreadReplySchema = z.unknown()

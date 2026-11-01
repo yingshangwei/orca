@@ -121,6 +121,9 @@ export function useMobileBranchDiffPreview({
             mergeBase: summary.mergeBase
           }
         })
+        if (!isCurrentPreview()) {
+          return
+        }
         let result: MobileGitDiffReply
         try {
           result = gitBranchDiffRead.interpret(reply)
@@ -132,9 +135,6 @@ export function useMobileBranchDiffPreview({
         }
         const diff = buildMobileDiffLines(result.originalContent, result.modifiedContent)
         const syntaxLanguage = resolveMobileSyntaxLanguage(entry.path)
-        if (!isCurrentPreview()) {
-          return
-        }
         updateBranchDiffPreview({
           kind: 'ready',
           entry,

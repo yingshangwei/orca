@@ -1,9 +1,9 @@
-import type { MobileWebShellFailureReason } from '../../modules/orca-mobile-web-shell/src/load-state'
 import { evaluateMobileWebBundleCompat } from '../transport/mobile-web-bundle-compat'
 import type {
   CachedGeneration,
   MobileWebShellGates,
   MobileWebShellManifestFacts,
+  MobileWebShellReportedFailure as ShellFailure,
   MobileWebShellSession,
   MobileWebShellSessionEffect,
   MobileWebShellSessionEvent,
@@ -171,32 +171,16 @@ function onManifestRead(
   )
 }
 
-/**
- * B3's contract, and the only place it is interpreted.
- *
- * `generation-unreadable` and `document-load-failed` say the bytes on disk are suspect, so the
- * host's cache goes and the flow runs once more. `render-process-gone` says nothing about the
- * bytes — renderer memory pressure and a WebView provider update look identical from here — so it
- * remounts and never deletes. `isolation-unavailable` is terminal on the first report: the fence is
- * the whole reason this view exists, and a device that cannot install it will not on a retry.
- *
- * Only `ready` hears any of it. The view exists in no other state, so a report arriving outside one
- * is from a view that has already been taken off screen: the second failure of a native batch that
- * the first one's recovery has already answered, or a mount that a wall or a retry has replaced.
- * Acting on it would strand the recovery already in flight — the delete-and-refetch would be made
- * terminal while its own cache read was still coming back, and that read would then drag the
- * session back to checking behind a failure screen.
- */
-function onShellFailed(
-  session: MobileWebShellSession,
-  reason: MobileWebShellFailureReason
-): MobileWebShellStep {
-  if (session.state.kind !== 'ready') {
+// Retry suspect disk bytes once via delete/refetch; renderer loss gets one remount without deletion; unavailable isolation is terminal.
+// Retired document reports cannot interrupt recovery; profile failures can end startup before ready.
+function onShellFailed(session: MobileWebShellSession, reason: ShellFailure): MobileWebShellStep {
+  if (session.state.kind !== 'ready' && reason !== 'host-profile-unreadable') {
     return step(session, {})
   }
   const failed = { kind: 'failed', reason, retriedOnce: session.retriedOnce } as const
-  if (reason === 'isolation-unavailable') {
-    return step(session, { state: failed })
+  if (reason === 'isolation-unavailable' || reason === 'host-profile-unreadable') {
+    // Terminal failures advance flow so pending startup work is cancelled and its completions rejected.
+    return step(session, { state: failed, flow: session.flow + 1 })
   }
   if (reason === 'render-process-gone') {
     return session.remountedOnce
@@ -276,6 +260,9 @@ function decideDownloadFailed(
 
 /** A layout-class change keeps the session when its view does not move, and restarts it otherwise. */
 function onLayoutChanged(session: MobileWebShellSession, wide: boolean): MobileWebShellStep {
+  if (session.state.kind === 'failed' && session.state.reason === 'host-profile-unreadable') {
+    return step(session, { wide })
+  }
   const view = routeViewOf(session.routes, session.routePathname, wide)
   // Without gates no manifest has been read, so there is no view to restart.
   if (session.gates === null || sameRouteView(view, session)) {

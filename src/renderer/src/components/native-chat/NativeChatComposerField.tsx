@@ -1,3 +1,4 @@
+import { useNotificationCardComposerClearance } from '@/lib/notification-card-composer-clearance'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
@@ -169,6 +170,8 @@ export function NativeChatComposerField({
   goalMode,
   agent
 }: NativeChatComposerFieldProps): React.JSX.Element {
+  const root = useRef<HTMLDivElement>(null)
+  useNotificationCardComposerClearance(root, true)
   const draftNotSaved = useNativeChatComposerDraftUnsaved(draftScopeKey)
   const optionCount =
     autocomplete.mode === 'slash'
@@ -216,7 +219,7 @@ export function NativeChatComposerField({
   const focusComposer = useCallback(() => textareaRef.current?.focus(), [textareaRef])
 
   return (
-    <div className="shrink-0 bg-chat-canvas">
+    <div ref={root} className="shrink-0 bg-chat-canvas">
       {/* Extra bottom padding keeps the input box off the window rim. */}
       <div className="px-3 pt-2 pb-4 sm:px-4">
         <div className="relative mx-auto w-full max-w-(--chat-content-max-width)">

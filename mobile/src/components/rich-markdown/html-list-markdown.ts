@@ -32,12 +32,12 @@ export function holdsUnownedList(element: Element): boolean {
   return Array.from(element.querySelectorAll('ul, ol')).some((list) => list.closest('li') === null)
 }
 
-/**
- * A list element as markdown, two spaces deeper per level of nesting.
- *
- * An ordered item's own number is preferred over its position, because the browser renumbers a
- * pasted or split item in the markup, and the source has to say what the surface shows.
- */
+// An empty task saves as a bare `- [ ]` rather than leaving trailing whitespace on its line.
+function itemLine(prefix: string, text: string, isTask: boolean): string {
+  return isTask && !text ? prefix.trimEnd() : prefix + text
+}
+
+// Indent two spaces per list level; prefer markup item number over position to preserve pasted/split browser renumbering.
 export function listMarkdown(element: Element, depth: number): string {
   const tag = element.tagName.toLowerCase()
   const isTask = element.getAttribute('data-type') === 'taskList'
@@ -58,7 +58,7 @@ export function listMarkdown(element: Element, depth: number): string {
         const listNumber = item.getAttribute('data-list-number') || item.getAttribute('value')
         marker = tag === 'ol' ? `${listNumber || orderedStart + index}. ` : '- '
       }
-      const line = indent + marker + listItemText(item)
+      const line = itemLine(indent + marker, listItemText(item), isTask)
       const nested = directNestedLists(item)
         .map((list) => listMarkdown(list, depth + 1))
         .filter(Boolean)

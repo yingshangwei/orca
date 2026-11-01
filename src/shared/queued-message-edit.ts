@@ -1,6 +1,6 @@
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
 import { MAX_BLOCKS, MAX_PROMPT_BYTES } from './rpc-contract/structured-agent-session-params'
-import { imageReferenceInsertion, imageReferenceToken } from './native-chat-image-reference'
+import { imageReferenceInsertion, withoutImageReference } from './native-chat-image-reference'
 import {
   imageReferencesToPromptMarkers,
   promptMarkersToImageReferences
@@ -71,8 +71,7 @@ export function queuedEditTextForKeptImages(
   let chips = promptMarkersToImageReferences(text, from)
   const staying = new Set(to)
   for (const id of from.filter((entry) => !staying.has(entry))) {
-    const token = imageReferenceToken(id)
-    chips = chips.replaceAll(`${token} `, '').replaceAll(token, '')
+    chips = withoutImageReference(chips, id)
   }
   return imageReferencesToPromptMarkers(chips, to)
 }

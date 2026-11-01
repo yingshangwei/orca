@@ -44,11 +44,8 @@ export function resolveRetainedTerminalHandles(context: {
   return new Set(context.liveHandles).add(activeHandle)
 }
 
-/** Drops per-handle keyboard metrics for pruned terminals, returning `previous`
- *  untouched when nothing changed. Swept over the whole map rather than the handles
- *  the caller just tore down: a handle retained for chat leaves the subscription map
- *  without ever being revisited by that loop. */
-export function pruneTerminalKeyboardMetrics<T>(
+// Cached handles may outlive subscriptions; preserve map identity when nothing is retired.
+export function pruneTerminalHandleMap<T>(
   previous: Map<string, T>,
   shouldPrune: (handle: string) => boolean
 ): Map<string, T> {

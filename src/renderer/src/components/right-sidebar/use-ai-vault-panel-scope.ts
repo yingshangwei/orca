@@ -17,7 +17,11 @@ export function useAiVaultPanelScope({
 }: {
   activeProjectKey: string | null
   activeWorktreePath: string | null
-}): { scope: AiVaultScope; handleScopeChange: (scope: AiVaultScope) => void } {
+}): {
+  scope: AiVaultScope
+  preferredScope: AiVaultScope
+  handleScopeChange: (scope: AiVaultScope) => void
+} {
   const [scope, setScope] = useState<AiVaultScope>(DEFAULT_AI_VAULT_SCOPE)
   const userChangedScopeRef = useRef(false)
   const preferredScopeRef = useRef<AiVaultScope>(DEFAULT_AI_VAULT_SCOPE)
@@ -52,5 +56,5 @@ export function useAiVaultPanelScope({
     setScope(nextScope)
   }, [])
 
-  return { scope, handleScopeChange }
+  return { scope, preferredScope: preferredScopeRef.current, handleScopeChange }
 }

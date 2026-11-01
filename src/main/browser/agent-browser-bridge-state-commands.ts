@@ -16,6 +16,7 @@ import { BrowserError } from './cdp-bridge'
 import { parseShellArgs, stripAgentBrowserTargetArgs } from './agent-browser-bridge-process'
 import { AgentBrowserBridgeInteractionCommands } from './agent-browser-bridge-interaction-commands'
 import { sendGuestCdpCommand } from './guest-cdp-command'
+import { touchEmulationParams } from './guest-touch-emulation'
 
 export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridgeInteractionCommands {
   // ── Cookie commands ──
@@ -108,7 +109,12 @@ export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridge
         deviceScaleFactor: scale,
         mobile
       })
-      // Why: BrowserView's compositor can keep the old host size after a metrics-only resize, cropping remote screencast clients.
+      await sendGuestCdpCommand(
+        wc,
+        'Emulation.setTouchEmulationEnabled',
+        touchEmulationParams(mobile)
+      )
+      // Metrics-only resize can leave the compositor at its old size and crop remote screencasts.
       await sendGuestCdpCommand(wc, 'Emulation.setVisibleSize', { width, height }).catch(() => {})
 
       return {

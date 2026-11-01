@@ -16,6 +16,7 @@ import { RichMarkdownTable } from './rich-markdown-table'
 import { TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import { BlockMath, InlineMath } from '@tiptap/extension-mathematics'
 import { createRichMarkdownExtension } from './rich-markdown-extension'
+import { RichMarkdownClipboardLinkOrigin } from './rich-markdown-clipboard-link-origin'
 import { createLowlight, common } from 'lowlight'
 import {
   acquireLocalImageSrcLease,
@@ -106,10 +107,8 @@ export function createRichMarkdownExtensions({
       autolink: true,
       linkOnPaste: true
     }),
-    // Why: in dev mode the renderer is served from http://localhost, so
-    // file:// URLs in <img> tags are blocked by cross-origin restrictions.
-    // A nodeView loads local images via IPC → blob URL, which bypasses this
-    // and works identically in dev and production modes.
+    RichMarkdownClipboardLinkOrigin,
+    // Load local images through IPC/blob URLs so dev-server cross-origin restrictions cannot block file URLs.
     Image.extend({
       addStorage() {
         return {

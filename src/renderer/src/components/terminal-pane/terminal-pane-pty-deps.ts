@@ -81,6 +81,7 @@ export function createTerminalPanePtyDeps(args: {
     clearExitedPanePtyLayoutBinding: deps.clearExitedPanePtyLayoutBinding,
     clearExitedPanePtyLayoutBindingForLeaf: deps.clearExitedPanePtyLayoutBindingForLeaf,
     onStartupBound: deps.onStartupBound,
+    refreshMobileOverlays: deps.refreshMobileOverlays,
     deferPtyInput: (paneId, data, forward) => {
       const suppression =
         refs.httpLinkClickFallbackDisposablesRef.current.get(paneId)?.ptyMouseSuppression

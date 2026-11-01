@@ -16,7 +16,6 @@ import type { NativeChatComposerImageAttachment } from './NativeChatComposerFiel
 import { appendNativeChatDraftCache } from './native-chat-draft-cache'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
 import { imageReferenceInsertion } from '../../../../shared/native-chat-image-reference'
-import { stripSentImagePromptMarkers } from '../../../../shared/native-chat-image-transcript-markers'
 
 export type QueuedEditImageState = {
   /** The chat box this edit hands off to; the one it started in, never another. */
@@ -100,7 +99,13 @@ export function releaseQueuedEditImages(edit: QueuedEditImageState): void {
  *  pending drops, as on the phone: its edit is gone. */
 export function handOffQueuedEdit(edit: QueuedEditImageState): boolean {
   const unchanged = edit.text === queuedEditBaseText(edit.body, edit.kept)
-  const typing = unchanged ? '' : stripSentImagePromptMarkers(edit.text, edit.kept.length)
+  const typing = unchanged
+    ? ''
+    : queuedEditTextForKeptImages(
+        edit.text,
+        edit.kept.map(({ id }) => id),
+        []
+      )
   const images = edit.added.flatMap((image) => (image.pending ? [] : [settled(image)]))
   const text =
     typing +

@@ -61,10 +61,10 @@ export type MobileWebShellBlockedVerdict =
   | Extract<MobileWebBundleCompatVerdict, { kind: 'blocked' }>
   | PageRouteRefusalVerdict
 
-/** The shell's own failures plus the one the view cannot report: a download or a cache write that
- *  never produced a generation to hand it. */
+export type MobileWebShellReportedFailure = MobileWebShellFailureReason | 'host-profile-unreadable'
+
 export type MobileWebShellFailureCause =
-  | MobileWebShellFailureReason
+  | MobileWebShellReportedFailure
   | 'download-failed'
   | 'status-unreadable'
 
@@ -192,7 +192,7 @@ export type MobileWebShellSessionEvent =
       readonly flow: number
       readonly cause: MobileWebShellUpdateFailureCause
     }
-  | { readonly type: 'shell-failed'; readonly reason: MobileWebShellFailureReason }
+  | { readonly type: 'shell-failed'; readonly reason: MobileWebShellReportedFailure }
   | { readonly type: 'retry-pressed' }
   /** The native view began a document. Unstamped, like the view's failure and for the same
    *  reason: the view exists only under the generation on screen. */

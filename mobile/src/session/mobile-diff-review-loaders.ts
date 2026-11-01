@@ -38,6 +38,7 @@ type DiffLoadInput = {
   worktreeId: string
   item: MobileDiffReviewQueueItem
   branchCompare: MobileGitBranchCompareResult | null
+  signal?: AbortSignal
 }
 
 /** One settled file diff and the operation that reads it; the two methods share a reader. */
@@ -152,6 +153,9 @@ export async function loadMobileDiffReviewDiff(input: DiffLoadInput): Promise<Re
     item.scope === 'branch'
       ? await requestBranchFileDiff(client, worktreeId, item, branchCompare)
       : await requestWorktreeFileDiff(client, worktreeId, item)
+  if (input.signal?.aborted) {
+    return { kind: 'idle' }
+  }
   if (!pending.reply.ok) {
     // Why the raw refusal: `diff_too_large` is a render mode rather than a failure, and no
     // acceptance policy carries the code through.

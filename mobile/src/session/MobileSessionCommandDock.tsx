@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { View, Text, ScrollView, TextInput, Pressable } from 'react-native'
 import { hostOs } from '../platform/host-os'
 import {
@@ -17,7 +18,7 @@ import {
 } from '../terminal/terminal-keyboard-type'
 import { MobileTerminalLiveInputStatus } from './MobileTerminalLiveInputStatus'
 import { MobileTerminalInputActions } from './MobileTerminalInputActions'
-import { keepHeldPressThroughLongPress } from './held-press-long-press'
+import { TERMINAL_ACCESSORY_REPEAT_DELAY_MS } from '../terminal/terminal-accessory-repeat'
 import { isTerminalPhoneDisplayMode } from './mobile-session-route-helpers'
 import { colors } from '../theme/mobile-theme'
 import { styles } from './mobile-session-styles'
@@ -60,7 +61,8 @@ export function MobileSessionCommandDock({ controller }: { controller: MobileSes
     dismissSoftwareKeyboard,
     toggleLiveInput,
     stopAccessoryRepeat,
-    startAccessoryRepeat,
+    cancelAccessoryRepeat,
+    prepareAccessoryPress,
     handlePaste,
     isAttaching,
     attachImage,
@@ -69,6 +71,8 @@ export function MobileSessionCommandDock({ controller }: { controller: MobileSes
     activeBrowserTab,
     keyboardLift
   } = controller
+  const accessoryPresses = useRef(new Map<string, ReturnType<typeof prepareAccessoryPress>>())
+  useEffect(() => cancelAccessoryRepeat, [cancelAccessoryRepeat])
   const accessoryBarKeepsKeyboard = useKeyboardPersistingTaps('always')
   return (
     !activeMarkdownTab &&
@@ -114,6 +118,7 @@ export function MobileSessionCommandDock({ controller }: { controller: MobileSes
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.accessoryContent}
             keyboardShouldPersistTaps="always"
+            onScrollBeginDrag={cancelAccessoryRepeat}
           >
             <Pressable
               style={({ pressed }) => [
@@ -193,26 +198,41 @@ export function MobileSessionCommandDock({ controller }: { controller: MobileSes
                   !canSend && styles.accessoryKeyDisabled
                 ]}
                 disabled={!canSend}
-                onPressIn={() => {
+                onPressIn={(event) => {
                   if (!key.repeatable) {
                     return
                   }
-                  const input = createTerminalLiveAccessoryInput(key)
-                  void handleAccessoryKey(input)
-                  startAccessoryRepeat(input)
+                  const press = prepareAccessoryPress(createTerminalLiveAccessoryInput(key))
+                  accessoryPresses.current.set(key.id, press)
+                  if (event.type === 'keydown') {
+                    press.hold(TERMINAL_ACCESSORY_REPEAT_DELAY_MS)
+                  }
                 }}
                 onPressOut={() => {
                   if (key.repeatable) {
                     stopAccessoryRepeat()
                   }
                 }}
-                onPress={() => {
+                onPress={(event) => {
                   if (key.repeatable) {
+                    // Accessibility clicks have no touch-down to prepare a sender.
+                    const accessibilityClick =
+                      event.type === 'click' &&
+                      'detail' in event.nativeEvent &&
+                      event.nativeEvent.detail === 0
+                    const press =
+                      (!accessibilityClick && accessoryPresses.current.get(key.id)) ||
+                      prepareAccessoryPress(createTerminalLiveAccessoryInput(key))
+                    accessoryPresses.current.delete(key.id)
+                    void press.tap()
                     return
                   }
                   void handleAccessoryKey(createTerminalLiveAccessoryInput(key))
                 }}
-                onLongPress={key.repeatable ? keepHeldPressThroughLongPress : undefined}
+                onLongPress={
+                  key.repeatable ? () => accessoryPresses.current.get(key.id)?.hold() : undefined
+                }
+                delayLongPress={TERMINAL_ACCESSORY_REPEAT_DELAY_MS}
                 accessibilityLabel={key.accessibilityLabel ?? `Send ${key.label}`}
               >
                 <Text

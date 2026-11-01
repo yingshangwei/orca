@@ -82,7 +82,11 @@ export function getStageablePaths(entries: readonly MobileGitStatusEntry[]): str
 }
 
 export function getUnstageablePaths(entries: readonly MobileGitStatusEntry[]): string[] {
-  return entries.filter((entry) => entry.area === 'staged').map((entry) => entry.path)
+  return entries
+    .filter((entry) => entry.area === 'staged')
+    .flatMap((entry) =>
+      entry.status === 'renamed' && entry.oldPath ? [entry.path, entry.oldPath] : [entry.path]
+    )
 }
 
 export function isMobileGitStageableEntry(entry: MobileGitStatusEntry): boolean {
