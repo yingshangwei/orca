@@ -548,6 +548,22 @@ describe('orca cli worktree awareness', () => {
     process.exitCode = priorExitCode
   })
 
+  it('rejects an empty --terminal instead of sending to the active pane', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const priorExitCode = process.exitCode
+    try {
+      await main(['terminal', 'send', '--terminal', '', '--text', 'x', '--json'], '/tmp/repo')
+      expect(callMock).not.toHaveBeenCalled()
+      expect(JSON.parse(String(logSpy.mock.calls[0]?.[0]))).toMatchObject({
+        ok: false,
+        error: { code: 'invalid_argument' }
+      })
+      expect(process.exitCode).toBe(1)
+    } finally {
+      process.exitCode = priorExitCode
+    }
+  })
+
   it('sends explicit remote terminal create worktree selectors unchanged', async () => {
     queueFixtures(
       callMock,

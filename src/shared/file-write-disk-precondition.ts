@@ -1,4 +1,5 @@
 import { getDiskBaselineSignature, getWrittenContentDiskSignature } from './disk-baseline-signature'
+import { ERRNO_CODE_PATTERN } from './errno-code'
 
 // Why: the host serves `files.writeIfUnchanged`; without it a client compares from its side first.
 export const FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY =
@@ -93,14 +94,13 @@ function isConfirmedFileNotFoundError(error: unknown): boolean {
   }
   // Other codes (an RPC envelope's 'runtime_error') carry no errno, so the wording decides.
   const code = 'code' in error ? error.code : undefined
-  if (typeof code === 'string' && ERRNO_CODE.test(code)) {
+  if (typeof code === 'string' && ERRNO_CODE_PATTERN.test(code)) {
     return code === 'ENOENT'
   }
   // Why only a leading wrapper is stripped: the rest may quote a path, which can spell anything.
   return NOT_FOUND_MESSAGE.test(error.message.replace(IPC_ERROR_WRAPPER, ''))
 }
 
-const ERRNO_CODE = /^E[A-Z0-9]+$/
 const IPC_ERROR_WRAPPER = /^Error invoking remote method '[^']*': (?:Error: )?/
 const NOT_FOUND_MESSAGE = /^(?:ENOENT: no such file or directory|No such file(?: or directory)?$)/i
 

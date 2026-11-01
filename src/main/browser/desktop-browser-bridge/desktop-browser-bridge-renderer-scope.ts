@@ -16,6 +16,7 @@ export function rendererResolveRemoteCliWorkspace(
   if (!win || win.isDestroyed()) {
     return Promise.resolve(null)
   }
+  const rendererWebContents = win.webContents
   const requestId = randomUUID()
   return new Promise<string | null>((resolve) => {
     const finish = (workspaceId: string | null): void => {
@@ -25,7 +26,7 @@ export function rendererResolveRemoteCliWorkspace(
     }
     const handler = (event: Electron.IpcMainEvent, reply: unknown): void => {
       if (
-        event.sender !== win.webContents ||
+        event.sender !== rendererWebContents ||
         !reply ||
         typeof reply !== 'object' ||
         !('requestId' in reply) ||
@@ -41,6 +42,6 @@ export function rendererResolveRemoteCliWorkspace(
     }
     const timer = setTimeout(() => finish(null), SCOPE_REPLY_TIMEOUT_MS)
     ipcMain.on('browser:remoteCliScopeReply', handler)
-    win.webContents.send('browser:requestRemoteCliScope', { requestId, ...query })
+    rendererWebContents.send('browser:requestRemoteCliScope', { requestId, ...query })
   })
 }

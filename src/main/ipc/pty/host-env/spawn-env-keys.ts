@@ -14,9 +14,12 @@ export const AGENT_HOOK_RUNTIME_ENV_KEYS = [
 
 // Why: Orca never sets these, so an inherited value means a pty host launched from inside a Claude session — Claude reads it as a nested child and silently stops persisting the transcript.
 export const CLAUDE_CHILD_SESSION_STAMP_ENV_KEYS = [
+  'CLAUDECODE',
   'CLAUDE_CODE_CHILD_SESSION',
   'CLAUDE_CODE_SESSION_ID',
-  'CLAUDE_CODE_BRIDGE_SESSION_ID'
+  'CLAUDE_CODE_BRIDGE_SESSION_ID',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_ENTRYPOINT'
 ] as const
 
 // Why: Orca writes these only into a structured session's own spawn, so an inherited value means a pty host launched from inside one — every pane would claim that session as its orchestration caller.

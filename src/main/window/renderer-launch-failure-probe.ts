@@ -1,17 +1,11 @@
 import { runProcess } from '@orca/process-host'
+import { errnoCodeOrUnknown } from '../../shared/errno-code'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 
 /** 'ok' when a throwaway child could start, the spawn errno (EAGAIN = per-user process limit), or 'skipped' on Windows. */
 export type RendererLaunchProbeResult = string
 
 const PROBE_TIMEOUT_MS = 5_000
-const ERRNO_CODE = /^E[A-Z0-9]{1,15}$/
-
-export function classifyLaunchProbeError(error: unknown): RendererLaunchProbeResult {
-  const code = error instanceof Error && 'code' in error ? error.code : undefined
-  return typeof code === 'string' && ERRNO_CODE.test(code) ? code : 'unknown'
-}
-
 /**
  * Chromium reports any failed helper spawn as launch-failed (macOS exit 1003 = LAUNCH_RESULT_FAILURE),
  * so spawn an unrelated child to learn whether the OS is refusing every new process.
@@ -33,7 +27,7 @@ export async function probeRendererLaunchCapacity(
     })
     return 'ok'
   } catch (error) {
-    return classifyLaunchProbeError(error)
+    return errnoCodeOrUnknown(error)
   }
 }
 

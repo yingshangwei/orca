@@ -11,6 +11,7 @@ import {
   createProcessTableSnapshotReader,
   withEvidenceBudget
 } from './process-table-snapshot-reader'
+import { psLocaleEnvironment } from './ps-locale-environment'
 
 /**
  * The cheap-tier sibling of the strict evidence reader: same coalescing and TTL, a
@@ -22,6 +23,7 @@ const cheapProcessTableReader = createProcessTableSnapshotReader<CheapProcessTab
     const result = await runProcess({
       program: 'ps',
       args: CHEAP_PS_ARGS,
+      env: psLocaleEnvironment(),
       timeoutMs: PS_TIMEOUT_MS,
       maxOutputBytes: PS_MAX_BUFFER_BYTES
     })

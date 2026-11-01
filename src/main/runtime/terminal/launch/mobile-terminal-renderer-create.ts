@@ -172,11 +172,12 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
         }
       )
     }
-    if (win.webContents.isDestroyed?.()) {
+    const rendererWebContents = win.webContents
+    if (rendererWebContents.isDestroyed?.()) {
       throw new Error('runtime_unavailable')
     }
     const releasePublicationThrottle = pairedCreate
-      ? rendererPublicationThrottle.acquire(win.webContents)
+      ? rendererPublicationThrottle.acquire(rendererWebContents)
       : () => {}
     try {
       const requestId = randomUUID()
@@ -198,7 +199,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           event: IpcMainEvent,
           r: { requestId: string; tabId?: string; title?: string; error?: string }
         ): void => {
-          if (event.sender !== win.webContents || r.requestId !== requestId) {
+          if (event.sender !== rendererWebContents || r.requestId !== requestId) {
             return
           }
           clearTimeout(timer)
@@ -212,7 +213,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
         }
         opts.signal?.addEventListener('abort', onAbort, { once: true })
         getRuntimeDesktopSurface().onIpc('terminal:tabCreateReply', handler)
-        win.webContents.send('terminal:requestTabCreate', {
+        rendererWebContents.send('terminal:requestTabCreate', {
           requestId,
           worktreeId,
           afterTabId: afterDesktopTabId,

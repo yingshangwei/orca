@@ -2,6 +2,7 @@ import type { ManagedPane } from '@/lib/pane-manager/pane-manager'
 import { writeForegroundTerminalChunk } from '@/lib/pane-manager/pane-terminal-foreground-render-settle'
 import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 import { ensureArabicShapingJoinerForText } from '@/lib/pane-manager/terminal-arabic-shaping-joiner'
+import { isXtermInstanceDisposed } from '@/lib/pane-manager/xterm-instance-disposed'
 import {
   captureTerminalParseProgressGeneration,
   hasTerminalParseProgressSince,
@@ -78,11 +79,23 @@ type ReplayGuardWriteCallbacks = {
   onWriteFailure: () => void
 }
 
-/**
- * Engage the replay counter for one write and return its settlement callbacks.
- * Release runs exactly once — from write completion or the probe-certified stall
- * path — so a lost completion cannot latch the guard.
- */
+type ReplayGuardReleaseReason = 'parsed' | 'lost-completion' | 'wedged' | 'target-disposed'
+
+const pendingGuardReleasesByTerminal = new WeakMap<
+  ReplayGuardWriteTarget,
+  Set<(reason: ReplayGuardReleaseReason) => void>
+>()
+
+// Disposed xterms drop queued completions; release their guards without certifying a false wedge.
+export function releaseReplayGuardsForDisposedTerminal(terminal: ReplayGuardWriteTarget): void {
+  const releases = pendingGuardReleasesByTerminal.get(terminal)
+  pendingGuardReleasesByTerminal.delete(terminal)
+  for (const release of releases ?? []) {
+    release('target-disposed')
+  }
+}
+
+/** One write owns one settlement through parse completion, certified failure or xterm disposal. */
 function engageReplayGuard(
   map: Map<number, number>,
   paneId: number,
@@ -94,7 +107,7 @@ function engageReplayGuard(
   map.set(paneId, (map.get(paneId) ?? 0) + 1)
   let released = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  const release = (reason: 'parsed' | 'lost-completion' | 'wedged'): void => {
+  const release = (reason: ReplayGuardReleaseReason): void => {
     if (released) {
       return
     }
@@ -103,6 +116,7 @@ function engageReplayGuard(
       clearTimeout(timer)
       timer = null
     }
+    pendingGuardReleasesByTerminal.get(terminal)?.delete(release)
     const remaining = (map.get(paneId) ?? 1) - 1
     if (remaining <= 0) {
       map.delete(paneId)
@@ -124,6 +138,9 @@ function engageReplayGuard(
     }
     onRelease?.()
   }
+  const pendingReleases = pendingGuardReleasesByTerminal.get(terminal) ?? new Set()
+  pendingReleases.add(release)
+  pendingGuardReleasesByTerminal.set(terminal, pendingReleases)
   const armWedgeDeadline = (quietSinceGeneration: number): void => {
     timer = setTimeout(() => {
       if (released) {
@@ -167,6 +184,11 @@ function engageReplayGuard(
   }
 }
 
+// A dead or disposed xterm cannot parse queued writes.
+function isReplayTargetUnparseable(terminal: ReplayGuardWriteTarget): boolean {
+  return isTerminalWritePipelineCertifiedDead(terminal) || isXtermInstanceDisposed(terminal)
+}
+
 /** Writes `data` into the pane's terminal with the replay guard engaged, so
  *  xterm's auto-replies to embedded query sequences don't leak to the shell.
  *  The counter increments/decrements so nested replays compose correctly. */
@@ -179,8 +201,7 @@ export function replayIntoTerminal(
   if (!data) {
     return
   }
-  // Why: a certified-dead pipeline never parses; retrying only re-arms a guard for another wedged release, so skip it.
-  if (isTerminalWritePipelineCertifiedDead(pane.terminal)) {
+  if (isReplayTargetUnparseable(pane.terminal)) {
     return
   }
   ensureArabicShapingJoinerForText(pane.terminal, data)
@@ -211,8 +232,8 @@ export function replayIntoTerminalAsync(
   if (!data) {
     return Promise.resolve()
   }
-  // Why: same certified-dead short-circuit as replayIntoTerminal; resolve so awaited chains don't hang on a dead parser.
-  if (isTerminalWritePipelineCertifiedDead(pane.terminal)) {
+  // Why resolve: awaited restore chains must not hang on a dead parser.
+  if (isReplayTargetUnparseable(pane.terminal)) {
     return Promise.resolve()
   }
   ensureArabicShapingJoinerForText(pane.terminal, data)
