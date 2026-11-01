@@ -265,7 +265,7 @@ export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridge
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
       // Why: strip target/session flags from passthrough so a caller can't override Orca's selected page or CDP proxy.
       const args = stripAgentBrowserTargetArgs(parseShellArgs(command.trim()))
-      return await this.execAgentBrowser(sessionName, args)
+      return await this.execAgentBrowser(sessionName, args, { cliArgv: true })
     })
   }
 }

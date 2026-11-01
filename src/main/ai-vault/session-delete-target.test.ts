@@ -282,6 +282,15 @@ describe('validateAiVaultSessionDeleteTarget', () => {
     })
     expect(result.allowed).toBe(true)
   })
+  it('allows an omp row the Pi walk labelled from under the Pi root', () => {
+    const result = validateAiVaultSessionDeleteTarget({
+      agent: 'omp',
+      filePath: join(PI_ROOT, '-repo-app', 'session-1.jsonl'),
+      executionHostId: 'local',
+      rootOptions: { piSessionsDir: PI_ROOT, ompSessionsDir: OMP_ROOT }
+    })
+    expect(result.allowed).toBe(true)
+  })
 
   // Discovery matches extensions case-insensitively (walkSessionFiles folds via
   // toLowerCase); the validator must accept the same uppercase-extension file.

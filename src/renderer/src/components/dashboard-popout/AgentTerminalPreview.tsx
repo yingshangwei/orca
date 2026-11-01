@@ -49,12 +49,14 @@ function clamp(value: number, min: number, max: number): number {
 export function AgentTerminalPreview({
   ptyId,
   terminalInput = null,
-  className
+  className,
+  onRequestClose
 }: {
   ptyId: string
   /** Host-input facts relayed with the card; null routes bytes by client OS. */
   terminalInput?: DashboardCardTerminalInput | null
   className?: string
+  onRequestClose?: () => void
 }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -66,6 +68,7 @@ export function AgentTerminalPreview({
   const settingsRef = useRef(settings)
   const macOptionAsAltRef = useRef(macOptionAsAlt)
   const terminalInputRef = useRef(terminalInput)
+  const onRequestCloseRef = useRef(onRequestClose)
   const { terminalTheme: composedTheme, terminalMode } = useMemo(() => {
     if (!settings) {
       return { terminalTheme: null, terminalMode: 'dark' as const }
@@ -90,7 +93,8 @@ export function AgentTerminalPreview({
     settingsRef.current = settings
     macOptionAsAltRef.current = macOptionAsAlt
     terminalInputRef.current = terminalInput
-  }, [settings, macOptionAsAlt, terminalInput])
+    onRequestCloseRef.current = onRequestClose
+  }, [settings, macOptionAsAlt, terminalInput, onRequestClose])
 
   // Font changes retain the replay-driven fit, grid claim and input-owner reset.
   useEffect(() => {
@@ -187,7 +191,8 @@ export function AgentTerminalPreview({
           answersQueries: false,
           getSettings: () => settingsRef.current,
           getMacOptionAsAlt: () => macOptionAsAltRef.current,
-          getTerminalInput: () => terminalInputRef.current
+          getTerminalInput: () => terminalInputRef.current,
+          requestClose: () => onRequestCloseRef.current?.()
         })
         if (!standalone) {
           return
@@ -327,6 +332,7 @@ export function AgentTerminalPreview({
     // buffer is. The terminal keeps the pane's true dimensions and is scaled/
     // clipped to fit; createPreviewBoxFit anchors the end that shows the cursor.
     <div
+      data-agent-terminal-preview
       className={cn(
         'relative h-[calc(100vh-140px)] w-full overflow-hidden bg-background p-1.5',
         className

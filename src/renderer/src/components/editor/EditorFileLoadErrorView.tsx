@@ -2,6 +2,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { displayIpcErrorMessage } from '@/lib/ipc-error'
+import { isFileTooLargeCodeMessage } from '../../../../shared/file-write-disk-precondition'
 import { WORKTREE_HOST_UNRESOLVED_CODE } from './editor-panel-content-types'
 
 // Why: `loadError` is stored as English so logs and non-view consumers stay readable; the
@@ -15,7 +16,14 @@ function localizeFileLoadError(message: string, code: string | undefined): strin
     )
   }
   // Why: the stored text keeps Electron's IPC wrapper for classifiers; the view drops it.
-  return displayIpcErrorMessage(message) ?? message
+  const displayed = displayIpcErrorMessage(message) ?? message
+  if (isFileTooLargeCodeMessage(displayed)) {
+    return translate(
+      'editor.fileLoad.remoteTooLarge',
+      'This file is too large to open from its host.'
+    )
+  }
+  return displayed
 }
 
 // Why no Close action here: this view renders for real tabs and for synthesized inline

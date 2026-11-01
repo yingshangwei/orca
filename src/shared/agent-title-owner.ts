@@ -6,11 +6,11 @@ import {
   SYNTHETIC_AGENT_TITLE_PROFILES,
   type SyntheticAgentTitleProfile
 } from './synthetic-agent-title'
-import { isLegacyPiCompatibleTitle } from './pi-compatible-synthetic-title'
+import {
+  isLegacyPiCompatibleTitle,
+  rebrandPiCompatibleTitle
+} from './pi-compatible-synthetic-title'
 import { getWrapperTitleSegments } from './terminal-title-wrapper-segments'
-
-/** The π brand a Pi/OMP title leads with; the owner's label replaces it in place. */
-const LEGACY_PI_BRAND = 'π'
 
 type TitleProfileMatch = {
   profile: SyntheticAgentTitleProfile
@@ -166,12 +166,10 @@ export function normalizeCompatibleAgentTitleForOwner(
   // Orca's injected extension writes the same shape). Swap only the BRAND for the owner's label
   // so the pane still reads as its launch owner (#6689, #7633, #9077) without discarding the
   // session name and cwd, which collapsing to a bare profile label threw away (#16093).
-  if (isLegacyPiCompatibleTitle(source.sourceTitle)) {
-    // Why scoped to the matched segment: a multiplexer prefix could itself contain the brand,
-    // and a whole-string replace would rewrite that instead of the pane's own identity. Note the
-    // scoping is only as good as the segment match — a prefix that itself parses as a π title
-    // makes the whole string the match, and then the prefix's brand is what gets swapped.
-    const ownedSegment = source.sourceTitle.replace(LEGACY_PI_BRAND, ownerProfile.workingLabel)
+  // Replace only the leading brand with launch ownership; retain the agent's session/cwd instead of collapsing its semantic title (#16093).
+  // Replace within the matched segment so multiplexer prefixes retain their brand; a prefix parsing as a π title remains an ambiguous match.
+  const ownedSegment = rebrandPiCompatibleTitle(source.sourceTitle, ownerProfile.workingLabel)
+  if (ownedSegment !== null) {
     const segmentAt = title.lastIndexOf(source.sourceTitle)
     return segmentAt === -1 ? ownedSegment : title.slice(0, segmentAt) + ownedSegment
   }

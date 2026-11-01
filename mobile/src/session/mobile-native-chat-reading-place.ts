@@ -13,10 +13,13 @@ type Tagged = {
   getAttribute: (name: string) => string | null
   querySelectorAll: (selector: string) => ArrayLike<Tagged>
 }
+type Sibling = Tagged & { nextElementSibling: Sibling | null }
+type RowBox = Sibling & { children: ArrayLike<Sibling> }
 export type MobileNativeChatScrollNode = Tagged & {
   scrollTop: number
   scrollHeight: number
   clientHeight: number
+  querySelector: (selector: string) => RowBox | null
 }
 
 type Keys = Pick<MobileNativeChatRowKeys, 'current' | 'placement'>
@@ -32,6 +35,10 @@ export type MobileNativeChatReadingUnit = {
 
 const ROW = 'chat-row:'
 const MEMBER = 'chat-member:'
+const ROWS = 'data-chat-rows'
+
+// Lets the reading place index rows instead of searching the page.
+export const mobileNativeChatRowBoxProps = { [ROWS]: '' }
 
 /** A message row's `testID`, which the page draws as `data-testid`. It sets message rows apart from
  *  the top slot and the live status line, which don't move with the messages. */
@@ -87,35 +94,89 @@ function unitsOf(
   return lines.length > 0 ? lines : [shown[0] ?? self]
 }
 
-/** What the reader is reading, in page order. */
-export function mobileNativeChatReadingPlace(
-  scroller: MobileNativeChatScrollNode,
-  { placement }: Keys
-): MobileNativeChatReadingUnit[] {
-  const view = scroller.getBoundingClientRect()
-  const rows = tagged(scroller, ROW)
-  // Rows in normal flow have ordered bottoms, so the first one on screen is found without
-  // measuring the up to 2,000 above it.
+function rowIdOf(node: Tagged): string | undefined {
+  const id = node.getAttribute('data-testid')
+  return id?.startsWith(ROW) ? id.slice(ROW.length) : undefined
+}
+
+// The row box's children plus footer waiting rows after it; ids are read only where needed.
+function drawnRows(scroller: MobileNativeChatScrollNode): Sibling[] {
+  const box = scroller.querySelector(`[${ROWS}]`)
+  if (!box) {
+    return []
+  }
+  const rows = Array.from(box.children)
+  for (let next = box.nextElementSibling; next; next = next.nextElementSibling) {
+    if (rowIdOf(next) !== undefined) {
+      rows.push(next)
+    }
+  }
+  return rows
+}
+
+// Rows in normal flow have ordered bottoms.
+function firstRowEndingBelow(rows: readonly Tagged[], y: number): number {
   let low = 0
   let high = rows.length
   while (low < high) {
     const middle = low + Math.floor((high - low) / 2)
-    if (rows[middle]!.node.getBoundingClientRect().bottom <= view.top) {
+    if (rows[middle]!.getBoundingClientRect().bottom <= y) {
       low = middle + 1
     } else {
       high = middle
     }
   }
+  return low
+}
+
+// Turn-status lines sit between rows untagged, so step past them to the nearest tagged row.
+function nearestRow(
+  rows: readonly Tagged[],
+  from: number,
+  step: 1 | -1
+): { id: string; node: Tagged } | undefined {
+  for (let at = from; at >= 0 && at < rows.length; at += step) {
+    const id = rowIdOf(rows[at]!)
+    if (id !== undefined) {
+      return { id, node: rows[at]! }
+    }
+  }
+  return undefined
+}
+
+// The nearest row wholly more than `distance` above the view; it ends at or above that line.
+export function mobileNativeChatRowAbove(
+  scroller: MobileNativeChatScrollNode,
+  distance: number
+): string | undefined {
+  const rows = drawnRows(scroller)
+  const below = firstRowEndingBelow(rows, scroller.getBoundingClientRect().top - distance)
+  return nearestRow(rows, below - 1, -1)?.id
+}
+
+export function mobileNativeChatReadingPlace(
+  scroller: MobileNativeChatScrollNode,
+  { placement }: Keys
+): MobileNativeChatReadingUnit[] {
+  const view = scroller.getBoundingClientRect()
+  const rows = drawnRows(scroller)
+  const low = firstRowEndingBelow(rows, view.top)
   let end = low
-  while (end < rows.length && rows[end]!.node.getBoundingClientRect().top < view.bottom) {
+  while (end < rows.length && rows[end]!.getBoundingClientRect().top < view.bottom) {
     end += 1
   }
-  const self = ({ id, node }: { id: string; node: Tagged }): MobileNativeChatReadingUnit => {
-    return { key: id, top: node.getBoundingClientRect().top, placed: placement(id) }
-  }
-  const units = rows.slice(low, end).flatMap((row) => unitsOf(row.node, view, self(row)))
+  const unit = ({ id, node }: { id: string; node: Tagged }): MobileNativeChatReadingUnit => ({
+    key: id,
+    top: node.getBoundingClientRect().top,
+    placed: placement(id)
+  })
+  const units = rows.slice(low, end).flatMap((node) => {
+    const id = rowIdOf(node)
+    return id === undefined ? [] : unitsOf(node, view, unit({ id, node }))
+  })
   // The nearest rows off screen stand in when the update takes away all that was on it.
-  return units.concat([rows[end], rows[low - 1]].flatMap((row) => (row ? [self(row)] : [])))
+  const nearest = [nearestRow(rows, end, 1), nearestRow(rows, low - 1, -1)]
+  return units.concat(nearest.flatMap((row) => (row ? [unit(row)] : [])))
 }
 
 /** Where a held part is drawn now, if the update kept it. A line in the row now drawing its old
@@ -147,7 +208,12 @@ export function mobileNativeChatReadingDrift(
   keys: Keys,
   roots?: MobileNativeChatScrollRoots
 ): number {
-  const rows = new Map(tagged(scroller, ROW).map(({ id, node }) => [id, node]))
+  const rows = new Map(
+    drawnRows(scroller).flatMap((node) => {
+      const id = rowIdOf(node)
+      return id === undefined ? [] : [[id, node] as const]
+    })
+  )
   for (const unit of place) {
     const node = drawn(unit, rows, keys, roots)
     if (node) {

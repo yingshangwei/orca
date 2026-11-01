@@ -297,7 +297,7 @@ function resolveOwnerRouteResult(
 
   // Why no Active Server focus here: the client stamps every server row on arrival, so an
   // unstamped row is never a server's.
-  const savedRuntimeIds = state.runtimeEnvironments?.map((environment) => environment.id.trim())
+  const savedRuntimes = state.runtimeEnvironments
   // Why: a found repo/worktree record is positive identity evidence, so keep terminal-owner
   // parity with the folder branch below. Every stamped row already routed above, so an unstamped
   // repo row here is a legacy pre-owner-projection row — local by construction, as
@@ -314,9 +314,9 @@ function resolveOwnerRouteResult(
   }
   // Why: no saved runtime can publish a remote ownerless row; otherwise current detected presence affirms identity under the stamped-writer invariant.
   const mayBeLegacyLocal =
-    savedRuntimeIds === undefined ||
+    savedRuntimes === undefined ||
     (state.runtimeEnvironmentCatalogHydrated === true &&
-      (savedRuntimeIds.length === 0 || hasDetectedWorktree))
+      (savedRuntimes.length === 0 || hasDetectedWorktree))
   return mayBeLegacyLocal
     ? {
         kind: 'resolved',

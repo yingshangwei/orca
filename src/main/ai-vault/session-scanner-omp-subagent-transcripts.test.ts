@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseMessageGraphSessionContent } from './session-scanner-graph-parsers'
 import {
-  OMP_SESSION_ARTIFACT_DIR_PATTERN,
   countOmpSubagentTranscripts,
+  isOmpConversationDirectory,
   partitionOmpSubagentTranscriptPaths
 } from './session-scanner-omp-subagent-transcripts'
 
@@ -24,12 +24,12 @@ async function makeWorkspaceDir(): Promise<string> {
   return root
 }
 
-describe('OMP_SESSION_ARTIFACT_DIR_PATTERN', () => {
-  it('matches session artifact dir names and nothing else in the layout', () => {
-    expect(OMP_SESSION_ARTIFACT_DIR_PATTERN.test(SESSION_STEM)).toBe(true)
-    // Task children are label-named.
-    expect(OMP_SESSION_ARTIFACT_DIR_PATTERN.test('AuthAndPreflight')).toBe(false)
-    expect(OMP_SESSION_ARTIFACT_DIR_PATTERN.test('local')).toBe(false)
+describe('isOmpConversationDirectory', () => {
+  it('skips session artifact dirs below the workspace and nothing else in the layout', () => {
+    expect(isOmpConversationDirectory(SESSION_STEM, 0)).toBe(true)
+    expect(isOmpConversationDirectory(SESSION_STEM, 1)).toBe(false)
+    expect(isOmpConversationDirectory('AuthAndPreflight', 1)).toBe(true)
+    expect(isOmpConversationDirectory('local', 1)).toBe(true)
     // Workspace dir names OMP encodes from a cwd (relative to home, relative to
     // tmp, absolute, or slug-hashed) never collide with a session stem. The
     // local prune doesn't depend on this — it skips depth 0 — but the remote
@@ -40,7 +40,7 @@ describe('OMP_SESSION_ARTIFACT_DIR_PATTERN', () => {
       `--${SESSION_STEM}--`,
       'home-app-85dfa2f063812c58976deb581167a634a4'
     ]) {
-      expect(OMP_SESSION_ARTIFACT_DIR_PATTERN.test(workspaceDirName)).toBe(false)
+      expect(isOmpConversationDirectory(workspaceDirName, 1)).toBe(true)
     }
   })
 })

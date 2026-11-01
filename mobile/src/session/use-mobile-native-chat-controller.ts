@@ -59,7 +59,6 @@ export function useMobileNativeChatController(args: {
     onSendResolved
   } = args
   const {
-    activeChatAgent,
     activeChatAgentConfirmed,
     activeChatAgentRef,
     activeChatResolution,
@@ -82,24 +81,22 @@ export function useMobileNativeChatController(args: {
   // append reaches the drafts state through this ref, set below once they exist.
   // Until the drafts mount, nothing is copied, so Edit deletes nothing.
   const appendComposerTextRef = useRef<(text: string) => boolean>(() => false)
-  const { structuredSession: structuredNativeChat, session: nativeChatSession } =
-    useMobileNativeChatSessionLane({
-      client,
-      structured: activeChatStructured,
-      agent: activeChatAgent,
-      resolvedAgent: activeChatResolution?.agent ?? null,
-      transcriptPath: activeChatResolution?.transcriptPath ?? null,
-      sessionId: activeChatSessionId,
-      sourceIdentity,
-      enabled: showNativeChat,
-      connState,
-      hostSupport: agentSessionHostSupport,
-      appendComposerTextRef,
-      onSendError,
-      onActionResolved: onSendResolved
-    })
+  const nativeChatLane = useMobileNativeChatSessionLane({
+    client,
+    hostId,
+    structured: activeChatStructured,
+    resolution: activeChatResolution,
+    sourceIdentity,
+    enabled: showNativeChat,
+    connState,
+    hostSupport: agentSessionHostSupport,
+    appendComposerTextRef,
+    onSendError,
+    onActionResolved: onSendResolved
+  })
+  const { structuredSession: structuredNativeChat, session: nativeChatSession } = nativeChatLane
   const {
-    composerText: chatComposerText,
+    draftKey: chatDraftKey,
     setComposerText: setChatComposerText,
     getComposerEditGeneration: getChatComposerEditGeneration,
     appendComposerText,
@@ -222,6 +219,7 @@ export function useMobileNativeChatController(args: {
 
   const structuredNativeChatSend = useMobileStructuredNativeChatSendBridge({
     agent: activeChatResolution?.agent,
+    sessionCommands: nativeChatLane.sessionCommands.commands,
     sendStructured: structuredNativeChat.sendWithOutcome,
     captureSendOrigin,
     clearDraftForSend,
@@ -283,7 +281,7 @@ export function useMobileNativeChatController(args: {
     showNativeChat,
     showNativeChatRef,
     nativeChatAgent: activeChatResolution?.agent ?? null,
-    chatComposerText,
+    chatDraftKey,
     setChatComposerText,
     getChatComposerEditGeneration,
     chatPending,
@@ -336,6 +334,7 @@ export function useMobileNativeChatController(args: {
       : handleNativeChatSendWithOutcome,
     readSeededLaunchDraft,
     nativeChatSessionOptions,
+    nativeChatSessionCommands: nativeChatLane.sessionCommands,
     // A terminal-backed chat pastes images into the agent's own input instead.
     nativeChatAcceptsImages: !activeChatStructured || structuredNativeChat.acceptsImages
   }

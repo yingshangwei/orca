@@ -17,7 +17,12 @@ const OMP_SESSION_DIR_NAME = String.raw`\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3
 
 // Exported so discovery prunes exactly the subtrees this module reads on
 // demand — the pruning predicate and the lister can't drift apart.
-export const OMP_SESSION_ARTIFACT_DIR_PATTERN = new RegExp(`^${OMP_SESSION_DIR_NAME}$`, 'i')
+const OMP_SESSION_ARTIFACT_DIR_PATTERN = new RegExp(`^${OMP_SESSION_DIR_NAME}$`, 'i')
+
+/** Walk workspace buckets but not task artifact dirs; OMP lists only top-level conversations (#9330). */
+export function isOmpConversationDirectory(name: string, depth: number): boolean {
+  return depth === 0 || !OMP_SESSION_ARTIFACT_DIR_PATTERN.test(name)
+}
 
 // Direct child of a session artifact dir: `…/<stamp>_<uuid>/<label>.jsonl`.
 // A child's own artifact dir is label-named (`<stamp>_<uuid>/<label>/`), so a
@@ -108,7 +113,7 @@ export function withOmpSubagentTranscriptCount(
       const session = await state.finalize(platform, options)
       const ownsTranscriptDisk =
         !options?.executionHostId || options.executionHostId === LOCAL_EXECUTION_HOST_ID
-      if (!session || !ownsTranscriptDisk) {
+      if (session?.agent !== 'omp' || !ownsTranscriptDisk) {
         return session
       }
       return {

@@ -1,3 +1,4 @@
+import { isAgentStatusHeldOpenByChildWork } from '../../../../shared/agent-lead-status-fold'
 import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
 import type { EnrichedAgentHookEventPayload } from '../server-types'
 
@@ -23,6 +24,13 @@ export function programStatusHookYieldEndsAt(
   // row still wins over another app id: forks report upstream's app (OpenClaude says claude-code).
   if (!sameAgent && previous.payload.state === 'done') {
     return undefined
+  }
+  if (
+    payload.state === 'done' &&
+    payload.sessionBoundary !== true &&
+    isAgentStatusHeldOpenByChildWork(previous.payload)
+  ) {
+    return Infinity
   }
   if (payload.state === previous.payload.state) {
     return Infinity

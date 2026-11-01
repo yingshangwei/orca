@@ -81,6 +81,13 @@ export class AgentSessionJournal {
   private readonly mintEpoch: () => string
 
   private state: JournalReducerState
+  private snapshotCache: {
+    state: JournalReducerState
+    epoch: string
+    sequence: number
+    queueRevision: string
+    snapshot: AgentJournalSnapshot
+  } | null = null
   private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: (() => void) | null = null
@@ -192,7 +199,28 @@ export class AgentSessionJournal {
     sequence: this.state.lastSequence
   })
 
-  snapshot = (): AgentJournalSnapshot => renderJournalState(this.queuedMessages.displayState())
+  snapshot = (): AgentJournalSnapshot => {
+    const state = this.state
+    const queueRevision = this.queuedMessages.revision()
+    const cached = this.snapshotCache
+    if (
+      cached?.state === state &&
+      cached.epoch === state.epoch &&
+      cached.sequence === state.lastSequence &&
+      cached.queueRevision === queueRevision
+    ) {
+      return cached.snapshot
+    }
+    const snapshot = renderJournalState(this.queuedMessages.displayState())
+    this.snapshotCache = {
+      state,
+      epoch: state.epoch,
+      sequence: state.lastSequence,
+      queueRevision,
+      snapshot
+    }
+    return snapshot
+  }
 
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (

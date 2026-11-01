@@ -32,12 +32,6 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 // launch prep only for launchAgent 'codex', so without it a restart respawn
 // could race the account handoff and record a launch account the pane does not
 // actually read.
-export const CODEX_ACCOUNT_RESTART_STARTUP = {
-  command: 'codex',
-  startupCommandDelivery: 'shell-ready',
-  launchAgent: 'codex'
-} as const
-
 export type CodexPaneScanResult = {
   ptyId: string
   /** The pane may be shown a restart prompt (see isCodexRestartEligiblePane). */

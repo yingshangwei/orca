@@ -108,7 +108,8 @@ export async function initializeMultiplexStream(
   // Why: a multiplexed stream feeds a remote xterm view with query authority, so the main model responder yields while it receives output; a paused stream drops it, so main answers.
   const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(
     ptyId,
-    () => stream.outputPaused
+    () => stream.outputPaused,
+    isMobile ? request.client?.id : undefined
   )
   // Why: the pane must hear its daemon died now, not when its next keystroke is refused.
   const unsubscribeEndpointLoss = stream.supportsEndpointLossNotice

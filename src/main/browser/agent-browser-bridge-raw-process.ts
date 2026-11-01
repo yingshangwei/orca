@@ -1,6 +1,7 @@
 import { execFile, type ChildProcess } from 'node:child_process'
 import { BrowserError } from './cdp-bridge'
 import { classifyErrorCode } from './agent-browser-bridge-process'
+import { parseAgentBrowserJsonOutput } from './agent-browser-batch-command'
 import { AgentBrowserBridgeExecution } from './agent-browser-bridge-execution'
 import {
   AGENT_BROWSER_EXIT_DRAIN_MS,
@@ -77,7 +78,7 @@ export abstract class AgentBrowserBridgeRawProcess extends AgentBrowserBridgeExe
             // Why: agent-browser exits non-zero on failure but still writes structured JSON to stdout — parse it for the real error.
             if (stdout) {
               try {
-                const parsed = JSON.parse(stdout)
+                const parsed = parseAgentBrowserJsonOutput(stdout)
                 if (parsed.error) {
                   const code = classifyErrorCode(parsed.error)
                   reject(

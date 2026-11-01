@@ -1,5 +1,5 @@
 import type { TuiAgent } from '../../shared/tui-agent'
-import { applyCodexRemoteViewerClipboardEnv } from '../ipc/pty/host-env/codex-terminal-clipboard'
+import { applyRemoteViewerClipboardEnv } from '../ipc/pty/host-env/remote-viewer-clipboard-env'
 import { applyClaudeTerminalImageViewerEnv } from './terminal-image-viewer-env'
 
 /**
@@ -13,11 +13,11 @@ export function applyRemoteViewerLaunchEnv<
   }
 >(launch: T, terminalImageViewerSupported: boolean | undefined, agent = launch.launchAgent): T {
   const next = applyClaudeTerminalImageViewerEnv(launch, terminalImageViewerSupported, agent)
-  if (terminalImageViewerSupported === undefined || agent !== 'codex') {
+  if (terminalImageViewerSupported === undefined) {
     return next
   }
   // Why: a desktop host is not headless, so spawn-time env never marks its viewer remote (#10861).
   const env = { ...next.env }
-  applyCodexRemoteViewerClipboardEnv(env, { launchAgent: agent, viewerIsRemote: true })
-  return env.SSH_CONNECTION === next.env?.SSH_CONNECTION ? next : { ...next, env }
+  applyRemoteViewerClipboardEnv(env, { launchAgent: agent, viewerIsRemote: true })
+  return { ...next, env }
 }

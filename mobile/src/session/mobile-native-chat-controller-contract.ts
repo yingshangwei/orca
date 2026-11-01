@@ -22,6 +22,7 @@ import type { MobileNativeChatPendingMessage } from './use-mobile-native-chat-dr
 import type { useMobileNativeChatSession } from './use-mobile-native-chat-session'
 import type { MobileNativeChatSessionOptionPickersProps } from './MobileNativeChatSessionOptionPickers'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
+import type { useMobileStructuredSessionCommands } from './use-mobile-structured-session-commands'
 
 export type MobileNativeChatController = {
   /** Whether the saved default view and this workspace's per-tab views have been read. */
@@ -34,7 +35,7 @@ export type MobileNativeChatController = {
   showNativeChatRef: MutableRefObject<boolean>
   /** Resolved agent for the active chat tab (names the empty-state copy). */
   nativeChatAgent: string | null
-  chatComposerText: string
+  chatDraftKey: string | null
   setChatComposerText: Dispatch<SetStateAction<string>>
   getChatComposerEditGeneration: () => number
   chatPending: MobileNativeChatPendingMessage[]
@@ -118,6 +119,7 @@ export type MobileNativeChatController = {
   /** Model/session-option pickers for the composer, or null when the active
    *  agent has no session-option catalog. */
   nativeChatSessionOptions: MobileNativeChatSessionOptionPickersProps | null
+  nativeChatSessionCommands: ReturnType<typeof useMobileStructuredSessionCommands>
   /** Whether the composer offers images: a structured chat by its options report. */
   nativeChatAcceptsImages: boolean
 }

@@ -42,7 +42,7 @@ import { MobileNativeChatLiveLine } from './MobileNativeChatLiveLine'
 import { MobileNativeChatFloatingControls } from './MobileNativeChatFloatingControls'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import {
-  MobileNativeChatComposer,
+  MobileNativeChatDraftComposer,
   type MobileNativeChatStructuredComposer
 } from './MobileNativeChatComposer'
 import { MobileNativeChatPromptCard } from './MobileNativeChatPromptCard'
@@ -106,7 +106,7 @@ type Props = ComposerTrayProps & {
    *  optimistic image bubble. */
   imagePreviewsByMessageId?: Record<string, string[]>
   /** Controlled composer text (owned by the route so dictation can write to it). */
-  composerText: string
+  draftKey: string | null
   onComposerTextChange: (text: string) => void
   onAttachImage?: () => void
   /** Pending image attachments shown as composer thumbnails until the next send. */
@@ -192,7 +192,7 @@ export function MobileNativeChatView({
   getComposerEditGeneration,
   pending,
   imagePreviewsByMessageId,
-  composerText,
+  draftKey,
   onComposerTextChange,
   onAttachImage,
   attachments,
@@ -417,9 +417,9 @@ export function MobileNativeChatView({
       ) : null}
       {/* Directly on the composer, which it tucks into. */}
       {trayContent}
-      <MobileNativeChatComposer
+      <MobileNativeChatDraftComposer
         structured={structuredActivityUi ? structuredComposer : null}
-        value={composerText}
+        draftKey={draftKey}
         onChangeText={onComposerTextChange}
         onSend={handleSend}
         sendSurfaceId={sendSurfaceId}

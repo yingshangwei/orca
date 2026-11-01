@@ -58,22 +58,8 @@ vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionShee
 // Stand-in composer: exposes the view's `handleSend` through a pressable, which is
 // the only composer behaviour these banner tests exercise.
 vi.mock('./MobileNativeChatComposer', async () => {
-  const React = await import('react')
-  const { MobileNativeChatStopButton } = await import('./MobileNativeChatStopButton')
-  return {
-    MobileNativeChatComposer: (props: {
-      onSend: (text: string) => Promise<boolean>
-      disabled?: boolean
-      placeholder?: string
-      stop?: { onStop?: () => void; held: boolean } | null
-    }) =>
-      React.createElement(
-        'Composer',
-        { ...props, accessibilityLabel: 'Send message', onPress: () => props.onSend('hi') },
-        // The real composer draws Stop in Send's slot while its draft is empty, as here.
-        props.stop ? React.createElement(MobileNativeChatStopButton, props.stop) : null
-      )
-  }
+  const { composerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture')
+  return composerStub()
 })
 
 type Overrides = {
@@ -113,7 +99,7 @@ function chatViewElement(overrides: Overrides): ReturnType<typeof createElement>
     getSendCompletionGeneration: () => 0,
     getComposerEditGeneration: () => 0,
     pending: [],
-    composerText: '',
+    draftKey: null,
     onComposerTextChange: vi.fn(),
     ...overrides
   })

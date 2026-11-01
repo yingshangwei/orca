@@ -104,17 +104,24 @@ function isConfirmedFileNotFoundError(error: unknown): boolean {
 const IPC_ERROR_WRAPPER = /^Error invoking remote method '[^']*': (?:Error: )?/
 const NOT_FOUND_MESSAGE = /^(?:ENOENT: no such file or directory|No such file(?: or directory)?$)/i
 
+const FILE_TOO_LARGE_CODE = 'file_too_large'
+
+/** A host's `file_too_large` refusal, which travels as the bare code in the message. */
+export function isFileTooLargeCodeMessage(message: string): boolean {
+  return message === FILE_TOO_LARGE_CODE
+}
+
 // Why both: hosts answer with the `file_too_large` code (carried as the message); local readers in prose.
+export function isFileTooLargeMessage(message: string): boolean {
+  return isFileTooLargeCodeMessage(message) || /\btoo large\b|\bis larger than\b/i.test(message)
+}
+
 function isFileTooLargeToReadError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false
   }
   const code = 'code' in error ? error.code : undefined
-  return (
-    code === 'file_too_large' ||
-    error.message === 'file_too_large' ||
-    /\btoo large\b|\bis larger than\b/i.test(error.message)
-  )
+  return code === FILE_TOO_LARGE_CODE || isFileTooLargeMessage(error.message)
 }
 
 /** Settles a precondition whose disk read failed; rethrows anything that doesn't prove the disk state. */

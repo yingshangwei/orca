@@ -1,3 +1,4 @@
+import { DROP_STAGING_RELATIVE_DIR } from '../../../../shared/drop-staging-ignore'
 import { toast } from 'sonner'
 import { detectLanguage } from '@/lib/language-detect'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
@@ -10,6 +11,7 @@ import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-typ
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { translate } from '@/i18n/i18n'
+import { describeSharedDropFailureReason } from '@/lib/drop-skip-reason-copy'
 import { captureWorktreeSshMutationExpectation } from '@/lib/ssh-mutation-expectation'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -159,16 +161,14 @@ async function openEditorFileDropPaths(
     try {
       // Why: OS file drops provide client-local paths. Remote runtime and
       // SSH editors must upload into the server worktree before opening.
-      const destinationDir = joinPath(worktreePath, '.orca/drops')
+      const destinationDir = joinPath(worktreePath, DROP_STAGING_RELATIVE_DIR)
       const { results } = await importExternalPathsToRuntime(
         fileContext,
         [...paths],
         destinationDir,
         { ensureDestinationDir: true, nameExtensionlessImages: true }
       )
-      if (!canOpenEditorFileDrop(context, destination)) {
-        return
-      }
+      // Rechecked per result, including the upload wait.
       for (const result of results) {
         if (!canOpenEditorFileDrop(context, destination)) {
           return
@@ -190,12 +190,14 @@ async function openEditorFileDropPaths(
           { suppressActiveRuntimeFallback: runtimeEnvironmentId === null, ...groupOptions }
         )
       }
-      if (results.some((result) => result.status !== 'imported')) {
+      const rejected = results.filter((result) => result.status !== 'imported')
+      if (rejected.length > 0) {
         toast.error(
           translate(
             'auto.hooks.useGlobalFileDrop.d720e2f855',
             'Some dropped files could not be uploaded.'
-          )
+          ),
+          { description: describeSharedDropFailureReason(rejected) }
         )
       }
     } catch {

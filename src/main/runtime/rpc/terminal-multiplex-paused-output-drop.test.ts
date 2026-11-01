@@ -34,7 +34,7 @@ async function subscribePausable(
     registerRemoteTerminalViewSubscriber: (ptyId, isOutputPaused) =>
       viewSubscribers.registerRemote(ptyId, isOutputPaused),
     isSoleRemoteTerminalQueryOwner: (ptyId) =>
-      viewSubscribers.remoteReceivingOutputCount(ptyId) === 1,
+      viewSubscribers.remoteAnsweringQueriesCount(ptyId) === 1,
     answerYieldedTerminalQueries
   })
   await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
@@ -91,7 +91,7 @@ async function subscribePausable(
     harness.registry.cleanupSubscription('terminal-multiplex:conn-desktop-first-paint')
     await harness.dispatchPromise
   }
-  const remoteViewHoldsAuthority = (): boolean => viewSubscribers.hasRemoteReceivingOutput('pty-1')
+  const remoteViewHoldsAuthority = (): boolean => viewSubscribers.hasRemoteAnsweringQueries('pty-1')
   return {
     subscribed: subscribedEvent(),
     setPaused,
@@ -214,20 +214,23 @@ describe('terminal multiplex paused-output drop notice', () => {
     }
   })
 
-  it('keeps mobile query authority after an old remote subscription releases a reused pty id', () => {
+  it('keeps a successor view when an old subscription releases a reused pty id', () => {
     const subscribers = new RuntimeTerminalViewSubscribers({
       notifyPresenceChanged: () => {},
-      hasMobileSubscribers: () => true,
+      hasMobileSubscribers: () => false,
       isUnattachedLocalCandidate: () => false,
       attachProvider: () => null
     })
     const releaseOld = subscribers.registerRemote('pty-1', () => false)
     subscribers.clearSubscribers('pty-1')
-    const releaseCurrent = subscribers.registerRemote('pty-1', () => true)
+    const releaseCurrent = subscribers.registerRemote('pty-1', () => false)
     releaseOld()
-    expect(subscribers.remoteReceivingOutputCount('pty-1')).toBe(1)
-    expect(subscribers.hasRemoteReceivingOutput('pty-1')).toBe(true)
+    releaseOld()
+    expect(subscribers.remoteAnsweringQueriesCount('pty-1')).toBe(1)
+    expect(subscribers.hasRemoteAnsweringQueries('pty-1')).toBe(true)
     releaseCurrent()
+    expect(subscribers.remoteAnsweringQueriesCount('pty-1')).toBe(0)
+    expect(subscribers.hasRemote('pty-1')).toBe(false)
   })
 
   it('does not inject a reply after a discarded query has expired', async () => {

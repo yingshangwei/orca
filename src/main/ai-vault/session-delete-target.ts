@@ -14,7 +14,11 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
-import { AI_VAULT_AGENT_SOURCES, isDiscoverableSessionFile } from './session-scanner-agent-sources'
+import {
+  AI_VAULT_AGENT_SOURCES,
+  isDiscoverableSessionFile,
+  sessionRowRootDirs
+} from './session-scanner-agent-sources'
 import { subagentTranscriptsDirFor } from './session-scanner-subagent-transcripts'
 import type { AiVaultScanOptions } from './session-scanner-types'
 
@@ -66,8 +70,7 @@ export function validateAiVaultSessionDeleteTarget(
   // would otherwise pass `<root>/../../etc/x.jsonl`.
   const resolvedPath = resolve(filePath)
   const source = AI_VAULT_AGENT_SOURCES[agent]
-  const roots = source
-    .rootDirs(args.rootOptions ?? {}, args.wslHomeDirs ?? [])
+  const roots = sessionRowRootDirs(agent, args.rootOptions ?? {}, args.wslHomeDirs ?? [])
     // Why: OMP_CODING_AGENT_DIR='/' normalizes to '', which resolve()s to the
     // process cwd — an empty root would silently allowlist it.
     .filter((rootDir) => rootDir.trim().length > 0)

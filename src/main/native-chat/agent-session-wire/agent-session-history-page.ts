@@ -148,7 +148,7 @@ export function readAgentSessionHistory(
 /**
  * A catch-up run over one journal. Pages share one reduced timeline, so the run
  * costs its own rows instead of re-reducing every item per page; the cursor
- * check re-reduces if anything did advance the journal between pages.
+ * identity check follows both committed rows and same-cursor reloads.
  */
 export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
@@ -156,9 +156,9 @@ export function createAgentSessionCatchUpReader(
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
   let snapshot = journal.snapshot()
   return (request) => {
-    const live = journal.cursor()
-    if (live.epoch !== snapshot.cursor.epoch || live.sequence !== snapshot.cursor.sequence) {
-      snapshot = journal.snapshot()
+    const live = journal.snapshot()
+    if (live !== snapshot) {
+      snapshot = live
     }
     return readAgentSessionHistory(journal, request, { snapshot, reader })
   }

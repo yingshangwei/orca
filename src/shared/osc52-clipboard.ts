@@ -90,7 +90,8 @@ export function createOsc52OscHandler(deps: {
   getReplaying: () => boolean
   writeClipboardText: (text: string) => Promise<void>
   showBlockedWriteToast?: () => void
-  showWriteFailedToast?: () => void
+  /** Receives the refused text so a web client can retry it from a fresh click. */
+  showWriteFailedToast?: (text: string) => void
 }): (data: string) => boolean {
   // Why coalesce: each sequence is only ~15 bytes, so one hostile chunk can fire a
   // million parser callbacks — each a main-process clipboard write. Only the last of
@@ -113,10 +114,10 @@ export function createOsc52OscHandler(deps: {
           // Report the otherwise invisible host failure.
           try {
             void deps.writeClipboardText(next)?.catch(() => {
-              reportOsc52ClipboardWriteFailure(deps.showWriteFailedToast)
+              reportOsc52ClipboardWriteFailure(() => deps.showWriteFailedToast?.(next))
             })
           } catch {
-            reportOsc52ClipboardWriteFailure(deps.showWriteFailedToast)
+            reportOsc52ClipboardWriteFailure(() => deps.showWriteFailedToast?.(next))
           }
         }
       })

@@ -29,7 +29,6 @@ export function resolveAiVaultResumeStartupShell(args: {
   state: AiVaultResumeShellState
   worktreeId?: string | null
   platform: NodeJS.Platform
-  isLocalSession: boolean
 }): AgentStartupShell {
   // Why no login-shell probe: everything this command is built from — quoting
   // and env clearing — is emitted in a form that is correct in sh and fish
@@ -37,21 +36,21 @@ export function resolveAiVaultResumeStartupShell(args: {
   if (args.platform !== 'win32') {
     return 'posix'
   }
-  const projectRuntime = args.isLocalSession
-    ? getLocalProjectExecutionRuntimeContext(args.state, args.worktreeId, CLIENT_PLATFORM)
-    : undefined
+  const projectRuntime = getLocalProjectExecutionRuntimeContext(
+    args.state,
+    args.worktreeId,
+    CLIENT_PLATFORM
+  )
   const workspacePath = getAiVaultResumeWorkspacePath(
     args.state,
     args.worktreeId ?? args.state.activeWorktreeId
   )
-  const shellOverride = args.isLocalSession
-    ? resolveLocalWindowsTerminalShellOverrideForTab({
-        explicitShellOverride: undefined,
-        defaultWindowsShell: args.state.settings?.terminalWindowsShell,
-        isWslWorktree: Boolean(workspacePath && parseWslUncPath(workspacePath)),
-        projectRuntime
-      })
-    : undefined
+  const shellOverride = resolveLocalWindowsTerminalShellOverrideForTab({
+    explicitShellOverride: undefined,
+    defaultWindowsShell: args.state.settings?.terminalWindowsShell,
+    isWslWorktree: Boolean(workspacePath && parseWslUncPath(workspacePath)),
+    projectRuntime
+  })
   const shell = shellOverride ? resolveWindowsShellStartupFamily(shellOverride) : undefined
   return resolveStartupShell(args.platform, shell)
 }

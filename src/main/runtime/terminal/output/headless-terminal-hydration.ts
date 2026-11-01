@@ -1,4 +1,11 @@
-import type { RuntimeHeadlessTerminal } from '../../runtime-terminal-state-records'
+import { TrustDialogStatusObserver } from '../../trust-dialog-status-observer'
+import type { LaunchedAgentForeground } from '../../launched-agent-foreground'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type {
+  RuntimeHeadlessTerminal,
+  RuntimePtyWorktreeRecord
+} from '../../runtime-terminal-state-records'
+import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import { splitFreebuffScreenUpdates } from '../../../../shared/freebuff-screen-status'
 import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './terminal-buffer-operations'
 import { observeFreebuffTerminalStatus } from '../../freebuff-terminal-status'
@@ -14,6 +21,29 @@ import { advancePartialEscapeTail } from '../../../../shared/terminal-partial-es
 export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
   protected abstract getOrCreateHeadlessTerminal(ptyId: string): RuntimeHeadlessTerminal
   protected abstract markPaneLiveTitlesDirty(): void
+  abstract readLaunchedAgentForeground(
+    ptyId: string,
+    agent: TuiAgent
+  ): Promise<LaunchedAgentForeground>
+
+  protected readonly trustDialogStatus = new TrustDialogStatusObserver({
+    getPaneAgent: (ptyId) => this.getPaneAgentForTuiIdle(ptyId),
+    refreshForegroundAgent: (ptyId) => this.ptyForegroundAgent.refresh(ptyId),
+    readLaunchedAgentForeground: (ptyId, agent) => this.readLaunchedAgentForeground(ptyId, agent),
+    getEmulator: (ptyId) =>
+      this.ptysById.has(ptyId) ? this.headlessTerminals.get(ptyId)?.emulator : undefined,
+    readStatus: (ptyId) => {
+      const pty = this.ptysById.get(ptyId)
+      return pty ? this.readPtyAgentStatusRow(ptyId, pty) : undefined
+    },
+    publish: (ptyId, payload) =>
+      this.emitTerminalAgentStatusEvents(
+        ptyId,
+        { cleanData: '', payloads: [payload], lastPayloadCleanOffset: null },
+        undefined,
+        false
+      )
+  })
 
   // Why: hydrate the runtime headless emulator from the desktop renderer's
   // xterm buffer on the first onPtyData byte after a PTY is taken over by a
@@ -182,7 +212,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
   /** True when this PTY's queries go unanswered unless its single receiving remote view answers them. */
   isSoleRemoteTerminalQueryOwner(ptyId: string): boolean {
     return (
-      this.terminalViewSubscribers.remoteReceivingOutputCount(ptyId) === 1 &&
+      this.terminalViewSubscribers.remoteAnsweringQueriesCount(ptyId) === 1 &&
       shouldModelAnswerHiddenPtyQueries({
         ptyId,
         settings: this.store?.getSettings(),
@@ -241,6 +271,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
         await state.emulator.write(chunk, { forwardQueryReplies })
         const pty = this.ptysById.get(ptyId)
         if (pty && !pty.connectionId && this.headlessTerminals.get(ptyId) === state) {
+          this.trustDialogStatus.observe(ptyId, state.emulator, chunk)
           const command = this.terminalSpawnCommandsByPtyId.get(ptyId)
           const payload =
             observeCodexCapacityTerminalStatus(
@@ -248,12 +279,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
               chunk,
               command,
               pty.launchAgent,
-              () => {
-                const paneKey =
-                  this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
-                  this.paneOfPty(pty).paneKey
-                return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
-              },
+              () => this.readPtyAgentStatusRow(ptyId, pty),
               outputObservedAt
             ) ?? observeFreebuffTerminalStatus(state.emulator, chunk, command, pty.launchAgent)
           if (payload) {
@@ -273,5 +299,15 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
       state.outputSequence = outputSequence
     })
     state.writeChain = completion.catch(() => {})
+  }
+
+  private readPtyAgentStatusRow(
+    ptyId: string,
+    pty: RuntimePtyWorktreeRecord
+  ): AgentStatusIpcPayload | undefined {
+    const paneKey =
+      this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
+      this.paneOfPty(pty).paneKey
+    return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
   }
 }

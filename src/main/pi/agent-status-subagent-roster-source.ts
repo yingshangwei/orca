@@ -127,6 +127,36 @@ export function getPiSubagentRosterEventSourceLines(): string[] {
     '  function postSubagentsUpdate(): void {',
     "    if (!hasQueuedPost()) post('subagents_update')",
     '  }',
+    // OMP lifecycle frames can invert or lose a terminal; its job list and child sessions know which children still run.
+    '  function forgetFinishedOmpSubagents(ctx): boolean {',
+    '    const live = new Set<unknown>()',
+    '    try {',
+    '      const running = ctx?.getAsyncJobSnapshot?.()?.running',
+    '      if (!Array.isArray(running)) return false',
+    // Older snapshots omit agentId, and workpool batch labels are not child ids.
+    '      for (const job of running) {',
+    "        if (job?.type !== 'task') continue",
+    "        if (typeof job.agentId !== 'string') return false",
+    '        live.add(job.agentId)',
+    '      }',
+    // Woken or resumed children run outside the root's jobs.
+    '      const registry = pi.pi?.AgentRegistry?.global?.()',
+    "      if (typeof registry?.get !== 'function') return false",
+    '      for (const id of lifecycleState.active) {',
+    '        const session = registry.get(id)?.session',
+    '        if (session?.isStreaming === true || session?.hasPendingAsyncWork?.() === true) live.add(id)',
+    '      }',
+    '    } catch {',
+    '      return false',
+    '    }',
+    '    let wasVisible = false',
+    '    for (const id of lifecycleState.active) {',
+    '      if (live.has(id)) continue',
+    '      wasVisible ||= isVisibleSubagent(lifecycleState, id)',
+    '      forgetSubagent(id)',
+    '    }',
+    '    return wasVisible',
+    '  }',
     "  const readLabel = (value: unknown): string | undefined => typeof value === 'string' && value.trim() ? value : undefined",
     '  lifecycleState.onEvent = (event: unknown, forcedStatus?: string): void => {',
     "    if (!event || typeof event !== 'object') return",
@@ -139,7 +169,8 @@ export function getPiSubagentRosterEventSourceLines(): string[] {
     '      lifecycleState.active.add(id)',
     // Why: pi-subagents redacts task prompts, so only the agent name, OMP's short label and a
     // workflow child's step key are shown. The key tells apart siblings that share an agent.
-    "      if (!subagentDetails.has(id)) subagentDetails.set(id, { agentType: readLabel(record.agent), description: readLabel(record.description) ?? readLabel(record.workflowKey), startedAt: Date.now(), workflow: record.mode === 'workflow', parent: readLabel(record.parentWorkflowRunId), registration })",
+    // Use labels/step keys because pi-subagents redacts task prompts; keys and OMP's named ids distinguish same-agent siblings.
+    "      if (!subagentDetails.has(id)) subagentDetails.set(id, { agentType: readLabel(record.agent), description: readLabel(record.description) ?? readLabel(record.workflowKey) ?? (isOmpRuntime() ? id : undefined), startedAt: Date.now(), workflow: record.mode === 'workflow', parent: readLabel(record.parentWorkflowRunId), registration })",
     // Why: Pi re-opens only a posted completion; an earlier child must leave the idle check intact.
     '      if (!isTurnInFlight() && (isOmpRuntime() || lifecycleState.runGeneration === 0 || lifecycleState.completionPostedGeneration === lifecycleState.runGeneration)) {',
     '        lifecycleState.waiting = true',

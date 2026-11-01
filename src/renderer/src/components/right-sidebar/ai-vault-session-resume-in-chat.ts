@@ -5,7 +5,7 @@ import { isAntigravityReferenceSession } from '../../../../shared/antigravity-se
 // terminal resume asks whether a workspace can host a PTY, this asks whether a provider will still
 // find the conversation from the workspace we would run it in.
 
-import { isWslStoredAiVaultSessionFile } from '@/lib/ai-vault-resume-target'
+import { isWslStoredAiVaultSessionFile } from '../../../../shared/ai-vault-resume-target'
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'

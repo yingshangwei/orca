@@ -1,7 +1,13 @@
+import {
+  isConnectionDialing,
+  isConnectionOutage,
+  type ConnectionVerdict
+} from '../transport/connection-health'
 import type { ConnectionState } from '../transport/types'
 
 export type HostWorkspaceListStateInput = {
   connState: ConnectionState
+  connectionVerdict: ConnectionVerdict
   worktreesLoaded: boolean
   displayCount: number
   sectionCount: number
@@ -12,8 +18,27 @@ export type HostWorkspaceListStateInput = {
 // failed worktree.ps can never render as a healthy host with zero workspaces.
 export function selectHostWorkspaceListState(
   input: HostWorkspaceListStateInput
-): 'loading' | 'catalog-error' | 'empty' | null {
-  const { connState, worktreesLoaded, displayCount, sectionCount, catalogError } = input
+): 'loading' | 'unreachable' | 'catalog-error' | 'empty' | null {
+  const {
+    connState,
+    connectionVerdict,
+    worktreesLoaded,
+    displayCount,
+    sectionCount,
+    catalogError
+  } = input
+  // The auth banner owns refused pairings.
+  if (connectionVerdict.kind === 'auth-failed') {
+    return null
+  }
+  // An outage with nothing cached must say so; a spinner there never ends (STA-11382).
+  if (
+    displayCount === 0 &&
+    (isConnectionOutage(connectionVerdict) ||
+      (connState === 'disconnected' && !isConnectionDialing(connectionVerdict)))
+  ) {
+    return 'unreachable'
+  }
   // Why: a blank disconnected list read as "no workspaces"; spin instead — the
   // header verdict owns escalating a long outage. auth-failed keeps its own UI.
   const pending =

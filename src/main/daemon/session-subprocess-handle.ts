@@ -13,7 +13,7 @@ export type SubprocessHandle = {
    *  'claude' / 'codex' / 'zsh'. `cachedOnly` never reads the process or schedules inspection. */
   getForegroundProcess(options?: { rawFallback?: boolean; cachedOnly?: boolean }): string | null
   /** Await process-table evidence captured after this confirmation request. */
-  confirmForegroundProcess?(): Promise<string | null>
+  confirmForegroundProcess?(context?: { decision?: boolean }): Promise<string | null>
   /** Proves a fresh post-boundary PTY process tree contains only the shell. */
   confirmShellForeground?(): Promise<boolean>
   /** True when shell launch args already delivered the startup command, so the host skips its stdin fallback write. */

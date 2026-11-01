@@ -301,9 +301,9 @@ async function reuseCachedSession(
   // cheap directory count on reuse.
   if (session && session.messageCount === 0) {
     const subagentTranscriptCount =
-      candidate.agent === 'claude'
+      session.agent === 'claude'
         ? await countSubagentTranscripts(candidate.file.path)
-        : candidate.agent === 'omp'
+        : session.agent === 'omp'
           ? await countOmpSubagentTranscripts(candidate.file.path)
           : null
     if (

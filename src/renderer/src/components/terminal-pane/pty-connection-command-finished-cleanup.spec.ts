@@ -219,11 +219,9 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
-      )
+      const deps = createDeps({ isVisibleRef: { current: false } })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: shared pane fixtures provide every member used by this connection lifecycle.
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -246,6 +244,8 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       // process-confirmed agent exit must go through the reconcile route instead — otherwise a
       // surviving Claude latch resolves the pane's next event straight back to 'working' (STA-4612).
       expect(window.api.agentStatus.reconcileEndedProcess).toHaveBeenCalledWith(paneKey)
+      // Shell-confirmed exit must leave ChatView even when the agent's OSC title survives.
+      expect(deps.onAgentExitedRef.current).toHaveBeenCalledWith(LEAF_1)
     })
 
     it.each([
@@ -269,11 +269,9 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
-      )
+      const deps = createDeps({ isVisibleRef: { current: false } })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: shared pane fixtures provide every member used by this connection lifecycle.
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -300,9 +298,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
           agent: 'codex'
         })
+        expect(deps.onAgentExitedRef.current).not.toHaveBeenCalled()
       } else {
         expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledExactlyOnceWith(paneKey)
         expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeUndefined()
+        expect(deps.onAgentExitedRef.current).toHaveBeenCalledWith(LEAF_1)
       }
       expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]).toEqual({
         agent: null,

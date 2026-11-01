@@ -1,3 +1,4 @@
+import { createAgentSessionCatchUpReader } from './agent-session-history-page'
 // An earlier build kept queued cards in their own table. They move into the chat's journal: the
 // queue reads each the same before and after, each action moves only its own card, and the bulk
 // import runs once per open, all-or-nothing, until no readable legacy row is left.
@@ -365,4 +366,40 @@ it('a rewind while the import has failed moves the legacy cards first: a refused
   expect(await rig.drafts()).toEqual(held)
   await nothingSentTo('edited')
   expect(legacyIds()).toEqual([])
+})
+
+it('refreshes a cached snapshot after a legacy-only import with no cursor progress', async () => {
+  await rig.drafts()
+  await rig.host.close(SESSION, 'evict')
+  const earlier = journalFor(SESSION)
+  await earlier.open()
+  await handOff(earlier, 'cache-accepted', 'cache-card', 'delivered', 'accepted')
+  await earlier.close()
+  seedLegacy(SESSION, [['cache-card', 'dispatched', 'delivered', 'cache-accepted']])
+  db().exec(`CREATE TEMP TRIGGER cache_fail_import BEFORE DELETE ON queued_messages
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+  const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const journal = journalFor(SESSION)
+  try {
+    await journal.open()
+    const snapshot = journal.snapshot()
+    expect(journal.snapshot()).toBe(snapshot)
+    const cursor = journal.cursor()
+    const read = createAgentSessionCatchUpReader(journal)
+    const request = { sessionId: SESSION, direction: 'tail' as const }
+    const beforeImport = read(request)
+    expect(beforeImport).toMatchObject({ ok: true, page: { items: snapshot.items } })
+    expect(legacyIds()).toEqual(['cache-card'])
+    db().exec('DROP TRIGGER cache_fail_import')
+    await journal.queuedMessages.importAtOpen()
+    expect(journal.cursor()).toEqual(cursor)
+    expect(legacyIds()).toEqual([])
+    expect(journal.snapshot()).not.toBe(snapshot)
+    expect(journal.snapshot()).toEqual(snapshot)
+    expect(read(request)).toEqual(beforeImport)
+  } finally {
+    db().exec('DROP TRIGGER IF EXISTS cache_fail_import')
+    warned.mockRestore()
+    await journal.close()
+  }
 })
