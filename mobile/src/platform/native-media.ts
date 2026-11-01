@@ -182,7 +182,11 @@ export function createNativeMediaVerbServer(
     }
   }
 
-  async function pickFrom(source: BridgeMediaSource, multiple: boolean): Promise<StagedMedia[]> {
+  async function pickFrom(
+    source: BridgeMediaSource,
+    multiple: boolean,
+    isCurrent: () => boolean
+  ): Promise<StagedMedia[]> {
     // Before the picker, not after it. `mint` refuses a pick that would pass the cap, and by then
     // the OS has copied every selected asset into the cache: a user who chose nine photos would
     // wait through all of it to be told none were taken. The same number bounds the selection
@@ -196,7 +200,7 @@ export function createNativeMediaVerbServer(
     }
     if (source === 'clipboard') {
       const image = await deps.readClipboardImage()
-      if (image === null) {
+      if (image === null || !isCurrent()) {
         return []
       }
       const base64 = image.data.replace(DATA_URL_PREFIX_RE, '')
@@ -229,14 +233,21 @@ export function createNativeMediaVerbServer(
       return assets
     }
 
-    if (source === 'library') {
-      // No permission request first. Ruling 6b: `launchImageLibraryAsync` gates on nothing in
-      // expo-image-picker 55.0.24 on either platform, so the prompt the shell owns is the OS
-      // picker's own and asking first would only add a dialog the system does not need — plus a
-      // denial that refuses a pick the OS would have completed.
-      return stage(withinRoom(readAssets(await deps.launchLibrary({ multiple, limit: room }))))
+    // The OS library picker owns its permission prompt; no additional preflight is needed.
+    const assets = readAssets(
+      await (source === 'library'
+        ? deps.launchLibrary({ multiple, limit: room })
+        : deps.launchFiles({ multiple, limit: room }))
+    )
+    if (!isCurrent()) {
+      for (const asset of assets) {
+        if (deps.ownsStagedUri(asset.uri)) {
+          discardQuietly(asset.uri)
+        }
+      }
+      return []
     }
-    return stage(withinRoom(readAssets(await deps.launchFiles({ multiple, limit: room }))))
+    return stage(withinRoom(assets))
   }
 
   /**
@@ -269,7 +280,16 @@ export function createNativeMediaVerbServer(
   return async (verb, params) => {
     if (verb === 'native.media.pick') {
       const { source, multiple } = mediaPickParamsSchema.parse(params)
-      return { items: deps.registry.mint(await pickFrom(source, multiple)) }
+      const generation = deps.registry.generation
+      const isCurrent = (): boolean => deps.registry.generation === generation
+      const staged = await pickFrom(source, multiple, isCurrent)
+      if (!isCurrent()) {
+        for (const item of staged) {
+          discardQuietly(item.uri)
+        }
+        return { items: [] }
+      }
+      return { items: deps.registry.mint(staged) }
     }
     if (verb === 'native.media.read') {
       const { handle, offset, length } = mediaReadParamsSchema.parse(params)

@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react'
 import { openExternalLink } from '../platform/external-link'
 import { useMobileFileTapHandlers } from './use-mobile-file-tap-handlers'
 import { resolveMobileNativeChatSessionId } from './mobile-native-chat-eligibility'
+import { useProvideSessionDiffOpenHandlers } from './session-diff-open-handlers'
 import { activateOpenedSourceControlDiffTab } from './opened-mobile-session-tab'
 import type { MobileSessionTab } from './mobile-session-route-types'
 import type { MobileSessionTerminalSendActionsModel } from './use-mobile-session-terminal-send-actions'
@@ -83,6 +84,7 @@ export function useMobileSessionFileActions(scope: MobileSessionTerminalSendActi
     },
     [fetchSessionTabs, scheduleDelayedAction]
   )
+  useProvideSessionDiffOpenHandlers(hostId, worktreeId, handleFileOpenStart, handleOpenedFileDiff)
 
   const handleTerminalOpenUrl = useCallback(
     (handle: string, url: string) => {

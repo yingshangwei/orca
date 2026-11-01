@@ -8,6 +8,7 @@ import { isRpcResponse } from './rpc-response-shape'
 import { redactSocketEndpoint } from './socket-event-debug'
 import type { ConnectionLogSink, RpcResponse } from './types'
 import { websocketPayloadToUint8 } from './websocket-payload-bytes'
+import { WsInboundMessageQueue } from '../../../src/shared/ws-inbound-message-queue'
 import { relayConnectWebSocketUrl } from './mobile-relay-connect-url'
 import { isAllowedSelfHostedRelayCell } from './self-hosted-relay-origin'
 export { RelayOuterError } from './mobile-relay-e2ee-link'
@@ -106,20 +107,21 @@ export function connectMobileRelayForPairing(args: {
       })
     )
   }
-  let inboundChain: Promise<void> = Promise.resolve()
+  const inbound = new WsInboundMessageQueue(
+    async (raw) => {
+      if (closed) {
+        return
+      }
+      if (!outerReady) {
+        acceptRelayHello(raw)
+        return
+      }
+      await channel.handleMessage(raw)
+    },
+    (error) => fail(asError(error))
+  )
   socket.onmessage = (event) => {
-    inboundChain = inboundChain
-      .then(async () => {
-        if (closed) {
-          return
-        }
-        if (!outerReady) {
-          acceptRelayHello(event.data)
-          return
-        }
-        await channel.handleMessage(event.data)
-      })
-      .catch((error: unknown) => fail(asError(error)))
+    void inbound.enqueue(event.data)
   }
   // WebSocket implementations commonly emit `error` immediately before
   // `close`; the bounded fallback represents an opaque 1006 close.
@@ -170,6 +172,7 @@ export function connectMobileRelayForPairing(args: {
       return
     }
     closed = true
+    inbound.dispose()
     if (transportErrorTimer) {
       clearTimeout(transportErrorTimer)
       transportErrorTimer = null

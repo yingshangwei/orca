@@ -141,7 +141,7 @@ async function flushBatch(root: WatchedRoot): Promise<void> {
       async (evt) => {
         // Why: a deleted path can't be stat'd; leave isDirectory undefined and let the renderer infer from dirCache.
         const isDirectory =
-          root.batch.cancelled || evt.type === 'delete'
+          root.batch.cancelled || root.listeners.size === 0 || evt.type === 'delete'
             ? undefined
             : await tryStatIsDirectory(evt.path)
 

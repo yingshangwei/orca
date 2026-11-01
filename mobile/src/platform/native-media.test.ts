@@ -133,6 +133,69 @@ beforeEach(() => {
 })
 
 describe('picking', () => {
+  it('leaves a late provider original untouched and skips its whole-file copy', async () => {
+    const providerUri = 'content://media/external/images/media/42'
+    const probe = harness({
+      launchLibrary: async () => {
+        probe.registry.releaseAll()
+        return { canceled: false, assets: [{ uri: providerUri, mimeType: 'image/jpeg' }] }
+      }
+    })
+    probe.files.set(providerUri, bytesOf(1024 * 1024))
+    await expect(
+      probe.serve('native.media.pick', { source: 'library', multiple: false })
+    ).resolves.toEqual({ items: [] })
+    expect(probe.copied).toEqual([])
+    expect(probe.discarded).toEqual([])
+    expect(probe.registry.liveCount()).toBe(0)
+    expect(probe.files.get(providerUri)?.byteLength).toBe(1024 * 1024)
+  })
+
+  it('does not stage clipboard bytes that arrive after session cleanup', async () => {
+    const probe = harness({
+      readClipboardImage: async () => {
+        probe.registry.releaseAll()
+        return { data: 'data:image/png;base64,AQID' }
+      }
+    })
+    await expect(
+      probe.serve('native.media.pick', { source: 'clipboard', multiple: false })
+    ).resolves.toEqual({ items: [] })
+    expect(probe.written).toEqual([])
+    expect(probe.discarded).toEqual([])
+    expect(probe.registry.liveCount()).toBe(0)
+  })
+
+  it('discards every copy if cleanup runs between staging and minting', async () => {
+    const providerUris = ['content://media/1', 'content://media/2']
+    const probe = harness({
+      launchLibrary: () =>
+        Promise.resolve({
+          canceled: false,
+          assets: providerUris.map((uri) => ({ uri, mimeType: 'image/jpeg' }))
+        })
+    })
+    for (const uri of providerUris) {
+      probe.files.set(uri, bytesOf(4096))
+    }
+    const picked = probe.serve('native.media.pick', { source: 'library', multiple: true })
+    await Promise.resolve()
+    expect(probe.copied).toHaveLength(2)
+    expect(probe.registry.liveCount()).toBe(0)
+    probe.registry.releaseAll()
+    const [live] = probe.registry.mint([
+      { uri: `${CACHE}/successor.png`, byteLength: 64, mime: 'image/png' }
+    ])
+    await expect(picked).resolves.toEqual({ items: [] })
+    expect(probe.discarded).toEqual(probe.copied.map(({ to }) => to))
+    expect(probe.registry.liveCount()).toBe(1)
+    expect(probe.registry.read(live?.handle ?? '', 0, 64)).toMatchObject({
+      uri: `${CACHE}/successor.png`,
+      end: 64,
+      eof: true
+    })
+  })
+
   it('answers a handle per asset for a library pick', async () => {
     const probe = harness()
     probe.files.set(`${CACHE}/lib.png`, bytesOf(64))

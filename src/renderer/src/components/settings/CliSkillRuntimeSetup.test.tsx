@@ -8,6 +8,16 @@ import {
 } from './CliSkillRuntimeSetup'
 
 describe('CliSkillRuntimeSetup runtime helpers', () => {
+  it('forces English git messages only for POSIX skill install targets', () => {
+    const command =
+      'npx skills@1.7.2 add https://github.com/stablyai/orca/tree/abc --skill orca-cli'
+    const wsl = { runtime: 'wsl' as const, label: 'WSL' }
+
+    expect(buildSkillCommandForRuntime(command, undefined, 'linux')).toBe(`env LC_ALL=C ${command}`)
+    expect(buildSkillCommandForRuntime(command, wsl, 'win32')).toBe(`env LC_ALL=C ${command}`)
+    expect(buildSkillCommandForRuntime(command, undefined, 'win32')).toMatch(/^cmd\.exe .*\(npx /)
+  })
+
   it('keeps the WSL command native and wraps the selected distro for a PowerShell terminal', () => {
     const runtime = {
       runtime: 'wsl',
@@ -16,7 +26,7 @@ describe('CliSkillRuntimeSetup runtime helpers', () => {
     } as const
     const command =
       'npx skills@1.7.2 add https://github.com/stablyai/orca/tree/abc --skill orca-cli --global'
-    expect(buildSkillCommandForRuntime(command, runtime, 'win32')).toBe(command)
+    expect(buildSkillCommandForRuntime(command, runtime, 'win32')).toBe(`env LC_ALL=C ${command}`)
     const wrapped = buildSkillSetupTerminalCommand(command, 'powershell.exe', runtime, 'win32')
     expect(wrapped).toContain("wsl.exe -d 'Fedora Remix' --exec sh -c")
     expect(wrapped).toContain(`} # Runs: ${command}`)

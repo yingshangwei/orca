@@ -170,6 +170,13 @@ async function startOrcadRuntime(
     console.warn('[orcad] Could not prepare the profile CLI launcher', error)
   })
   const idleExitStartup = beginOrcadIdleExit(runtimeUserDataPath)
+  const { orcadSessionScannerIdleTimeoutMs } = await import('./orcad-session-scanner-idle')
+  const scannerIdleTimeoutMs = orcadSessionScannerIdleTimeoutMs()
+  if (scannerIdleTimeoutMs !== null) {
+    const { setAiVaultServiceIdleTimeoutMs } =
+      await import('../ai-vault/session-scanner-service-spawn')
+    setAiVaultServiceIdleTimeoutMs(scannerIdleTimeoutMs)
+  }
   // Why before the profile store: it unseals protected settings as it loads.
   await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
   const { store: profileStore, authority: profileStateAuthority } =

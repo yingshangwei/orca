@@ -1,8 +1,12 @@
 import { Terminal } from '@xterm/headless'
 import { describe, expect, it } from 'vitest'
-import { detectTerminalComposerDraft } from '../../shared/terminal-composer-draft'
+import {
+  detectTerminalComposerDraft,
+  hasTerminalComposerPlaceholder
+} from '../../shared/terminal-composer-draft'
 import { HeadlessEmulator } from './headless-emulator'
 import { readTerminalCursorLineContext } from '../../shared/terminal-cursor-line-context'
+import { readRuntimeFixture } from '../runtime/agent-transcript-replay-test-harness'
 
 function writeSync(terminal: Terminal, data: string): void {
   const core = (terminal as unknown as { _core: { writeSync(data: string): void } })._core
@@ -51,6 +55,17 @@ function observeCellReads(terminal: Terminal) {
 }
 
 describe('readTerminalCursorLineContext', () => {
+  it("masks Codex 0.157's placeholder when shortcut help sits under the status row", async () => {
+    const emulator = new HeadlessEmulator({ cols: 120, rows: 40 })
+    await emulator.write(readRuntimeFixture('codex-0157-plain-ready'))
+
+    const context = emulator.getCursorLineContext()
+
+    expect(context?.rowsBelow.at(-1)).toContain('? for shortcuts')
+    expect(hasTerminalComposerPlaceholder(context)).toBe(true)
+    emulator.dispose()
+  })
+
   it('reuses one cell across every scan without retaining it between reads', () => {
     const terminal = new Terminal({ cols: 12, rows: 5, allowProposedApi: true })
     try {

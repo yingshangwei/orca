@@ -71,8 +71,11 @@ export function getAgentResumeArgv(
       return providerSession.key === 'session_id' ? ['zcode', '--resume', id] : null
     // Why: `dsh-tui --resume <id>` re-enters the session the launcher recorded for this
     // workspace. DSH keys sessions by workspace path, so callers must keep the cwd.
+    // Pin the backend (dsh-tui 0.14+ boots its remembered one); joined so <0.14 can't read `dsh` as a prompt.
     case 'dsh':
-      return providerSession.key === 'session_id' ? ['dsh-tui', '--resume', id] : null
+      return providerSession.key === 'session_id'
+        ? ['dsh-tui', '--backend=dsh', '--resume', id]
+        : null
     case 'jcode':
       return providerSession.key === 'session_id' ? ['jcode', '--resume', id] : null
     case 'kiro':

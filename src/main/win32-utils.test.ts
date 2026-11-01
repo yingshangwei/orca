@@ -73,7 +73,7 @@ describe('getSpawnArgsForWindows', () => {
         expect(spawnCmd).toBe('C:\\Windows\\System32\\cmd.exe')
         // Why: /d disables AutoRun; /c runs the batch command and exits.
         // Separate argv entries avoid cmd.exe seeing Node-escaped quotes.
-        expect(spawnArgs).toEqual(['/d', '/c', 'C:\\tools\\codex.cmd', 'login', '--foo'])
+        expect(spawnArgs).toEqual(['/d', '/c', '@', 'C:\\tools\\codex.cmd', 'login', '--foo'])
       })
     } finally {
       if (originalComSpec === undefined) {
@@ -104,6 +104,7 @@ describe('getSpawnArgsForWindows', () => {
         getCmdExePath(),
         '/d',
         '/c',
+        '@',
         'C:\\Tools\\idea.cmd',
         'C:\\workspaces\\orca'
       ])
@@ -117,7 +118,7 @@ describe('getSpawnArgsForWindows', () => {
   it('keeps the waiting form for batch launches without detachedGui', () => {
     withPlatform('win32', () => {
       const { spawnArgs } = getSpawnArgsForWindows('C:\\Tools\\idea.cmd', ['C:\\workspaces\\orca'])
-      expect(spawnArgs).toEqual(['/d', '/c', 'C:\\Tools\\idea.cmd', 'C:\\workspaces\\orca'])
+      expect(spawnArgs).toEqual(['/d', '/c', '@', 'C:\\Tools\\idea.cmd', 'C:\\workspaces\\orca'])
     })
   })
 
@@ -185,6 +186,7 @@ describe('getSpawnArgsForWindows', () => {
       expect(spawnArgs).toEqual([
         '/d',
         '/c',
+        '@',
         'C:\\tools\\code.cmd',
         '--remote',
         'wsl+Ubuntu Preview',
@@ -231,7 +233,7 @@ describe('getSpawnArgsForWindows', () => {
     withPlatform('win32', () => {
       expect(
         getSpawnArgsForWindows('C:\\tools\\agent.cmd', ['package,name;version']).spawnArgs
-      ).toEqual(['/d', '/c', 'C:\\tools\\agent.cmd', 'package,name;version'])
+      ).toEqual(['/d', '/c', '@', 'C:\\tools\\agent.cmd', 'package,name;version'])
     })
   })
 
@@ -242,10 +244,10 @@ describe('getSpawnArgsForWindows', () => {
       const npx = 'C:\\Program Files (x86)\\nodejs\\npx.cmd'
       expect(getSpawnArgsForWindows(npx, ['C:\\dev\\app (fork)'])).toEqual({
         spawnCmd: getCmdExePath(),
-        spawnArgs: ['/d', '/c', npx, 'C:\\dev\\app (fork)']
+        spawnArgs: ['/d', '/c', '@', npx, 'C:\\dev\\app (fork)']
       })
       expect(getSpawnArgsForWindows('C:\\tools\\agent.cmd', ['close)', '(open']).spawnArgs).toEqual(
-        ['/d', '/c', 'C:\\tools\\agent.cmd', 'close)', '(open']
+        ['/d', '/c', '@', 'C:\\tools\\agent.cmd', 'close)', '(open']
       )
     })
   })

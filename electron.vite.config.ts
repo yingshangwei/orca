@@ -2,7 +2,7 @@ import { markdownParserAliases } from './config/build-plugins/markdown-parser-ex
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { defineConfig, type UserConfig } from 'electron-vite'
-import type { Plugin } from 'vite'
+import type { Plugin, Rollup } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { createBootstrapFatalExitBanner } from './config/build-plugins/bootstrap-fatal-exit-banner'
@@ -189,26 +189,16 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
 `
 }
 
-function createMainBootstrapPlugin() {
-  return {
-    name: 'orca-main-bootstrap',
-    generateBundle(_options, bundle) {
-      const mainChunk = bundle['index.js']
-      if (!mainChunk || mainChunk.type !== 'chunk') {
-        return
-      }
-      if (!mainChunk.moduleIds.some((id) => resolve(id) === MAIN_BUILD_ENTRY_POINTS.index)) {
-        throw new Error('Main startup must stay in index.js so __dirname resolves app assets')
-      }
-
-      // Why: source guards and diagnostics run after Rollup's generated require
-      // prelude, too late to handle a missing bootstrap dependency.
-      mainChunk.code =
-        createBootstrapFatalExitBanner() +
-        createStartupDiagnosticsBanner(mainChunk.fileName) +
-        mainChunk.code
-    }
+// postBanner runs after minification and shifts the source map past the startup banners.
+function createMainBootstrapPostBanner(chunk: Rollup.RenderedChunk): string {
+  if (chunk.fileName !== 'index.js') {
+    return ''
   }
+  if (!chunk.moduleIds.some((id) => resolve(id) === MAIN_BUILD_ENTRY_POINTS.index)) {
+    throw new Error('Main startup must stay in index.js so __dirname resolves app assets')
+  }
+  // The generated require prelude must already have the fatal-exit guard and diagnostics.
+  return createBootstrapFatalExitBanner() + createStartupDiagnosticsBanner(chunk.fileName)
 }
 
 /**
@@ -251,10 +241,10 @@ export const electronViteConfig: UserConfig = {
         output: {
           format: 'cjs',
           entryFileNames: '[name].js',
-          chunkFileNames: 'chunks/[name]-[hash].js'
+          chunkFileNames: 'chunks/[name]-[hash].js',
+          postBanner: createMainBootstrapPostBanner
         },
         plugins: [
-          createMainBootstrapPlugin(),
           createPlainNodeEntryGuardPlugin(),
           createProcessHostDevRebuildPlugin(),
           createDarkBuildMarkerPlugin()

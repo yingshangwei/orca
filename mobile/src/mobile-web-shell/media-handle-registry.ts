@@ -66,8 +66,13 @@ type LiveHandle = StagedMedia & { touchedAt: number }
 export class MediaHandleRegistry {
   private readonly live = new Map<string, LiveHandle>()
   private minted = 0
+  private releaseGeneration = 0
 
   constructor(private readonly deps: MediaHandleRegistryDeps) {}
+
+  get generation(): number {
+    return this.releaseGeneration
+  }
 
   liveCount(): number {
     this.sweep()
@@ -164,6 +169,7 @@ export class MediaHandleRegistry {
 
   /** The session ended or the page unmounted. Both reach this, and it runs twice without harm. */
   releaseAll(): void {
+    this.releaseGeneration += 1
     for (const [handle, record] of this.live) {
       this.live.delete(handle)
       this.discard(record.uri)

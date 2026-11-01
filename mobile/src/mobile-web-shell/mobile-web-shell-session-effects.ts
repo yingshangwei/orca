@@ -126,7 +126,7 @@ export async function download(args: {
     }
     fetchedWhole = true
     send({ type: 'download-staged', flow })
-    const staged = await store.stageGeneration(hostKey, fetched)
+    const staged = await store.stageGeneration(hostKey, fetched, controller.signal)
     // Again before the commit, because the commit is the write that is not the staging tree's to
     // undo: it renames into the active slot and moves the host index. An abort that landed while
     // the bytes were being staged takes the staged tree back out instead.

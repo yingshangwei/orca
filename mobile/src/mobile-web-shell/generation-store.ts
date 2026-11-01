@@ -9,7 +9,7 @@ import type {
 } from '../transport/mobile-web-bundle-fetch'
 import { joinUri } from './generation-cache-uri'
 import { MANIFEST_FILE_NAME, requireStorablePath } from './generation-asset-path'
-import { copyCachedAsset, reusableAssetsOf } from './generation-reuse'
+import { reusableAssetsOf } from './generation-reuse'
 import type { GenerationDirectoryEntry, GenerationFileSystem } from './generation-store-file-system'
 import { isHostCacheKey } from './host-cache-key'
 import type { MobileWebShellUpdateFailure } from './mobile-web-shell-update-failure'
@@ -45,7 +45,11 @@ export type GenerationStore = {
   /** The host's active generation, by content, for a download to leave unchanged assets to the
    *  stage, which copies them from it. */
   openReusableAssets(hostKey: string): Promise<MobileWebBundleReusableAssets>
-  stageGeneration(hostKey: string, result: MobileWebBundleFetchResult): Promise<StagedGeneration>
+  stageGeneration(
+    hostKey: string,
+    result: MobileWebBundleFetchResult,
+    signal?: AbortSignal
+  ): Promise<StagedGeneration>
   commitGeneration(staged: StagedGeneration): Promise<ActiveGeneration>
   abortStagedGeneration(staged: StagedGeneration): Promise<void>
   sweepStagedGenerations(): Promise<void>
@@ -173,8 +177,12 @@ export function createGenerationStore(options: {
 
   async function stage(
     hostKey: string,
-    result: MobileWebBundleFetchResult
+    result: MobileWebBundleFetchResult,
+    signal?: AbortSignal
   ): Promise<StagedGeneration> {
+    if (signal?.aborted) {
+      throw new Error('generation staging was aborted')
+    }
     const manifest = result.manifest
     const directory = joinUri(stagingRoot(hostKey), manifest.buildId)
     const reused = new Set(result.reused)
@@ -185,13 +193,13 @@ export function createGenerationStore(options: {
     }))
     // Here rather than during the download, so a sweep or a second download of this build never
     // takes a copy out from under it: the stage runs on the queue they do.
-    const active = reused.size > 0 ? await readActive(hostKey) : null
+    const reusable = reusableAssetsOf(fs, reused.size > 0 ? await readActive(hostKey) : null)
     // Residue from an earlier attempt is dropped rather than written over: a half-written tree
     // plus a fresh write is not a generation either side verified.
     await fs.delete(directory)
     try {
       for (const { asset, uri, bytes } of assets) {
-        await (bytes === null ? copyCachedAsset(fs, active, asset, uri) : fs.writeBytes(uri, bytes))
+        await (bytes === null ? reusable.copyTo(asset, uri) : fs.writeBytes(uri, bytes))
       }
       // Last, always: a tree without it never reads back as an activation, which is what makes an
       // interrupted write recoverable rather than ambiguous.
@@ -305,7 +313,7 @@ export function createGenerationStore(options: {
   return {
     readActiveGeneration: (hostKey) => serialize(() => openActive(hostKey)),
     openReusableAssets: (hostKey) => serialize(() => openReusable(hostKey)),
-    stageGeneration: (hostKey, result) => serialize(() => stage(hostKey, result)),
+    stageGeneration: (hostKey, result, signal) => serialize(() => stage(hostKey, result, signal)),
     commitGeneration: (staged) => serialize(() => commit(staged)),
     abortStagedGeneration: (staged) =>
       serialize(() => fs.delete(requireIssuedHandle(staged).directory)),

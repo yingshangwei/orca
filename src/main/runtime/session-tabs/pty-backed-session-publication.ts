@@ -3,6 +3,7 @@ import { OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding } from '../s
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 import { normalizeCompatibleAgentTitleForOwner } from '../../../shared/agent-title-owner'
 import { getLatestPtyTitle } from '../runtime-worktree-status-projection'
+import type { OrcaRuntimeWithBuildPtyTerminalSummary as PtyTerminalSummaryMethods } from '../terminal/query/pty-terminal-summary'
 import type {
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
@@ -19,6 +20,9 @@ import {
 
 export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal extends OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding {
   protected abstract markPaneLiveTitlesDirty(): void
+  protected abstract getPtyManualTitle(
+    ...args: Parameters<PtyTerminalSummaryMethods['getPtyManualTitle']>
+  ): ReturnType<PtyTerminalSummaryMethods['getPtyManualTitle']>
   protected abstract isMobileSessionSurfaceMembershipAllowed(
     ...args: Parameters<
       TouchMobileSessionTabsForWorktreeMethods['isMobileSessionSurfaceMembershipAllowed']
@@ -95,8 +99,8 @@ export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal exten
           candidate.parentTabId === args.tabId &&
           candidate.viewMode !== undefined
       )?.viewMode
-    // Why: republishing a surface must not drop the tab's manual name; a new split leaf inherits it.
-    const customTitle = (
+    // Republished rows retain manual names, including explicit null; new split leaves inherit them.
+    const rowCustomTitle = (
       existingTab ??
       existing?.tabs.find(
         (candidate): candidate is RuntimeMobileSessionTerminalTab =>
@@ -105,6 +109,11 @@ export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal exten
           candidate.customTitle !== undefined
       )
     )?.customTitle
+    // A restart has no earlier row, so the name comes from the saved tab.
+    const customTitle =
+      rowCustomTitle !== undefined
+        ? rowCustomTitle
+        : this.getPtyManualTitle(pty, false) || undefined
     const tab: RuntimeMobileSessionTerminalTab = {
       type: 'terminal',
       id: `${args.tabId}::${args.leafId}`,
