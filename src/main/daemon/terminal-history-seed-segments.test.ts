@@ -6,6 +6,7 @@ import {
   PROCESS_BOUNDARY_GROUND,
   RESET_GRAPHIC_RENDITION
 } from '../../shared/terminal-mode-reset-profiles'
+import { buildFreshShellViewportBlankingSequence } from '../../shared/terminal-fresh-shell-viewport'
 import type { ColdRestoreInfo } from './terminal-history-cold-restore-info'
 import type { TerminalModes } from './types'
 
@@ -21,6 +22,7 @@ const ARMED_MODES: TerminalModes = {
 // Why import rather than restate: the exact bytes are pinned in
 // terminal-mode-reset-profiles.test.ts; this suite pins placement within the seed.
 const GROUND = PROCESS_BOUNDARY_GROUND
+const FRESH_VIEWPORT = buildFreshShellViewportBlankingSequence(24)
 
 function restoreInfo(overrides: Partial<ColdRestoreInfo> = {}): ColdRestoreInfo {
   return {
@@ -43,7 +45,8 @@ describe('getRecoveredHistorySeedSegments', () => {
     expect(segments).toEqual([
       `${RESET_GRAPHIC_RENDITION}\x1b[?1003h\x1b[?1006h`,
       'user@host ~ $ \x1b[?1003h',
-      GROUND
+      GROUND,
+      FRESH_VIEWPORT
     ])
   })
 
@@ -52,7 +55,7 @@ describe('getRecoveredHistorySeedSegments', () => {
       getRecoveredHistorySeedSegments(
         restoreInfo({ modes: { ...ARMED_MODES, alternateScreen: true } })
       )
-    ).toEqual([`${RESET_GRAPHIC_RENDITION}user@host ~ $ `, GROUND])
+    ).toEqual([`${RESET_GRAPHIC_RENDITION}user@host ~ $ `, GROUND, FRESH_VIEWPORT])
   })
 
   it('stays empty when there is no recovered normal buffer', () => {

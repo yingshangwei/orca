@@ -1,4 +1,6 @@
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay'
+import { AiVaultScanCoordinator } from '../ai-vault/ai-vault-scan-coordinator'
+import { aiVaultSessionListCacheGeneration } from '../ai-vault/cached-session-list'
 import type { AiVaultListResult } from '../../shared/ai-vault-types'
 import {
   aiVaultCachedDepthServes,
@@ -142,6 +144,22 @@ function pruneExpiredHostLegs(now: number): void {
     if (entry.expiresAt <= now) {
       cachedHostLegs.delete(cacheKey)
     }
+  }
+}
+
+/** Keeps reads after a delete out of scans that began before it. Remote-client
+ * deletes bump only the shared session-list generation, so fence on both. */
+export function createAiVaultListScanCoordinator(): Pick<AiVaultScanCoordinator, 'run'> {
+  const coordinator = new AiVaultScanCoordinator()
+  return {
+    run: (args) =>
+      coordinator.run({
+        ...args,
+        key: JSON.stringify({
+          key: args.key,
+          generation: [cacheGeneration, aiVaultSessionListCacheGeneration()]
+        })
+      })
   }
 }
 

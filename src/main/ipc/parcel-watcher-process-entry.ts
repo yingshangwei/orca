@@ -11,6 +11,7 @@ import { detectShallowWatchDelivery } from './shallow-watch-delivery-probe'
 import { startWatcherDeliveryCanary } from './parcel-watcher-delivery-canary'
 import {
   createWatcherProcessEventDeliveryQueue,
+  isParcelWatcherRescanRequiredError,
   type WatcherProcessEventDeliveryQueue
 } from './parcel-watcher-event-delivery'
 import type {
@@ -133,12 +134,16 @@ function main(): void {
               if (rootDeleted) {
                 return
               }
-              if (err) {
+              if (err && !isParcelWatcherRescanRequiredError(err)) {
                 send({ op: 'watch-error', id, message: errorMessage(err) })
                 return
               }
               rootDeleted = events.some((event) => event.type === 'delete' && event.path === dir)
-              eventDelivery.enqueue(events)
+              if (err) {
+                eventDelivery.overflow()
+              } else {
+                eventDelivery.enqueue(events)
+              }
               if (rootDeleted) {
                 // Native backends stop deleted roots without reporting an error.
                 void eventDelivery
