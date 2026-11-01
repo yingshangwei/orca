@@ -1,8 +1,8 @@
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import {
   getEnvironmentStorePath,
-  listEnvironments
-} from '../../../shared/runtime-environment-store'
+  listRegisteredEnvironmentIds
+} from '../../../shared/runtime-environment-store-file'
 import type { Store } from '../../persistence'
 import { watchFileAcrossReplacement } from '../rebinding-file-watch'
 
@@ -10,11 +10,11 @@ type PreferenceStore = Pick<Store, 'getSettings' | 'updateSettings'>
 
 function reconcileRuntimeEnvironmentPreference(
   store: PreferenceStore,
-  environments: readonly { id: string }[]
+  environmentIds: ReadonlySet<string>
 ): GlobalSettings {
   const settings = store.getSettings()
   const activeId = settings?.activeRuntimeEnvironmentId?.trim()
-  if (!activeId || environments.some((environment) => environment.id === activeId)) {
+  if (!activeId || environmentIds.has(activeId)) {
     return settings
   }
   // A deleted default must not keep routing unrelated requests to its retired pairing.
@@ -29,10 +29,10 @@ export function readSettingsWithRuntimeEnvironmentPreference(
   if (!settings?.activeRuntimeEnvironmentId?.trim()) {
     return settings
   }
-  let environments: { id: string }[]
+  let environments: Set<string>
   try {
     // An unavailable registry cannot prove the selected host was removed.
-    environments = listEnvironments(userDataPath, { requireStoreFile: true })
+    environments = listRegisteredEnvironmentIds(userDataPath, { requireStoreFile: true })
   } catch {
     return settings
   }

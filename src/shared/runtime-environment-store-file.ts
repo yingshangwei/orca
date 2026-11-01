@@ -57,6 +57,19 @@ export function readPersistedEnvironmentStore(
   }
 }
 
+/** Registered identities survive hidden links and records that require a newer build. */
+export function listRegisteredEnvironmentIds(
+  userDataPath: string,
+  options: EnvironmentStoreRecordsReadOptions = {}
+): Set<string> {
+  const { environments, unreadable } = readEnvironmentStoreRecords(userDataPath, options)
+  const ids = new Set(environments.map((environment) => environment.id))
+  for (const record of unreadable) {
+    if (record.id !== undefined) ids.add(record.id)
+  }
+  return ids
+}
+
 /** Unreadable WSL state hides only possible WSL hosts while their gate is open; writes still refuse it. */
 function readWslHostDeploymentsForRegistry(
   userDataPath: string
@@ -89,10 +102,7 @@ export function readEnvironmentStore(
     wslDeployments = readWslHostDeploymentsForRegistry(userDataPath)
   } catch (error) {
     // Fail closed like the main file: a link we cannot read may pin a host key we must not drop.
-    if (
-      error instanceof RuntimeEnvironmentSidecarInvalidError ||
-      error instanceof WslHostDeploymentStoreInvalidError
-    ) {
+    if (error instanceof RuntimeEnvironmentSidecarInvalidError) {
       throw new RuntimeEnvironmentStoreError('runtime_error', error.message)
     }
     throw error

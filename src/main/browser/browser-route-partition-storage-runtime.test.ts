@@ -12,8 +12,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-test-user-data' } }))
-vi.mock('../../shared/runtime-environment-store', () => ({
-  listEnvironments: () => mocks.environments
+vi.mock('../../shared/runtime-environment-store-file', () => ({
+  listRegisteredEnvironmentIds: () => new Set(mocks.environments.map(({ id }) => id))
 }))
 vi.mock('./browser-route-partition-binding-runtime', () => ({
   activeBrowserRoutePartitionOrcaProfileId: () => 'local-default'

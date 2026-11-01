@@ -11,6 +11,7 @@
  */
 import { errorMessage } from '../../shared/error-message'
 import { listEnvironments } from '../../shared/runtime-environment-store'
+import { readWslHostDeployments } from '../../shared/wsl-host-deployment-store'
 import { E2EE_KEYPAIR_FILENAME } from '../../shared/runtime-e2ee-keypair-file'
 import type { WslHostAddResult } from '../../shared/wsl-host-types'
 import {
@@ -55,6 +56,7 @@ export async function wslHostSshManagedRefusal(
   readPublicKey: (distro: string) => Promise<string | null>
 ): Promise<Extract<WslHostAddResult, { ok: false }> | null> {
   try {
+    readWslHostDeployments(userDataPath)
     const sharing = findServerSharingWslOrcad(
       // A conflict check before an add: a crash-zeroed list (#18766) must read as empty here.
       listEnvironments(userDataPath, { recoverBlankStore: true }),
