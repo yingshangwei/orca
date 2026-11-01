@@ -109,11 +109,17 @@ export function readEnvironmentStoreRecords(
 }
 
 /** Copies (never moves) a blank store aside before a write replaces it, so readers never see the name missing. */
-export function backUpBlankEnvironmentStore(userDataPath: string): void {
+export function backUpBlankEnvironmentStore(userDataPath: string, sidecarPath: string): void {
   const path = getEnvironmentStorePath(userDataPath)
-  const backupPath = `${path}.corrupt-${Date.now()}-${process.pid}`
+  const suffix = `.corrupt-${Date.now()}-${process.pid}`
+  const backupPath = `${path}${suffix}`
   copyFileSync(path, backupPath, constants.COPYFILE_EXCL)
   hardenExistingSecureFile(backupPath)
+  if (existsSync(sidecarPath)) {
+    const sidecarBackupPath = `${sidecarPath}${suffix}`
+    copyFileSync(sidecarPath, sidecarBackupPath, constants.COPYFILE_EXCL)
+    hardenExistingSecureFile(sidecarBackupPath)
+  }
   console.warn(`[runtime-environments] ${path} held no data; kept a copy at ${backupPath}.`)
 }
 

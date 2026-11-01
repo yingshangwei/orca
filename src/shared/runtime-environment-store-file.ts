@@ -9,6 +9,7 @@ import {
   type RuntimeEnvironmentStore
 } from './runtime-environments'
 import {
+  getRuntimeEnvironmentSidecarPath,
   overlayRuntimeEnvironmentSidecar,
   readRuntimeEnvironmentSidecar,
   RuntimeEnvironmentSidecarInvalidError
@@ -160,7 +161,7 @@ export function writeEnvironmentStore(userDataPath: string, store: RuntimeEnviro
   }
   // Copied only once the write is certain to be attempted, so rejected saves leave no copies.
   if (onDisk.blankFile) {
-    backUpBlankEnvironmentStore(userDataPath)
+    backUpBlankEnvironmentStore(userDataPath, getRuntimeEnvironmentSidecarPath(userDataPath))
   }
   // Without fsync before the rename, a crash can publish the name over NUL-filled data (#18766).
   writeSecureFile(path, serialized, { durable: true })
