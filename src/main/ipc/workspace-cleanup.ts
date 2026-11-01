@@ -1,3 +1,4 @@
+import { abortWhenRendererGone } from './renderer-lifetime-abort'
 import { ipcMain } from 'electron'
 import type { Store } from '../persistence'
 import {
@@ -68,14 +69,14 @@ export function registerWorkspaceCleanupHandlers(store: Store): void {
       }
       // Why: a window close or reload must stop the fleet scan's git and fs
       // work, not merely mute its progress events.
-      const onSenderDestroyed = (): void => controller.abort()
-      sender.once('destroyed', onSenderDestroyed)
+      const lifetime = abortWhenRendererGone(sender)
+      lifetime.signal.addEventListener('abort', () => controller.abort(), { once: true })
       try {
         const result = await scanWorkspaceCleanup(store, scanArgs, {
           signal: controller.signal,
           onProgress: scanArgs.scanId
             ? (progress) => {
-                if (!sender.isDestroyed()) {
+                if (!controller.signal.aborted && !sender.isDestroyed()) {
                   sender.send('workspaceCleanup:scanProgress', progress)
                 }
               }
@@ -89,9 +90,7 @@ export function registerWorkspaceCleanupHandlers(store: Store): void {
         }
         return result
       } finally {
-        if (!sender.isDestroyed()) {
-          sender.removeListener('destroyed', onSenderDestroyed)
-        }
+        lifetime.dispose()
         if (scanKey && activeScans.get(scanKey) === controller) {
           activeScans.delete(scanKey)
         }

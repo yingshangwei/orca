@@ -6,6 +6,7 @@ import type {
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { isDashboardPopoutRenderer } from '../window/dashboard-popout-window'
 import { isTrustedUIRenderer } from './ui'
+import { abortWhenRendererGone } from './renderer-lifetime-abort'
 import {
   TERMINAL_PREVIEW_OUTPUT_BATCH_MAX_BYTES,
   TerminalPreviewOutputStream
@@ -37,6 +38,7 @@ export function registerTerminalPreviewHandlers(runtime: OrcaRuntimeService): vo
   // geometry. Claims are tracked per viewer webContents so an explicit
   // unsubscribe or a destroyed window always releases the size floor.
   const fitClaimsByContents = new Map<number, Map<string, symbol>>()
+  const rendererLifetimes = new Map<number, ReturnType<typeof abortWhenRendererGone>>()
 
   const previewViewerKey = (contentsId: number): string => `dashboard-popout:${contentsId}`
 
@@ -61,6 +63,9 @@ export function registerTerminalPreviewHandlers(runtime: OrcaRuntimeService): vo
   }
 
   const disposeContents = (contentsId: number): void => {
+    const lifetime = rendererLifetimes.get(contentsId)
+    rendererLifetimes.delete(contentsId)
+    lifetime?.dispose()
     const perPty = subscriptionsByContents.get(contentsId)
     if (perPty) {
       for (const subscription of perPty.values()) {
@@ -79,7 +84,9 @@ export function registerTerminalPreviewHandlers(runtime: OrcaRuntimeService): vo
     if (!perPty) {
       perPty = new Map()
       subscriptionsByContents.set(contents.id, perPty)
-      contents.once('destroyed', () => disposeContents(contents.id))
+      const lifetime = abortWhenRendererGone(contents)
+      rendererLifetimes.set(contents.id, lifetime)
+      lifetime.signal.addEventListener('abort', () => disposeContents(contents.id), { once: true })
     }
     return perPty
   }

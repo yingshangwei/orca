@@ -14,6 +14,7 @@ function bypassCoalescing(event: AgentSessionSubscribeEvent): boolean {
     // own "Sending…" card went with its queued answer.
     event.queuedMessages !== undefined ||
     event.currentRequests !== undefined ||
+    event.batch.removedItemIds.length > 0 ||
     event.batch.items.some((item) => item.body.kind !== 'message' || item.body.role !== 'assistant')
   )
 }
@@ -48,7 +49,7 @@ function mergeBatch(
     batch: {
       cursor: right.batch.cursor,
       items: [...items.values()],
-      removedItemIds: [...new Set([...left.batch.removedItemIds, ...right.batch.removedItemIds])],
+      removedItemIds: [],
       submissions: [...submissions.values()]
     },
     ...(right.fence !== undefined || left.fence !== undefined

@@ -9,11 +9,21 @@ export const PLUGIN_AGENT_PROFILE_LIMIT = 64
 
 // Why: locale ids become i18next bundle keys and filenames. This bounded BCP
 // 47 subset covers current community packs without accepting path syntax.
+function isWellFormedLocaleId(value: string): boolean {
+  try {
+    Intl.getCanonicalLocales(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const pluginLocaleIdSchema = z
   .string()
   .min(2)
   .max(35)
   .regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/, 'must be a portable locale identifier')
+  .refine(isWellFormedLocaleId, 'must be a well-formed locale identifier')
 
 export const pluginLanguagePackContributionSchema = z
   .object({

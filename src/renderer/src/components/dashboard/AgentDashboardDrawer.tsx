@@ -4,6 +4,7 @@ import type { AgentSubjectReadIntent } from '@/attention/agent-subject-read-acti
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
 import { AgentKanbanBoard } from '../dashboard-popout/AgentKanbanBoard'
+import { isXtermHelperTextarea } from '../terminal-pane/regular-terminal-focus-ownership'
 import type { AgentRevealArgs } from '../dashboard-popout/AgentTerminalDialog'
 import {
   isWorkspaceBoardKeepOpenTarget,
@@ -148,6 +149,10 @@ export function AgentDashboardDrawer({
         return
       }
       event.preventDefault()
+      // xterm ignores defaultPrevented; only the terminal must lose this dismissal key.
+      if (isXtermHelperTextarea(event.target)) {
+        event.stopPropagation()
+      }
       close()
     }
     // Why: the board is a non-modal companion panel, so focus may be outside

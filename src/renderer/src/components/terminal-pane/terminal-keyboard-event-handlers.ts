@@ -283,6 +283,9 @@ export function createTerminalKeyboardEventHandlers(context: EventContext) {
         deferredNewlineSender.defer(e, pane.terminal.element, sendResolvedInput)
         return
       }
+      if (deferredChordSender.absorbReplay(e)) {
+        return
+      }
       // Why: the composed glyph reaches the pty from the composition session-end handler, which
       // runs after this keydown. Sending now puts a cursor chord ahead of the text it was typed
       // after — `가나다` then Cmd+Left leaves `다가나` (#12871). Enter is handled above, where a
@@ -290,7 +293,7 @@ export function createTerminalKeyboardEventHandlers(context: EventContext) {
       // mid-preedit is the corruption itself, so this one waits on the composition rather than a
       // deadline. The sender owns the wait so blur and teardown can drop it.
       if (e.isComposing || hasPendingImeComposition) {
-        deferredChordSender.defer(pane.terminal.element, sendResolvedInput)
+        deferredChordSender.defer(e, pane.terminal.element, sendResolvedInput)
         return
       }
       sendResolvedInput()

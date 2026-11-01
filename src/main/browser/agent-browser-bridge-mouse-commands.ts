@@ -1,3 +1,4 @@
+import { agentBrowserSetMediaArguments } from './agent-browser-set-media-arguments'
 import type { BrowserMouseModifier } from './agent-browser-bridge-types'
 import { BrowserError } from './cdp-bridge'
 import {
@@ -152,14 +153,8 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
     worktreeId?: string,
     browserPageId?: string
   ): Promise<unknown> {
+    const args = agentBrowserSetMediaArguments(colorScheme, reducedMotion)
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      const args = ['set', 'media']
-      if (colorScheme) {
-        args.push(colorScheme)
-      }
-      if (reducedMotion) {
-        args.push(reducedMotion)
-      }
       return await this.execAgentBrowser(sessionName, args)
     })
   }

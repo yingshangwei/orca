@@ -180,22 +180,27 @@ export class RuntimeBrowserScreencasts {
       resolveSubscriberDone()
       throw error
     }
-    // Why: a device that force-quit and reconnected arrives on a fresh socket, so the
-    // connection-keyed replacement upstream cannot see its old subscription. Run this after the
-    // joiner is registered — the page then never empties mid-replacement and stops the stream.
-    if (stream.pairedDeviceId !== undefined) {
-      // Deleting the entry being visited is well defined for a Map, and no other entry is touched.
+    try {
+      if (!createdPageStream) {
+        if (active.viewportOwnerSubscriptionId === subscriptionId) {
+          await session.updateViewport(viewport)
+        }
+        await applySharedScreencastFrameBudget(active, session)
+      }
+    } catch (error) {
+      this.leaveScreencastSubscriber(active, subscriptionId, session)
+      throw error
+    }
+    // Retire a reconnected device's old socket only after its replacement successfully joins.
+    if (stream.pairedDeviceId !== undefined && active.subscribers.has(subscriptionId)) {
       for (const [candidateId, candidate] of active.subscribers) {
-        if (candidateId !== subscriptionId && candidate.pairedDeviceId === stream.pairedDeviceId) {
+        if (candidateId === subscriptionId) {
+          break
+        }
+        if (candidate.pairedDeviceId === stream.pairedDeviceId) {
           this.leaveScreencastSubscriber(active, candidateId, session)
         }
       }
-    }
-    if (!createdPageStream) {
-      if (active.viewportOwnerSubscriptionId === subscriptionId) {
-        await session.updateViewport(viewport)
-      }
-      await applySharedScreencastFrameBudget(active, session)
     }
     return {
       subscriptionId,

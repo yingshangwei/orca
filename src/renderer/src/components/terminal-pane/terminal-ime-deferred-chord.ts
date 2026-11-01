@@ -1,4 +1,7 @@
-import { sendTerminalInputAfterComposition } from './terminal-ime-deferred-newline'
+import {
+  sendTerminalInputAfterComposition,
+  type TerminalImeKeyIdentity
+} from './terminal-ime-deferred-newline'
 
 /**
  * Ceiling on the otherwise indefinite wait. Generous enough for a conversion candidate window,
@@ -8,7 +11,12 @@ import { sendTerminalInputAfterComposition } from './terminal-ime-deferred-newli
 export const TERMINAL_IME_DEFERRED_CHORD_ABANDON_MS = 10_000
 
 export type TerminalImeDeferredChordSender = {
-  defer: (terminalElement: HTMLElement | null | undefined, send: () => void) => void
+  defer: (
+    chord: TerminalImeKeyIdentity,
+    terminalElement: HTMLElement | null | undefined,
+    send: () => void
+  ) => void
+  absorbReplay: (chord: TerminalImeKeyIdentity) => boolean
   cancelPending: () => void
 }
 
@@ -19,9 +27,11 @@ export type TerminalImeDeferredChordSender = {
  */
 export function createTerminalImeDeferredChordSender(): TerminalImeDeferredChordSender {
   const pendingStops = new Set<() => void>()
+  let replayableChord: TerminalImeKeyIdentity | null = null
 
   return {
-    defer: (terminalElement, send) => {
+    defer: (chord, terminalElement, send) => {
+      replayableChord = { code: chord.code, timeStamp: chord.timeStamp }
       let abandonTimer: number | undefined
       let stopComposingWait: (() => void) | null = null
       const stopWaiting = (): void => {
@@ -40,7 +50,13 @@ export function createTerminalImeDeferredChordSender(): TerminalImeDeferredChord
         { fallbackMs: null }
       )
     },
+    absorbReplay: (chord) => {
+      const owed = replayableChord
+      replayableChord = null
+      return owed?.code === chord.code && owed.timeStamp === chord.timeStamp
+    },
     cancelPending: () => {
+      replayableChord = null
       // Each stop removes itself; deleting the visited entry is safe for a Set iterator.
       for (const stopWaiting of pendingStops) {
         stopWaiting()
