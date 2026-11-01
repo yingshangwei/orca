@@ -75,6 +75,9 @@ export function useStaleConflictOperationPolling(args: {
         return
       }
       for (const { id, path } of staleConflictWorktrees) {
+        if (!active || !isWindowVisible()) {
+          return
+        }
         try {
           const connectionId = getConnectionId(id) ?? undefined
           // Why: after explicit SSH disconnect the provider is intentionally

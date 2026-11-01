@@ -196,6 +196,31 @@ describe('normalizeImageTranscriptMessages', () => {
     ])
   })
 
+  it.each([10, 100])('reads %i unpaired image source turns once', (count) => {
+    let reads = 0
+    const messages = Array.from({ length: count }, (_, index): NativeChatMessage => ({
+      ...userText(`image-${index}`, ''),
+      blocks: [
+        {
+          type: 'text',
+          get text() {
+            reads += 1
+            return `[Image: source: /tmp/image-${index}.png]`
+          }
+        }
+      ]
+    }))
+    const out = normalizeImageTranscriptMessages(messages)
+
+    expect(reads).toBeLessThanOrEqual(count * 2)
+    expect(out.map((message) => ({ id: message.id, blocks: message.blocks }))).toEqual(
+      messages.map((message, index) => ({
+        id: message.id,
+        blocks: [{ type: 'image-ref', path: `/tmp/image-${index}.png` }]
+      }))
+    )
+  })
+
   it('folds a multi-block companion turn into one turn carrying every ref', () => {
     // Claude records a multi-image paste as ONE companion message with a marker block
     // per image, so a single-block-only rule missed every multi-image turn.

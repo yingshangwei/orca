@@ -1,4 +1,4 @@
-import { ipcMain, Menu, type BrowserWindow } from 'electron'
+import { ipcMain, type BrowserWindow } from 'electron'
 import { isCrashReportReason } from '../../shared/crash-reporting'
 import {
   plainTextContextMenuTargetChannel,
@@ -16,6 +16,7 @@ import {
   matchingRichMarkdownContextMenuTableTarget,
   parseRichMarkdownContextMenuTableTarget
 } from './editable-context-menu'
+import { createEditableContextMenuPopup } from './editable-context-menu-popup'
 import type { CreateMainWindowOptions, MainWindowLoadObserver } from './main-window-contracts'
 import { browserRouteWebContentsRegistry } from '../browser/browser-route-session-runtime'
 import {
@@ -115,6 +116,7 @@ export function installMainWindowFocusLifecycle(args: {
     }
   }
   ipcMain.on(plainTextContextMenuTargetChannel, onPlainTextContextMenuTarget)
+  const editableContextMenuPopup = createEditableContextMenuPopup(mainWindow, rendererWebContents)
   const onMainContextMenu = (_event: Electron.Event, params: Electron.ContextMenuParams): void => {
     const tableTarget = matchingRichMarkdownContextMenuTableTarget(
       params,
@@ -130,13 +132,14 @@ export function installMainWindowFocusLifecycle(args: {
     if (template.length === 0 || mainWindow.isDestroyed()) {
       return
     }
-    // Why: the context-menu event can precede our focus-mirror update; trust Electron's editable params, not markdownEditorFocused.
-    Menu.buildFromTemplate(template).popup({ window: mainWindow, x: params.x, y: params.y })
+    // Context menu may precede focus mirroring; trust Electron's editable params.
+    editableContextMenuPopup.open(template, params)
   }
   rendererWebContents.on('context-menu', onMainContextMenu)
 
   // Why: a dead renderer can't clear its focus mirror; default-deny carve-outs so it can't disable app shortcuts in a later lifecycle.
   const resetMarkdownEditorFocus = (): void => {
+    editableContextMenuPopup.close()
     markdownEditorFocused = false
     pendingRichMarkdownContextMenuTableTarget = null
     pendingPlainTextContextMenuTarget = false

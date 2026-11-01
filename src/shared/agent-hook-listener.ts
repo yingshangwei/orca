@@ -79,7 +79,14 @@ export function normalizeHookPayload(
     (source === 'jcode' ? hookPayloadRecord.event : undefined)
   // Codex child hooks expose the child's session_id on the parent's pane.
   let providerSession =
-    source === 'codex' && readString(hookPayloadRecord, 'agent_id')
+    (source === 'codex' && readString(hookPayloadRecord, 'agent_id')) ||
+    (source === 'copilot' &&
+      readFirstString(hookPayloadRecord, [
+        'agent_id',
+        'agentId',
+        'parent_agent_id',
+        'parentAgentId'
+      ]))
       ? null
       : extractAgentProviderSession(source, hookPayloadRecord)
   if (source === 'grok' && isGrokSubagentEvent(hookPayloadRecord)) {
