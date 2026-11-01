@@ -6,6 +6,7 @@ import type {
   SystemResolverHealthRequest
 } from './daemon-health-requests'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
+import type { SessionInfo } from './daemon-session-info'
 import type {
   ConfirmForegroundProcessRequest,
   ConfirmShellForegroundRequest,
@@ -26,7 +27,6 @@ import type { TuiAgent } from '../../shared/tui-agent'
 import type { PtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
 import type {
   AgentSessionExecutionClaim,
-  AgentSessionOwnerBinding,
   AgentSessionSurfaceBinding
 } from '../../shared/agent-session-host-authority'
 import type * as HistorySeedProtocol from './terminal-history-seed-transfer-protocol'
@@ -363,30 +363,7 @@ export type SystemResolverHealthResult = {
   health: SystemResolverHealth
 }
 
-export type SessionInfo = {
-  foregroundProcess?: string
-  sessionId: string
-  incarnationId?: string
-  state: SessionState
-  shellState: ShellReadyState
-  isAlive: boolean
-  terminalHandle?: string
-  wslDistro?: string | null
-  pid: number | null
-  cwd: string | null
-  cols: number
-  rows: number
-  createdAt: number
-  agentSessionOwners?: AgentSessionOwnerBinding[]
-}
-
-// Why: SessionInfo + source protocol version, so the Manage Sessions UI can
-// label legacy-backed sessions. Populated by the router/adapter at RPC time;
-// never transmitted over the daemon wire (daemon only speaks its own
-// protocol version and doesn't know about other versions).
-export type DaemonSessionInfo = SessionInfo & {
-  protocolVersion: number
-}
+export type { DaemonSessionInfo, SessionInfo } from './daemon-session-info'
 
 // Stream-socket event shapes live in daemon-stream-events.ts; re-exported so
 // existing importers keep one types entry point.

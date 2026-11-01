@@ -102,6 +102,7 @@ export function installPtySessionListingIpcHandler(deps: {
                 hostId === LOCAL_EXECUTION_HOST_ID &&
                 provider.supportsFencedTermination?.(session.id) === true,
               ...(session.worktreeId !== undefined ? { worktreeId: session.worktreeId } : {}),
+              ...(session.paneKey !== undefined ? { paneKey: session.paneKey } : {}),
               ...(session.exiting === true ? { exiting: true as const } : {}),
               // Why: the renderer's binding map is empty during restore, so ownership is the only
               // liveness evidence it has. Absence is authoritative only from a provider that
