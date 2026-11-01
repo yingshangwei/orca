@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RuntimeFileReadClient from '@/runtime/runtime-file-read-client'
+import type * as OwnerMigration from './migrate-restored-editor-file-owner'
 import { useAppStore } from '@/store'
 import { makeWorktree } from '../../store/slices/worktrees-slice-test-fixtures'
 import type { FileContent } from './editor-panel-content-types'
@@ -12,11 +13,29 @@ import {
   type EditorPanelFileContentLoader
 } from './useEditorPanelFileContentLoader'
 
-const mocks = vi.hoisted(() => ({ readRuntimeFileContent: vi.fn() }))
+const mocks = vi.hoisted(() => {
+  const migrationState: { migrationGate: Promise<void> | undefined } = { migrationGate: undefined }
+  return { readRuntimeFileContent: vi.fn(), ...migrationState, migrationCompleted: vi.fn() }
+})
 vi.mock('@/runtime/runtime-file-read-client', async (importOriginal) => ({
   ...(await importOriginal<typeof RuntimeFileReadClient>()),
   readRuntimeFileContent: mocks.readRuntimeFileContent
 }))
+
+vi.mock('./migrate-restored-editor-file-owner', async (importOriginal) => {
+  const actual = await importOriginal<typeof OwnerMigration>()
+  return {
+    ...actual,
+    migrateRestoredEditorFileOwner: async (
+      ...args: Parameters<typeof actual.migrateRestoredEditorFileOwner>
+    ) => {
+      const result = await actual.migrateRestoredEditorFileOwner(...args)
+      mocks.migrationCompleted()
+      await mocks.migrationGate
+      return result
+    }
+  }
+})
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
@@ -74,6 +93,8 @@ describe('a restored tab whose workspace moved to its managed server', () => {
   let fileContents: Record<string, FileContent>
 
   beforeEach(() => {
+    mocks.migrationGate = undefined
+    mocks.migrationCompleted.mockReset()
     mocks.readRuntimeFileContent.mockReset()
     mocks.readRuntimeFileContent.mockResolvedValue({ content: '# repo', isBinary: false })
     fileContents = {}
@@ -148,5 +169,28 @@ describe('a restored tab whose workspace moved to its managed server', () => {
       'env-1',
       null
     ])
+  })
+  it('keeps a newer conflict-review read when the retired owner migration completes late', async () => {
+    seedConvertedWorkspace()
+    const restoredId = openRestored(FILE_PATH)
+    let releaseMigration: () => void = () => {}
+    mocks.migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve
+    })
+    const retiredRead = load!(FILE_PATH, restoredId, WORKTREE, 'README.md')
+    try {
+      await vi.waitFor(() => expect(mocks.migrationCompleted).toHaveBeenCalledOnce())
+      mocks.readRuntimeFileContent.mockResolvedValue({ content: '# newer review', isBinary: false })
+      await act(async () => load!(FILE_PATH, restoredId, WORKTREE, 'README.md', { force: true }))
+      expect(fileContents[restoredId]).toMatchObject({ content: '# newer review' })
+      await act(async () => {
+        releaseMigration()
+        await retiredRead
+      })
+      expect(fileContents[restoredId]).toMatchObject({ content: '# newer review' })
+    } finally {
+      releaseMigration()
+      await retiredRead
+    }
   })
 })

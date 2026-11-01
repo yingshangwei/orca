@@ -57,7 +57,10 @@ export default function ImageViewer({
 
   const filename = useMemo(() => filePath.split(/[/\\]/).pop() || filePath, [filePath])
   const cleanedContent = useMemo(() => content.replace(/\s/g, ''), [content])
-  const imageStateKey = `${filePath}\n${mimeType}\n${cleanedContent}`
+  const imageStateKey = useMemo(
+    () => `${filePath}\n${mimeType}\n${cleanedContent}`,
+    [filePath, mimeType, cleanedContent]
+  )
   const [lastImageStateKey, setLastImageStateKey] = useState(imageStateKey)
   if (lastImageStateKey !== imageStateKey) {
     setLastImageStateKey(imageStateKey)

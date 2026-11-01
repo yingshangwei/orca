@@ -5,7 +5,7 @@ import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
 
 type MermaidViewerProps = {
   content: string
-  filePath: string
+  scrollCacheKey: string
 }
 
 // Why: MermaidViewer is the full-file counterpart to MermaidBlock (which
@@ -14,15 +14,10 @@ type MermaidViewerProps = {
 // source — no markdown wrapper, no frontmatter, just mermaid syntax.
 export default function MermaidViewer({
   content,
-  filePath
+  scrollCacheKey
 }: MermaidViewerProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
   const isDark = useDocumentDarkTheme()
-
-  // Why: Each viewing mode (source vs diagram) produces different DOM heights.
-  // Mode-scoped keys prevent restoring a source-mode scroll position in diagram
-  // mode (same reasoning as MarkdownPreview's scrollCacheKey).
-  const scrollCacheKey = `${filePath}:mermaid-diagram`
 
   useLayoutEffect(() => {
     const container = rootRef.current
