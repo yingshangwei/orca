@@ -11,6 +11,8 @@ export type SessionInfo = {
   terminalHandle?: string
   /** ORCA_PANE_KEY the PTY was spawned with; absent from daemons that predate it. */
   paneKey?: string
+  /** null means no seed was attempted; absent means the daemon cannot report the outcome. */
+  historySeeded?: boolean | null
   wslDistro?: string | null
   pid: number | null
   cwd: string | null

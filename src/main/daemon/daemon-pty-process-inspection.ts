@@ -165,7 +165,9 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
       undefined,
       remainingDaemonRequestTimeoutMs(deadlineMs)
     )
-    const session = result.sessions.find((entry) => entry.sessionId === sessionId && entry.isAlive)
+    const session = result.sessions.find(
+      (entry) => entry.sessionId === sessionId && entry.isAlive && entry.state !== 'exiting'
+    )
     if (session) {
       await this.adoptLiveSession(session, { activeOnlyIfReconciled: true })
     }
@@ -181,7 +183,9 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     if (session.wslDistro) {
       this.wslDistrosBySessionId.set(session.sessionId, session.wslDistro)
     }
-    await this.reconcileLiveSessionHistory(session).catch((err) =>
+    await this.reconcileLiveSessionHistory(session, {
+      forSleep: opts.activeOnlyIfReconciled
+    }).catch((err) =>
       console.warn('[history] live-session reconciliation failed:', session.sessionId, err)
     )
     // Why after: an exit seen during reconcile closed the writer and must not revive the session.
@@ -190,18 +194,29 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     }
   }
 
-  protected async reconcileLiveSessionHistory(session: SessionInfo): Promise<void> {
+  protected async reconcileLiveSessionHistory(
+    session: SessionInfo,
+    opts: { forSleep?: boolean } = {}
+  ): Promise<void> {
     const historyManager = this.historyManager
     const historyReader = this.historyReader
     if (!historyManager || !historyReader) {
       return
     }
     await this.withHistorySpawnLock(session.sessionId, async () => {
-      if (historyManager.hasWriter(session.sessionId)) {
+      // A concurrent spawn may have suspended recovery while Sleep waited for this lock.
+      if (
+        historyManager.hasWriter(session.sessionId) ||
+        (opts.forSleep &&
+          (this.activeSessionIds.has(session.sessionId) || session.historySeeded === false))
+      ) {
         return
       }
       const probe = historyReader.probeRestorableHistory(session.sessionId)
-      if (probe.status === 'unreadable') {
+      if (
+        probe.status === 'unreadable' ||
+        (opts.forSleep && session.historySeeded === undefined && probe.status !== 'none')
+      ) {
         return
       }
       if (probe.status === 'none') {
