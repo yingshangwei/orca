@@ -137,8 +137,6 @@ export function runSsh2Handshake(config: ConnectConfig, host: Ssh2HandshakeHost)
       settled = true
       host.adoptClient(client)
       cleanupStartupListeners()
-      // Why: ssh2 leaves Nagle on; enable TCP_NODELAY so keystrokes don't stack with delayed-ACK (~40ms each). No-op for proxy sockets.
-      client.setNoDelay(true)
       host.onConnected()
       resolve()
     }
@@ -187,5 +185,7 @@ export function runSsh2Handshake(config: ConnectConfig, host: Ssh2HandshakeHost)
     client.on('close', onStartupClose)
     rearmStartupTimer(config.readyTimeout ?? CONNECT_TIMEOUT_MS)
     client.connect({ ...config, readyTimeout: 0 })
+    // connect creates the socket synchronously; avoid delayed ACKs during key exchange and authentication too.
+    client.setNoDelay(true)
   })
 }

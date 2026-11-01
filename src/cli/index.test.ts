@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { worktreeRemovalReplyTimeoutMs } from '../shared/worktree/archive-hook-removal-gate'
+import { RuntimeClientError } from './runtime/types'
 
 const {
   callMock,
@@ -98,7 +100,8 @@ describe('command aliases dispatch to the canonical handler', () => {
     expect(callMock).toHaveBeenNthCalledWith(
       2,
       'worktree.rm',
-      expect.objectContaining({ worktree: 'id:wt-1', hostId: 'local', force: true })
+      expect.objectContaining({ worktree: 'id:wt-1', hostId: 'local', force: true }),
+      expect.anything()
     )
   })
 
@@ -114,22 +117,88 @@ describe('command aliases dispatch to the canonical handler', () => {
     expect(callMock).toHaveBeenNthCalledWith(
       2,
       'worktree.rm',
-      expect.objectContaining({ worktree: 'id:wt-1', hostId: 'runtime:env-1' })
+      expect.objectContaining({ worktree: 'id:wt-1', hostId: 'runtime:env-1' }),
+      expect.anything()
     )
   })
 
-  it('says the checkout is still being deleted when the host accepted a background removal', async () => {
+  it('asks the host to reply with the delete outcome and waits past Git deletion (#35135)', async () => {
     queueFixtures(
       callMock,
       okFixture('req_show', { worktree: { hostId: 'local' } }),
-      okFixture('req', { removed: true, removing: true })
+      okFixture('req', { removed: true })
     )
 
-    await main(['worktree', 'rm', '--worktree', 'id:wt-1'], '/tmp/repo')
+    await main(['worktree', 'rm', '--worktree', 'id:wt-1', '--run-hooks'], '/tmp/repo')
 
-    expect(logSpy).toHaveBeenCalledWith(
-      'removed: true\nOrca is still deleting the checkout in the background.'
+    expect(callMock).toHaveBeenNthCalledWith(
+      2,
+      'worktree.rm',
+      expect.objectContaining({ waitForBackgroundRemoval: true }),
+      { timeoutMs: worktreeRemovalReplyTimeoutMs(true) }
     )
+    expect(logSpy).toHaveBeenCalledWith('removed: true')
+  })
+
+  it.each([
+    { hostRemoved: true, json: false },
+    { hostRemoved: true, json: true },
+    { hostRemoved: false, json: false },
+    { hostRemoved: false, json: true }
+  ])(
+    'does not report removal success for acceptance ($hostRemoved, json=$json)',
+    async ({ hostRemoved, json }) => {
+      queueFixtures(
+        callMock,
+        okFixture('req_show', { worktree: { hostId: 'local' } }),
+        okFixture('req', { removed: hostRemoved, removing: true })
+      )
+      const priorExitCode = process.exitCode
+      try {
+        process.exitCode = 0
+        await main(
+          ['worktree', 'rm', '--worktree', 'id:wt-1', ...(json ? ['--json'] : [])],
+          '/tmp/repo'
+        )
+
+        if (json) {
+          expect(JSON.parse(logSpy.mock.calls[0][0])).toMatchObject({
+            result: { removed: false, removing: true }
+          })
+        } else {
+          expect(logSpy).toHaveBeenCalledWith(
+            'removed: false\nOrca is still deleting the checkout in the background.'
+          )
+        }
+        expect(process.exitCode).toBe(1)
+        expect(callMock).toHaveBeenCalledTimes(2)
+      } finally {
+        process.exitCode = priorExitCode
+      }
+    }
+  )
+
+  it('reports an indeterminate removal after the reply timeout without retrying deletion', async () => {
+    queueFixtures(callMock, okFixture('req_show', { worktree: { hostId: 'local' } }))
+    callMock.mockRejectedValueOnce(new RuntimeClientError('runtime_timeout', 'reply timed out'))
+    const priorExitCode = process.exitCode
+    try {
+      await main(['worktree', 'rm', '--worktree', 'id:wt-1', '--json'], '/tmp/repo')
+
+      expect(process.exitCode).toBe(1)
+      expect(callMock).toHaveBeenCalledTimes(2)
+      expect(logSpy).toHaveBeenCalledTimes(1)
+      const response = JSON.parse(logSpy.mock.calls[0][0])
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: 'worktree_removal_in_progress',
+          message: expect.stringContaining('orca worktree show --worktree id:wt-1')
+        }
+      })
+    } finally {
+      process.exitCode = priorExitCode
+    }
   })
 
   it('fails closed when worktree removal cannot resolve a host', async () => {
@@ -169,7 +238,8 @@ describe('command aliases dispatch to the canonical handler', () => {
         expect.objectContaining({
           runHooks: true,
           allowFailedArchiveHook: false
-        })
+        }),
+        expect.anything()
       )
     } finally {
       process.exitCode = priorExitCode
@@ -216,7 +286,8 @@ describe('command aliases dispatch to the canonical handler', () => {
     expect(callMock).toHaveBeenNthCalledWith(
       2,
       'worktree.rm',
-      expect.objectContaining({ runHooks: true, allowFailedArchiveHook: true })
+      expect.objectContaining({ runHooks: true, allowFailedArchiveHook: true }),
+      expect.anything()
     )
   })
 

@@ -270,7 +270,11 @@ export function EditorEditFileSurface({
       monacoEditor={monacoEditor}
     />
   ) : isMermaid && mdViewMode === 'rich' ? (
-    <MermaidViewer key={activeFile.id} content={currentContent} filePath={activeFile.filePath} />
+    <MermaidViewer
+      key={activeFile.id}
+      content={currentContent}
+      scrollCacheKey={`${editorViewStateKey}:mermaid-diagram`}
+    />
   ) : isCsv && mdViewMode === 'rich' ? (
     <CsvViewer
       key={activeFile.id}

@@ -56,8 +56,7 @@ export function useMonacoEditorMount(params: MonacoEditorMountParams): OnMount {
       contentRef,
       lastSyncedContentRef,
       contentSyncModeRef,
-      isApplyingProgrammaticContentRef,
-      isApplyingLargePasteRef
+      isApplyingProgrammaticContentRef
     },
     decorations: {
       markdownDocLinkDecorationsRef,
@@ -163,8 +162,6 @@ export function useMonacoEditorMount(params: MonacoEditorMountParams): OnMount {
         editorContainerRef,
         propsRef,
         readOnlyRef,
-        lastSyncedContentRef,
-        isApplyingLargePasteRef,
         commentPopoverRef,
         shouldShowMarkdownAnnotationsRef,
         setCommentPopover,
@@ -290,7 +287,6 @@ export function useMonacoEditorMount(params: MonacoEditorMountParams): OnMount {
       lastSyncedContentRef,
       contentSyncModeRef,
       isApplyingProgrammaticContentRef,
-      isApplyingLargePasteRef,
       markdownDocLinkDecorationsRef,
       conflictDecorationsRef,
       commentPopoverRef,

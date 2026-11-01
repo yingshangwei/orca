@@ -21,6 +21,7 @@ import { extractPromptText } from './agent-hook-listener/prompt-fields'
 import { normalizeProviderEvent } from './agent-hook-listener/provider-dispatch'
 import { hasExplicitUserPrompt } from './agent-hook-listener/provider-event-routing'
 import { hasExplicitAmpPrompt } from './agent-hook-listener/providers/amp-events'
+import { isGrokSubagentEvent } from './agent-hook-listener/providers/grok-tool-fields'
 import {
   isOpenCodeSharedServerPost,
   resolveOpenCodeSharedServerEnvelope,
@@ -77,10 +78,15 @@ export function normalizeHookPayload(
     // Scoped so another provider's unrelated `event` key cannot become an event name.
     (source === 'jcode' ? hookPayloadRecord.event : undefined)
   // Codex child hooks expose the child's session_id on the parent's pane.
-  const providerSession =
+  let providerSession =
     source === 'codex' && readString(hookPayloadRecord, 'agent_id')
       ? null
       : extractAgentProviderSession(source, hookPayloadRecord)
+  if (source === 'grok' && isGrokSubagentEvent(hookPayloadRecord)) {
+    // A child end restates its pane; retain the main session's resume identity.
+    const previous = state.lastStatusByPaneKey.get(stampedPaneKey)
+    providerSession = previous?.source === 'grok' ? (previous.providerSession ?? null) : null
+  }
   if (source === 'opencode' && record.opencodeTui === 1 && !providerSession) {
     return null
   }
