@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest'
  */
 // 43.7.8 fixes find-in-page looping across host iframes (electron/electron#54199).
 // 43.8.1 blocks compromised eMudhra TLS intermediates (GHSA-jr5w-w6x2-84p9).
-const MINIMUM_ELECTRON_VERSION = '43.8.1'
+// 43.8.4 closes File System Access blocklist bypasses and malformed-asar handling (electron#54677, #55331, #55179).
+const MINIMUM_ELECTRON_VERSION = '43.8.4'
 
 function parseVersion(specifier: string): [number, number, number] {
   const match = /(\d+)\.(\d+)\.(\d+)/.exec(specifier)

@@ -156,6 +156,10 @@ export class RuntimeBrowserCommandTargets {
     if (await this.host.serveBrowserTabs?.start(worktreeId, undefined)) {
       return
     }
+    // With no saved tab the window mounts nothing, so the wait could only time out (#20434).
+    if (this.host.serveBrowserTabs?.hasStartable(worktreeId) === false) {
+      return
+    }
     const win = this.host.getAuthoritativeWindow()
     win.webContents.send('browser:activateView', worktreeId ? { worktreeId } : {})
     // Why: the pane is operable only after the webview mounts and calls registerGuest; wait on that IPC rather than a flaky fixed sleep.

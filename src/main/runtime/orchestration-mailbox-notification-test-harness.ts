@@ -111,6 +111,7 @@ function mailboxLayoutStore(): RuntimeStore {
 export function createRuntime(
   db: OrchestrationDb,
   options: {
+    launchAgent?: 'codex' | 'pi'
     connectionId?: string
     isWsl?: boolean
     getAgentStatusSnapshot?: () => AgentStatusIpcPayload[]
@@ -146,7 +147,10 @@ export function createRuntime(
       tabId: TAB_ID,
       leafId: LEAF_ID,
       incarnationId: 'mailbox-incarnation',
-      agentLaunchAuthority: { launchToken: LAUNCH_TOKEN, launchAgent: 'codex' }
+      agentLaunchAuthority: {
+        launchToken: LAUNCH_TOKEN,
+        launchAgent: options.launchAgent ?? 'codex'
+      }
     },
     options.isWsl
   )
