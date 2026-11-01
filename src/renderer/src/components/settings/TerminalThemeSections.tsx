@@ -1,6 +1,11 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import {
+  hasTerminalColorOverrides,
+  TERMINAL_COLOR_OVERRIDES_SETTING,
+  type TerminalThemeSlot
+} from '../../../../shared/terminal-color-overrides'
+import {
   ColorField,
   SettingsSegmentedControl,
   SettingsSwitchRow,
@@ -21,11 +26,9 @@ import {
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
-type TerminalThemeTarget = 'dark' | 'light'
+let lastEditedTerminalThemeTarget: TerminalThemeSlot | null = null
 
-let lastEditedTerminalThemeTarget: TerminalThemeTarget | null = null
-
-function rememberTerminalThemeTarget(target: TerminalThemeTarget): void {
+function rememberTerminalThemeTarget(target: TerminalThemeSlot): void {
   lastEditedTerminalThemeTarget = target
 }
 
@@ -41,8 +44,8 @@ function isCustomizedTheme(themeName: string, defaultThemeName: string): boolean
 function getInitialTerminalThemeTarget(
   settings: GlobalSettings,
   systemPrefersDark: boolean,
-  preferredTarget?: TerminalThemeTarget
-): TerminalThemeTarget {
+  preferredTarget?: TerminalThemeSlot
+): TerminalThemeSlot {
   if (preferredTarget) {
     return preferredTarget
   }
@@ -72,8 +75,8 @@ type TerminalThemeCatalogSectionProps = {
   importedHighlightSignal: number
   warpThemes: UseWarpThemeImportReturn
   showThemeImport: boolean
-  preferredTarget?: TerminalThemeTarget
-  advancedContent?: ReactNode
+  preferredTarget?: TerminalThemeSlot
+  renderAdvancedContent?: (colorOverrideSlot: TerminalThemeSlot) => ReactNode
 }
 
 export function TerminalThemeCatalogSection({
@@ -87,12 +90,12 @@ export function TerminalThemeCatalogSection({
   warpThemes,
   showThemeImport,
   preferredTarget,
-  advancedContent
+  renderAdvancedContent
 }: TerminalThemeCatalogSectionProps): React.JSX.Element {
-  const [target, setTargetState] = useState<TerminalThemeTarget>(() =>
+  const [target, setTargetState] = useState<TerminalThemeSlot>(() =>
     getInitialTerminalThemeTarget(settings, systemPrefersDark, preferredTarget)
   )
-  const setTarget = (nextTarget: TerminalThemeTarget): void => {
+  const setTarget = (nextTarget: TerminalThemeSlot): void => {
     rememberTerminalThemeTarget(nextTarget)
     setTargetState(nextTarget)
   }
@@ -101,6 +104,8 @@ export function TerminalThemeCatalogSection({
   const matchDarkMode = !settings.terminalUseSeparateLightTheme
   const lightModeMatchesDark = isLightTarget && matchDarkMode
   const showCustomControls = !lightModeMatchesDark
+  // Light mode that matches dark paints the dark slot, so its overrides are the ones the preview shows.
+  const advancedContent = renderAdvancedContent?.(lightModeMatchesDark ? 'dark' : target)
   const selectedTheme = isLightTarget ? settings.terminalThemeLight : settings.terminalThemeDark
   const pickerTitle = isLightTarget
     ? translate('auto.components.settings.TerminalThemeSections.8273bc75d7', 'Light Theme')
@@ -252,20 +257,13 @@ export function TerminalThemeCatalogSection({
                   onQueryChange={setThemeSearch}
                   onSelectTheme={(theme) => {
                     rememberTerminalThemeTarget(target)
-                    // A selected theme must replace overrides or they mask the picker.
-                    const hasColorOverrides =
-                      Object.keys(settings.terminalColorOverrides ?? {}).length > 0
-                    updateSettings(
-                      isLightTarget
-                        ? {
-                            terminalThemeLight: theme,
-                            ...(hasColorOverrides ? { terminalColorOverrides: undefined } : {})
-                          }
-                        : {
-                            terminalThemeDark: theme,
-                            ...(hasColorOverrides ? { terminalColorOverrides: undefined } : {})
-                          }
-                    )
+                    // A selected theme must replace its slot's overrides or they mask the picker.
+                    updateSettings({
+                      [isLightTarget ? 'terminalThemeLight' : 'terminalThemeDark']: theme,
+                      ...(hasTerminalColorOverrides(settings, target)
+                        ? { [TERMINAL_COLOR_OVERRIDES_SETTING[target]]: undefined }
+                        : {})
+                    })
                   }}
                   importedHighlightSignal={importedHighlightSignal}
                 />
