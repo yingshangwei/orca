@@ -113,6 +113,12 @@ export abstract class DaemonPtySpawnResult extends DaemonPtySpawnRequest {
           this.historyManager.suspendSession(sessionId, recoveryFreeze)
         } else {
           this.historyManager.reopenSession(sessionId, recoveryFreeze)
+          if (result.isNew) {
+            // A new process seeded with the fresh-shell padding: its output must not append to a
+            // checkpoint that lacks that padding, or a later replay prints its prompt on the old one.
+            this.sessionsNeedingFullCheckpoint.add(sessionId)
+            this.lastFullCheckpointAt.delete(sessionId)
+          }
         }
       }
       return finalizeSpawnResult({

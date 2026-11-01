@@ -68,7 +68,9 @@ describe('DevinHookService', () => {
     expect(script).toContain('/hook/devin')
     // Why: payload is piped to curl via stdin (`payload@-`) so it never lands
     // on the curl command line (EDR oversized-command-line false positive).
-    expect(script).toContain('printf \'%s\' "$payload" | curl')
+    if (process.platform !== 'win32') {
+      expect(script).toContain('printf \'%s\' "$payload" | LC_ALL= LC_NUMERIC=C curl')
+    }
     expect(script).toContain('--data-urlencode "payload@-"')
     expect(script).not.toContain('--data-urlencode "payload=${payload}"')
   })

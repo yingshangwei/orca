@@ -25,6 +25,8 @@ class FakeSocket extends EventEmitter {
   sent: Array<{ data: unknown; binary: boolean }> = []
   closes: Array<{ code: number; reason: string }> = []
   _socket = { pause: vi.fn(), resume: vi.fn(), setNoDelay: vi.fn() }
+  pause = vi.fn()
+  resume = vi.fn()
 
   send(data: unknown, options: { binary: boolean }): void {
     this.sent.push({ data, binary: options.binary })
@@ -172,7 +174,7 @@ describe('splice forwarder', () => {
 
     receiver.write(batch)
 
-    expect(client._socket.pause).toHaveBeenCalledTimes(
+    expect(client.pause).toHaveBeenCalledTimes(
       RELAY_ADMISSION_BUDGETS.spliceHardQueuedFrames
     )
     expect(closed).toHaveBeenCalledWith({

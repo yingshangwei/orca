@@ -68,6 +68,7 @@ import {
   MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS
 } from './managed-agent-hook-registry'
 import { ClaudeHookService } from '../claude/hook-service'
+import { openClaudeHookService } from '../openclaude/hook-service'
 
 async function withPlatform<T>(platform: NodeJS.Platform, run: () => T | Promise<T>): Promise<T> {
   const original = Object.getOwnPropertyDescriptor(process, 'platform')
@@ -129,22 +130,65 @@ describe('managed hook script refresh', () => {
       // CLI — and possibly no config dir Orca may create. Seed only the script.
       const hooksDir = join(home, '.orca', 'agent-hooks')
       mkdirSync(hooksDir, { recursive: true })
-      writeFileSync(join(hooksDir, 'claude-hook.cmd'), STALE_WINDOWS_HOOK)
+      writeFileSync(join(hooksDir, 'openclaude-hook.cmd'), STALE_WINDOWS_HOOK)
 
-      await withPlatform('win32', () => new ClaudeHookService().refreshManagedScripts())
+      await withPlatform('win32', () => openClaudeHookService.refreshManagedScripts())
 
-      const refreshed = readFileSync(join(hooksDir, 'claude-hook.cmd'), 'utf8')
+      const refreshed = readFileSync(join(hooksDir, 'openclaude-hook.cmd'), 'utf8')
       expect(refreshed).toContain('if "%ORCA_AGENT_HOOK_PORT%"=="" exit /b 0')
       expect(refreshed).not.toContain('if "%ORCA_AGENT_HOOK_PORT%"=="" goto')
       // Why: refresh must not resurrect config for a CLI the user may have removed.
-      expect(existsSync(join(home, '.claude'))).toBe(false)
+      expect(existsSync(join(home, '.openclaude'))).toBe(false)
       // Why: the statusline script was never installed here, so it must not appear.
-      expect(existsSync(join(hooksDir, 'claude-statusline.cmd'))).toBe(false)
+      expect(existsSync(join(hooksDir, 'openclaude-statusline.cmd'))).toBe(false)
     } finally {
       homedirMock.mockImplementation(() => process.env.HOME ?? tmpdir())
       rmSync(home, { recursive: true, force: true })
     }
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'refreshes OpenClaude POSIX locale handling while preserving local Claude scripts',
+    async () => {
+      const home = mkdtempSync(join(tmpdir(), 'orca-hook-locale-refresh-'))
+      homedirMock.mockReturnValue(home)
+      const staleScript = '#!/bin/sh\ncurl --connect-timeout 0.5\n'
+      try {
+        const hooksDir = join(home, '.orca', 'agent-hooks')
+        mkdirSync(hooksDir, { recursive: true })
+        for (const name of [
+          'claude-hook.sh',
+          'claude-statusline.sh',
+          'openclaude-hook.sh',
+          'openclaude-statusline.sh'
+        ]) {
+          writeFileSync(join(hooksDir, name), staleScript)
+        }
+        await openClaudeHookService.refreshManagedScripts()
+        await new ClaudeHookService().refreshManagedScripts()
+        for (const name of ['openclaude-hook.sh', 'openclaude-statusline.sh']) {
+          const script = readFileSync(join(hooksDir, name), 'utf8')
+          expect(script).toContain('| LC_ALL= LC_NUMERIC=C curl -sS')
+          expect(script).not.toMatch(/\|\s+curl\b/)
+          expect(statSync(join(hooksDir, name)).mode & 0o777).toBe(0o755)
+        }
+        for (const name of ['claude-hook.sh', 'claude-statusline.sh']) {
+          expect(readFileSync(join(hooksDir, name), 'utf8')).toBe(staleScript)
+        }
+        expect(existsSync(join(home, '.claude'))).toBe(false)
+        expect(existsSync(join(home, '.openclaude'))).toBe(false)
+        expect(readdirSync(hooksDir).sort()).toEqual([
+          'claude-hook.sh',
+          'claude-statusline.sh',
+          'openclaude-hook.sh',
+          'openclaude-statusline.sh'
+        ])
+      } finally {
+        homedirMock.mockImplementation(() => process.env.HOME ?? tmpdir())
+        rmSync(home, { recursive: true, force: true })
+      }
+    }
+  )
 
   it('covers every shared launcher script with a refresher', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-coverage-'))
@@ -180,7 +224,7 @@ describe('managed hook script refresh', () => {
         expect(
           files.some((file) => file.startsWith(`${agent}-`)),
           `refresher for ${agent} matches no installed script`
-        ).toBe(true)
+        ).toBe(agent !== 'claude')
       }
     } finally {
       homedirMock.mockImplementation(() => process.env.HOME ?? tmpdir())

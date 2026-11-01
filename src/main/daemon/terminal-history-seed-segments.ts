@@ -3,6 +3,7 @@ import {
   PROCESS_BOUNDARY_GROUND,
   RESET_GRAPHIC_RENDITION
 } from '../../shared/terminal-mode-reset-profiles'
+import { buildFreshShellViewportBlankingSequence } from '../../shared/terminal-fresh-shell-viewport'
 
 // Why the ground belongs in the seed and not only at replay: the recovered stream
 // re-arms input modes from two independent sources (rehydrateSequences AND
@@ -15,7 +16,11 @@ export function getRecoveredHistorySeedSegments(restoreInfo: ColdRestoreInfo): r
   if (restoreInfo.modes.alternateScreen) {
     const normalBuffer = restoreInfo.scrollbackAnsi || restoreInfo.snapshotAnsi
     return normalBuffer
-      ? [`${RESET_GRAPHIC_RENDITION}${normalBuffer}`, PROCESS_BOUNDARY_GROUND]
+      ? [
+          `${RESET_GRAPHIC_RENDITION}${normalBuffer}`,
+          PROCESS_BOUNDARY_GROUND,
+          freshShellViewport(restoreInfo)
+        ]
       : []
   }
   const recovered = [restoreInfo.rehydrateSequences, restoreInfo.snapshotAnsi].filter(
@@ -32,6 +37,13 @@ export function getRecoveredHistorySeedSegments(restoreInfo: ColdRestoreInfo): r
   return [
     `${RESET_GRAPHIC_RENDITION}${firstRecovered}`,
     ...remainingRecovered,
-    PROCESS_BOUNDARY_GROUND
+    PROCESS_BOUNDARY_GROUND,
+    freshShellViewport(restoreInfo)
   ]
+}
+
+// Why: the window blanks its viewport after painting a restore, but the daemon's seeded screen
+// did not, so a reattach showed the new shell's prompt beside the old one (`$ $`).
+function freshShellViewport(restoreInfo: ColdRestoreInfo): string {
+  return buildFreshShellViewportBlankingSequence(restoreInfo.rows)
 }
