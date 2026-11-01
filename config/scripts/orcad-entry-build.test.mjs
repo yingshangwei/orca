@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import {
+  buildOrcadCli,
   buildOrcadEntry,
   escapeLegalCommentTail,
   findNonAsciiSource,
@@ -33,6 +34,28 @@ it('loads the structured Claude SDK through the packaged server under plain Node
   })
   expect(loaded.code, loaded.stderr.slice(-2_000)).toBe(0)
 }, 40_000)
+
+// #33592: the shipped CLI once bundled jsonc-parser's UMD build, whose relative requires fail.
+it('runs a jsonc-parser-backed command from the packaged CLI under plain Node', async () => {
+  const cli = join(directory, 'cli', 'index.js')
+  await buildOrcadCli(cli)
+  const testHome = join(directory, 'home')
+  mkdirSync(testHome)
+  const status = runProcessSync({
+    program: process.execPath,
+    args: [cli, 'agent', 'hooks', 'status', '--json'],
+    cwd: testHome,
+    env: {
+      ORCA_BACKGROUND_LAUNCH: '1',
+      HOME: testHome,
+      USERPROFILE: testHome,
+      ORCA_USER_DATA_PATH: join(testHome, 'user-data')
+    },
+    timeoutMs: 30_000
+  })
+  expect(status.code, status.stdout + status.stderr).toBe(0)
+  expect(JSON.parse(status.stdout).ok).toBe(true)
+}, 60_000)
 
 it('resolves bundle-relative requires after deployment to a path with URL-special characters', async () => {
   const buildDirectory = join(directory, 'build')

@@ -33,6 +33,9 @@ function configureHeadlessServeChromiumFlags(): void {
   // exhausted shared-memory mount as ENOSPC and can fatal in utility services
   // such as font_data. Keep browser panes on disk-backed temp storage instead.
   app.commandLine.appendSwitch('disable-dev-shm-usage')
+  if (process.env.ORCA_SERVE_GPU === '1') {
+    return
+  }
   // Why: externally managed displays are commonly Xvfb too; a GPU-process fork can trap before serve readiness.
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')

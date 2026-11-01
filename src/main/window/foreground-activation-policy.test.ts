@@ -5,6 +5,7 @@ vi.mock('electron', () => ({ app: { dock: { hide: vi.fn() }, setActivationPolicy
 
 const {
   applyBackgroundActivationPolicy,
+  applyServeDesktopWindowActivationPolicy,
   isBackgroundLaunch,
   isOrcadSidecarLaunch,
   isWindowlessLaunch,
@@ -104,7 +105,7 @@ describe('showWindowWithoutStealingFocus', () => {
 describe('applyBackgroundActivationPolicy', () => {
   function makeApp() {
     return {
-      dock: { hide: vi.fn(() => {}) },
+      dock: { hide: vi.fn(() => {}), show: vi.fn(async () => {}) },
       setActivationPolicy: vi.fn((_policy: 'accessory' | 'prohibited' | 'regular') => {})
     }
   }
@@ -137,6 +138,47 @@ describe('applyBackgroundActivationPolicy', () => {
     const user = makeApp()
     applyBackgroundActivationPolicy({ app: user, env: {}, platform: 'darwin' })
     expect(user.setActivationPolicy).not.toHaveBeenCalled()
+  })
+
+  it('keeps a windowless macOS serve out of the Dock until it hosts a desktop window', () => {
+    const app = makeApp()
+    expect(
+      applyBackgroundActivationPolicy({
+        app,
+        env: {},
+        platform: 'darwin',
+        serveWithoutDesktopWindow: true
+      })
+    ).toBe(true)
+    expect(app.setActivationPolicy).toHaveBeenLastCalledWith('accessory')
+
+    expect(applyServeDesktopWindowActivationPolicy({ app, env: {}, platform: 'darwin' })).toBe(true)
+    expect(app.setActivationPolicy).toHaveBeenLastCalledWith('regular')
+    expect(app.dock.show).toHaveBeenCalledOnce()
+    expect(
+      applyBackgroundActivationPolicy({
+        app,
+        env: {},
+        platform: 'darwin',
+        serveWithoutDesktopWindow: true
+      })
+    ).toBe(true)
+    expect(app.setActivationPolicy).toHaveBeenLastCalledWith('accessory')
+    expect(app.dock.hide).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { ORCA_BACKGROUND_LAUNCH: '1' },
+    { ORCA_E2E_HEADFUL: '1' },
+    { ORCA_E2E_HEADLESS: '1' },
+    { ORCA_ORCAD_SIDECAR: '1' },
+    { ORCA_BACKGROUND_LAUNCH: '1', ORCA_E2E_FOREGROUND: '1' },
+    { ORCA_ORCAD_SIDECAR: '1', ORCA_E2E_FOREGROUND: '1' }
+  ])('never gives a background serve its Dock tile back: %j', (env) => {
+    const app = makeApp()
+    expect(applyServeDesktopWindowActivationPolicy({ app, env, platform: 'darwin' })).toBe(false)
+    expect(app.setActivationPolicy).not.toHaveBeenCalled()
+    expect(app.dock.show).not.toHaveBeenCalled()
   })
 
   it('is a no-op off macOS', () => {
