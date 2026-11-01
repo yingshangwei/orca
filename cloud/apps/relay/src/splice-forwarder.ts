@@ -29,10 +29,10 @@ function frameBytes(data: RawData): number {
   return data.byteLength
 }
 
-function transport(socket: WebSocket): { pause(): void; resume(): void; setNoDelay(value: boolean): void } | null {
+function transport(socket: WebSocket): { setNoDelay(value: boolean): void } | null {
   return (
     socket as WebSocket & {
-      _socket?: { pause(): void; resume(): void; setNoDelay(value: boolean): void }
+      _socket?: { setNoDelay(value: boolean): void }
     }
   )._socket ?? null
 }
@@ -83,7 +83,7 @@ export function wireSplice(input: {
       )
       queuedBytes = 0
       queue.length = 0
-      transport(source)?.resume()
+      source.resume()
     })
 
     const flush = (): void => {
@@ -103,7 +103,7 @@ export function wireSplice(input: {
       }
       if (queue.length === 0) {
         wedgedSince = null
-        transport(source)?.resume()
+        source.resume()
         return
       }
       if (
@@ -147,7 +147,7 @@ export function wireSplice(input: {
       queuedBytes += bytes
       input.onForwardedBytes?.(bytes)
       wedgedSince ??= Date.now()
-      transport(source)?.pause()
+      source.pause()
       if (queue.length === 1) flush()
     })
   }
