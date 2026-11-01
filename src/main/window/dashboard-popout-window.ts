@@ -139,6 +139,9 @@ export function createOrFocusDashboardPopout(
   options: { getKeybindings?: () => KeybindingOverrides | undefined } = {}
 ): BrowserWindow {
   if (dashboardPopoutWindow && !dashboardPopoutWindow.isDestroyed()) {
+    if (dashboardPopoutWindow.webContents.isCrashed()) {
+      dashboardPopoutWindow.webContents.reload()
+    }
     if (dashboardPopoutWindow.isMinimized()) {
       dashboardPopoutWindow.restore()
     }

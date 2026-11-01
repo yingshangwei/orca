@@ -27,6 +27,12 @@ export function fileListingCancellationError(signal?: AbortSignal): Error {
   return new FileListingCancelledError()
 }
 
+export function throwIfFileListingCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw fileListingCancellationError(signal)
+  }
+}
+
 export function isFileListingCancellation(error: unknown): boolean {
   return error instanceof FileListingCancelledError
 }

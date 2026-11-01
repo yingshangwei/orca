@@ -21,11 +21,24 @@ export default function BrowserFind({
 }: BrowserFindProps): React.JSX.Element | null {
   const inputRef = useRef<HTMLInputElement>(null)
   const wasOpenRef = useRef(isOpen)
-  const activeFindQueryRef = useRef<string | null>(null)
+  const activeFindRef = useRef<{
+    query: string
+    guestGeneration: number | null
+    webview: Electron.WebviewTag
+    requestId: number
+  } | null>(null)
   const [query, setQuery] = useState('')
-  const [activeMatch, setActiveMatch] = useState(0)
-  const [totalMatches, setTotalMatches] = useState(0)
+  const [result, setResult] = useState<{
+    query: string
+    guestGeneration: number | null
+    activeMatch: number
+    totalMatches: number
+  } | null>(null)
   const requestQuery = getFindRequestQuery(query)
+  const currentResult =
+    result?.query === requestQuery && result.guestGeneration === guestGeneration ? result : null
+  const activeMatch = currentResult?.activeMatch ?? 0
+  const totalMatches = currentResult?.totalMatches ?? 0
 
   const safeFindInPage = useCallback(
     (text: string, opts?: Electron.FindInPageOptions): void => {
@@ -34,13 +47,14 @@ export default function BrowserFind({
         return
       }
       try {
-        webview.findInPage(text, opts)
+        const requestId = webview.findInPage(text, opts)
+        activeFindRef.current = { query: text, guestGeneration, webview, requestId }
       } catch {
         // Why: the webview can be mid-teardown during tab close or navigation
         // races. Best-effort is better than crashing.
       }
     },
-    [webviewRef]
+    [webviewRef, guestGeneration]
   )
 
   const safeStopFindInPage = useCallback((): void => {
@@ -57,21 +71,27 @@ export default function BrowserFind({
 
   // Why: Electron's findNext means "start a NEW session" — follow-up requests that
   // advance the selection must pass false, or every Enter restarts at the first match.
+  const isCurrentFind = useCallback(
+    (): boolean =>
+      activeFindRef.current?.query === requestQuery &&
+      activeFindRef.current.guestGeneration === guestGeneration &&
+      activeFindRef.current.webview === webviewRef.current,
+    [requestQuery, guestGeneration, webviewRef]
+  )
+
   const findNext = useCallback(() => {
     if (requestQuery) {
-      const findNext = activeFindQueryRef.current !== requestQuery
+      const findNext = !isCurrentFind()
       safeFindInPage(requestQuery, { forward: true, findNext })
-      activeFindQueryRef.current = requestQuery
     }
-  }, [requestQuery, safeFindInPage])
+  }, [requestQuery, safeFindInPage, isCurrentFind])
 
   const findPrevious = useCallback(() => {
     if (requestQuery) {
-      const findNext = activeFindQueryRef.current !== requestQuery
+      const findNext = !isCurrentFind()
       safeFindInPage(requestQuery, { forward: false, findNext })
-      activeFindQueryRef.current = requestQuery
     }
-  }, [requestQuery, safeFindInPage])
+  }, [requestQuery, safeFindInPage, isCurrentFind])
 
   useEffect(() => {
     if (isOpen) {
@@ -86,22 +106,21 @@ export default function BrowserFind({
     const wasOpen = wasOpenRef.current
     wasOpenRef.current = isOpen
     if (!isOpen) {
-      activeFindQueryRef.current = null
+      activeFindRef.current = null
       return
     }
     if (!requestQuery) {
-      activeFindQueryRef.current = null
+      activeFindRef.current = null
       safeStopFindInPage()
       return
     }
 
     // A reopen or a changed query starts a fresh session, so findNext must be true here.
     const runFind = (): void => {
-      if (activeFindQueryRef.current === requestQuery) {
+      if (isCurrentFind()) {
         return
       }
       safeFindInPage(requestQuery, { findNext: true })
-      activeFindQueryRef.current = requestQuery
     }
     if (!wasOpen) {
       runFind()
@@ -112,7 +131,7 @@ export default function BrowserFind({
     // navigation still use the live query immediately.
     const id = window.setTimeout(runFind, 200)
     return () => window.clearTimeout(id)
-  }, [isOpen, requestQuery, safeFindInPage, safeStopFindInPage])
+  }, [isOpen, requestQuery, safeFindInPage, safeStopFindInPage, isCurrentFind])
 
   // Why the generation is a dependency: this effect captures `webviewRef.current` into a local
   // variable, so a webview replaced while `isOpen` stays true would leave the listener on a dead
@@ -125,9 +144,22 @@ export default function BrowserFind({
       return
     }
     const handleFoundInPage = (event: Electron.FoundInPageEvent): void => {
+      const activeFind = activeFindRef.current
+      if (
+        !activeFind ||
+        activeFind.webview !== webview ||
+        activeFind.guestGeneration !== guestGeneration ||
+        activeFind.requestId !== event.result.requestId
+      ) {
+        return
+      }
       const { activeMatchOrdinal, matches } = event.result
-      setActiveMatch(activeMatchOrdinal)
-      setTotalMatches(matches)
+      setResult({
+        query: activeFind.query,
+        guestGeneration,
+        activeMatch: activeMatchOrdinal,
+        totalMatches: matches
+      })
     }
     webview.addEventListener('found-in-page', handleFoundInPage)
     return () => {
@@ -139,9 +171,8 @@ export default function BrowserFind({
     }
   }, [webviewRef, isOpen, guestGeneration])
 
-  if ((!isOpen || !requestQuery) && (activeMatch !== 0 || totalMatches !== 0)) {
-    setActiveMatch(0)
-    setTotalMatches(0)
+  if ((!isOpen || !requestQuery) && result !== null) {
+    setResult(null)
   }
 
   const handleKeyDown = useCallback(
@@ -181,7 +212,8 @@ export default function BrowserFind({
         className="min-w-0 flex-1 border-none bg-transparent text-sm text-white outline-none placeholder:text-zinc-500"
       />
 
-      {query ? (
+      {/* Why: a pending request has no count yet; blank avoids flashing "No matches". */}
+      {query && (currentResult !== null || !requestQuery) ? (
         <span className="shrink-0 text-xs text-zinc-400">
           {totalMatches > 0
             ? translate(

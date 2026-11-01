@@ -4,7 +4,11 @@ import type {
   AutomationRunTerminalObserver
 } from './run-completion-watcher'
 import type { AutomationRun, AutomationRunOutputSnapshot } from '../../shared/automations-types'
-import { judgeIdleRun, type AutomationRunAgentEvidence } from './automation-run-agent-evidence'
+import {
+  hasHeldRunTurnDone,
+  judgeIdleRun,
+  type AutomationRunAgentEvidence
+} from './automation-run-agent-evidence'
 
 const TERMINAL_SNAPSHOT_LIMIT = 2_000
 
@@ -19,6 +23,8 @@ const AGENT_START_PROBE_TIMEOUT_MS = 250
  *  the prompt reached an agent. Covers the deliberate pre-Enter delay plus agent
  *  spin-up over SSH; past that, silence is not evidence of work. */
 const AGENT_START_DEADLINE_MS = 2 * 60 * 1000
+/** Allow a fresh done signal to settle only after a blocked-screen grace period. */
+const HELD_DONE_SETTLE_MS = 30_000
 /** Total observation budget. Each tui-idle wait expires on the runtime's own
  *  5-minute schedule and a live agent legitimately outlives many of them, so the
  *  bound is wall-clock and generous; it exists so a pane whose agent is never
@@ -244,7 +250,11 @@ export function createRuntimeAutomationRunTerminalObserver(
       const deadlineAt = startedAt + OBSERVE_DEADLINE_MS
       while (Date.now() < deadlineAt) {
         try {
-          const wait = await runtime.waitForTerminal(handle, { condition: 'tui-idle', signal })
+          const wait = await runtime.waitForTerminal(handle, {
+            condition: 'tui-idle',
+            signal,
+            ...(judged ? { timeoutMs: HELD_DONE_SETTLE_MS } : {})
+          })
           if (!judged || !wait.satisfied) {
             return await buildObservation(runtime, handle, wait)
           }
@@ -264,6 +274,22 @@ export function createRuntimeAutomationRunTerminalObserver(
           // working past that window is live, so re-arm rather than fail it.
           if (signal.aborted || !isTerminalWaitTimeout(error)) {
             throw error
+          }
+          if (
+            judged &&
+            hasHeldRunTurnDone(
+              judged.evidence,
+              judged.run,
+              runStartedAt,
+              Date.now(),
+              HELD_DONE_SETTLE_MS
+            )
+          ) {
+            return {
+              status: 'completed',
+              outputSnapshot: snapshotOf(await readTail(runtime, handle)),
+              error: null
+            }
           }
         }
       }

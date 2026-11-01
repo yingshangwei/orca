@@ -31,7 +31,7 @@ import {
   ripgrepMissingCwdError,
   RipgrepUnavailableError
 } from '../../shared/ripgrep-process-availability'
-import { fileListingCancellationError } from '../../shared/file-listing-cancellation'
+import * as listingCancellation from '../../shared/file-listing-cancellation'
 
 export async function listQuickOpenFiles(
   rootPath: string,
@@ -44,6 +44,7 @@ export async function listQuickOpenFiles(
   pathFilter?: (relativePath: string) => boolean,
   options: { includeIgnored?: boolean; followSymlinks?: boolean; candidatePaths?: string[] } = {}
 ): Promise<string[]> {
+  listingCancellation.throwIfFileListingCancelled(signal)
   const authorizedRootPath = await resolveAuthorizedPath(rootPath, store)
   const { wslDistro, wslDistroForOutput } = resolveBundledRipgrepWslRouting(
     authorizedRootPath,
@@ -88,6 +89,7 @@ export async function listQuickOpenFiles(
 
   const runRg = (args: string[]): Promise<void> =>
     new Promise((resolve, reject) => {
+      listingCancellation.throwIfFileListingCancelled(signal)
       const filenameDecoder = new RipgrepFilenameDecoder((error) => {
         killSpawnedRipgrepProcess(child)
         finish(error)
@@ -272,7 +274,7 @@ export async function listQuickOpenFiles(
       const handleAbort = (): void => {
         buf = ''
         killSpawnedRipgrepProcess(child)
-        finish(fileListingCancellationError(signal))
+        finish(listingCancellation.fileListingCancellationError(signal))
       }
 
       children.push({ child, isDone: () => done, finish })

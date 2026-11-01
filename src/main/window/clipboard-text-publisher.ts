@@ -10,7 +10,7 @@ import { CLIPBOARD_IMAGE_MAX_BASE64_CHARS } from '../../shared/clipboard-image'
 import { isLinuxWaylandSession } from '../../shared/linux-wayland-session'
 import { writeClipboardTextAndVerify } from './clipboard-text-write-verify'
 import { stageClipboardPublisher } from './clipboard-publisher-executable'
-import { removeAppImageRuntimeEnv } from '../pty/appimage-terminal-env'
+import { envWithoutAppImageRuntime } from '../pty/appimage-terminal-env'
 import { isLegacyAppImageRuntimeIdentity } from '../linux-update-package-type'
 
 const WAYLAND_CLIPBOARD_WRITE_FAILED_ERROR = 'Wayland clipboard write failed'
@@ -158,16 +158,7 @@ export const { publish: publishClipboardOperation, publishText: publishClipboard
           process.platform === 'linux' ? app.commandLine.getSwitchValue('ozone-platform') : ''
       }),
     helperPath: publisherPath,
-    run: (spec) => {
-      const env: Record<string, string> = {}
-      for (const [key, value] of Object.entries(process.env)) {
-        if (value !== undefined) {
-          env[key] = value
-        }
-      }
-      removeAppImageRuntimeEnv(env)
-      return runProcess({ ...spec, env })
-    },
+    run: (spec) => runProcess({ ...spec, env: envWithoutAppImageRuntime(process.env) }),
     clearCache: () => clipboard.clear(),
     write: (text, kind) => {
       if (kind === 'terminal') {

@@ -85,6 +85,7 @@ vi.mock('./rate-limit', () => ({
 }))
 
 import { getWorkItemDetails } from './work-item-details'
+import { getMentionParticipants } from './work-item-participants'
 
 import { _resetOriginGitHubApiRepositoryCache } from './github-api-repository'
 
@@ -712,10 +713,7 @@ describe('getWorkItemDetails', () => {
     expect(getWorkItemMock).toHaveBeenCalledWith('/repo-root', 42, 'pr', null, {}, 'origin')
   })
 
-  // Why: `gh pr view` omits avatar_url, so the login-based github.com URL 404s on
-  // GHE. getWorkItemDetails must resolve author/reviewer/assignee avatars via the
-  // GraphQL user(login:) batch and stamp them onto the returned item. See #8784.
-  it('enriches PR author, reviewer, and assignee avatars from the GraphQL user lookup', async () => {
+  it('reuses participant profiles and enriches only missing or incomplete Enterprise users', async () => {
     getWorkItemMock.mockResolvedValueOnce({
       id: 'pr:1102',
       type: 'pr',
@@ -728,7 +726,6 @@ describe('getWorkItemDetails', () => {
       author: 'seah',
       reviewRequests: [{ login: 'ludi', name: null, avatarUrl: '' }],
       latestReviews: [{ login: 'inho', state: 'APPROVED', avatarUrl: '' }],
-      // A default `u/0` placeholder must be replaced by the resolved avatar.
       assignees: [{ login: 'seah', name: 'Seah', avatarUrl: 'https://avatars.example.com/u/0?v=4' }]
     })
     getOwnerRepoForRemoteMock.mockResolvedValue({ owner: 'acme', repo: 'widgets' })
@@ -750,8 +747,25 @@ describe('getWorkItemDetails', () => {
         return { stdout: '[]' }
       }
       const query = args.find((arg) => arg.startsWith('query=')) ?? ''
+      if (query.includes('participants(first: 100)')) {
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                pullRequest: {
+                  participants: {
+                    nodes: [
+                      { login: 'seah', name: null, avatarUrl: avatars.seah },
+                      { login: 'ludi', name: 'Ludi', avatarUrl: '' }
+                    ]
+                  }
+                }
+              }
+            }
+          })
+        }
+      }
       if (query.includes('user(login:')) {
-        // Return the aliased users the batch asked for, keyed by their login.
         const data: Record<string, { login: string; name: null; avatarUrl: string }> = {}
         let index = 0
         for (const login of Object.keys(avatars)) {
@@ -770,7 +784,41 @@ describe('getWorkItemDetails', () => {
     expect(details?.item.authorAvatarUrl).toBe(avatars.seah)
     expect(details?.item.reviewRequests?.[0]?.avatarUrl).toBe(avatars.ludi)
     expect(details?.item.latestReviews?.[0]?.avatarUrl).toBe(avatars.inho)
-    // The default u/0 placeholder is overridden by the resolved avatar.
     expect(details?.item.assignees?.[0]?.avatarUrl).toBe(avatars.seah)
+    const userQuery = ghExecFileAsyncMock.mock.calls
+      .flatMap(([args]) => args)
+      .find((arg: string) => arg.includes('user(login:'))
+    expect(userQuery).not.toContain('user(login: "seah")')
+    expect(userQuery).toContain('user(login: "ludi")')
+    expect(userQuery).toContain('user(login: "inho")')
+    expect(details?.participants).toContainEqual({
+      login: 'ludi',
+      name: 'Ludi',
+      avatarUrl: avatars.ludi
+    })
+  })
+
+  it('skips profile reads when participants already cover visible users regardless of login case', async () => {
+    const participants = [
+      { login: 'alice', name: null, avatarUrl: 'https://ghe.example.com/avatar/1' },
+      { login: 'bob', name: 'Bob', avatarUrl: 'https://ghe.example.com/avatar/2' }
+    ]
+    const result = await getMentionParticipants(
+      '/repo-root',
+      {
+        number: 42,
+        type: 'pr',
+        author: 'Alice',
+        reviewRequests: [{ login: 'BOB', name: null, avatarUrl: '' }],
+        latestReviews: [{ login: 'Bob', state: 'APPROVED', avatarUrl: null }],
+        assignees: [{ login: 'alice', name: null, avatarUrl: '' }]
+      },
+      [],
+      participants,
+      { owner: 'acme', repo: 'widgets', host: 'ghe.example.com' }
+    )
+    expect(result).toEqual(participants)
+    expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
+    expect(noteRepositoryRateLimitSpendMock).not.toHaveBeenCalled()
   })
 })
