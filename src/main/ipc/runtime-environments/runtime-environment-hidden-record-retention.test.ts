@@ -19,7 +19,9 @@ const state = vi.hoisted(() => ({
 }))
 vi.mock('electron', () => ({ app: { getPath: () => state.userDataPath } }))
 vi.mock('../../browser/browser-route-partition-binding-runtime', () => ({
-  activeBrowserRoutePartitionOrcaProfileId: () => 'local-default'
+  activeBrowserRoutePartitionOrcaProfileId: () => 'local-default',
+  currentBrowserRoutePartitionBindingFilePath: () =>
+    `${state.userDataPath}/browser-route-partition-bindings.json`
 }))
 vi.mock('../../browser/browser-route-partition-storage-dependencies', () => ({
   browserRoutePartitionStorageDependencies: () => ({
