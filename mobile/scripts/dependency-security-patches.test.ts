@@ -12,6 +12,14 @@ const braces = micromatchRequire('braces')
 type BraceNode = { type: string; value?: string; nodes?: BraceNode[] }
 
 describe('installed mobile dependency security patches', () => {
+  it('preserves PEM Buffer input with the official Forge security fixes', () => {
+    const cliRequire = createRequire(expoRequire.resolve('@expo/cli'))
+    const forge = cliRequire('node-forge')
+    const pem = forge.pem.encode({ type: 'MESSAGE', body: 'release payload' })
+    expect(forge.pem.decode(Buffer.from(pem))).toEqual(forge.pem.decode(pem))
+    expect(forge.pem.decode(Buffer.from(pem))[0].body).toBe('release payload')
+  })
+
   it.each([
     ['braces', '{', '}'],
     ['parentheses', '(', ')'],
