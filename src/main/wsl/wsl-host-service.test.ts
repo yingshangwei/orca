@@ -692,6 +692,28 @@ describe('WslHostService', () => {
     expect(service.getStatuses()[0]?.state).toBe('ready')
   })
 
+  it('repairs a stale stopped status when a passive probe confirms the existing connection', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'], new Set(['wsl:ubuntu']))
+    connector.reachability.mockResolvedValueOnce('stopped')
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toMatchObject({
+      code: 'wsl_host_stopped'
+    })
+    expect(service.getStatuses()[0]?.state).toBe('distro-stopped')
+    connector.connect.mockClear()
+    ready.mockClear()
+    published.length = 0
+
+    await service.ensureForRuntimeCall('wsl:ubuntu')
+
+    expect(connector.connect).not.toHaveBeenCalled()
+    expect(service.getStatuses()[0]?.state).toBe('ready')
+    expect(published.map(({ state }) => state)).toEqual(['ready'])
+    expect(ready).toHaveBeenCalledExactlyOnceWith('wsl:ubuntu')
+  })
+
   it('does not start or report stopped when the running list is unavailable', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)

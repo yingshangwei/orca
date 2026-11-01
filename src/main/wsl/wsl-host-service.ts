@@ -239,6 +239,12 @@ export class WslHostService {
     const generation = this.readyGenerations.get(environmentId)
     const reachability = await connector.reachability(record.distro, environmentId)
     if (reachability === 'available') {
+      if (this.statuses.get(environmentId)?.state === 'distro-stopped') {
+        const connection = connector.get(record.distro)
+        if (connection) {
+          this.noteConnected(record, connection)
+        }
+      }
       return
     }
     // A Start during the read supersedes its stopped verdict, which would mark live terminals exited.

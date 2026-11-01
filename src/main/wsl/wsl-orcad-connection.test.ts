@@ -98,11 +98,16 @@ function setup(overrides: Partial<WslOrcadConnectionDependencies> = {}) {
     deployAndLaunch,
     createTransport: (target) => createWslOrcadHostTransport({ target, spawn: children.spawn }),
     listen: (transport, options) =>
-      listenWslOrcadStdioBridge(transport, options, {
-        resolveBridge: async (_conn, port) => posixOrcadStdioBridge(port),
-        checkBridge: checkOrcadStdioBridge,
-        openChannel: openOrcadStdioBridgeChannel
-      }),
+      listenWslOrcadStdioBridge(
+        transport,
+        options,
+        {
+          resolveBridge: async (_conn, port) => posixOrcadStdioBridge(port),
+          checkBridge: checkOrcadStdioBridge,
+          openChannel: openOrcadStdioBridgeChannel
+        },
+        async () => ({ status: 'confirmed', distros: ['Ubuntu'] })
+      ),
     verifyIdentity: async () => ({ verdict: 'verified' }),
     onChange,
     ...overrides

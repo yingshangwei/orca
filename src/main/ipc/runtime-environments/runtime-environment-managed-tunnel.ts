@@ -36,7 +36,7 @@ export async function resolveManagedRuntimeEnvironment(
   selector: string
 ): Promise<ReturnType<typeof resolveEnvironment>> {
   const environment = resolveEnvironment(userDataPath, selector)
-  // Every call, subscription and status probe passes here, so a gated-off WSL host is never reached.
+  // Calls routed here gate WSL hosts; direct status/control dials are gated at bridge admission.
   assertWslHostReachable(environment)
   const host = classifyRuntimeEnvironmentHost(environment)
   switch (host.kind) {

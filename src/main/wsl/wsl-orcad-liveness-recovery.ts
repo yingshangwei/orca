@@ -11,7 +11,7 @@ import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import type { WslLivenessVerdict } from './wsl-orcad-liveness-verdict'
 import type { WslOrcadReconnectBackoff } from './wsl-orcad-reconnect-backoff'
 
-export type WslOrcadRecoveryReason = 'orcad-exited' | 'distro-restarted' | 'distro-stopped'
+export type WslOrcadRecoveryReason = 'orcad-exited' | 'distro-restarted'
 
 export type WslOrcadRecoveryContext = {
   distro: string
@@ -25,7 +25,6 @@ export type WslOrcadRecoveryContext = {
   collectCensus: (connection: WslOrcadConnection) => Promise<OrcadTerminalCensus>
   /** Records the new orcad's identity and holds a fresh watch. */
   arm: (connection: WslOrcadConnection) => Promise<void>
-  hasUserVisibleWork: () => boolean
   readRunning: () => Promise<WslRunningDistrosRead>
 }
 
