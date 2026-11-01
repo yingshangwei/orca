@@ -284,5 +284,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
         ? 'removed: false\nOrca is still deleting the checkout in the background.'
         : `removed: ${value.removed}`
     )
+    if (result.result.removing) {
+      process.exitCode = 1
+    }
   }
 }

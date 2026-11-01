@@ -140,19 +140,43 @@ describe('command aliases dispatch to the canonical handler', () => {
     expect(logSpy).toHaveBeenCalledWith('removed: true')
   })
 
-  it('does not say removed when an older host only accepted a background removal', async () => {
-    queueFixtures(
-      callMock,
-      okFixture('req_show', { worktree: { hostId: 'local' } }),
-      okFixture('req', { removed: true, removing: true })
-    )
+  it.each([
+    { hostRemoved: true, json: false },
+    { hostRemoved: true, json: true },
+    { hostRemoved: false, json: false },
+    { hostRemoved: false, json: true }
+  ])(
+    'does not report removal success for acceptance ($hostRemoved, json=$json)',
+    async ({ hostRemoved, json }) => {
+      queueFixtures(
+        callMock,
+        okFixture('req_show', { worktree: { hostId: 'local' } }),
+        okFixture('req', { removed: hostRemoved, removing: true })
+      )
+      const priorExitCode = process.exitCode
+      try {
+        process.exitCode = 0
+        await main(
+          ['worktree', 'rm', '--worktree', 'id:wt-1', ...(json ? ['--json'] : [])],
+          '/tmp/repo'
+        )
 
-    await main(['worktree', 'rm', '--worktree', 'id:wt-1'], '/tmp/repo')
-
-    expect(logSpy).toHaveBeenCalledWith(
-      'removed: false\nOrca is still deleting the checkout in the background.'
-    )
-  })
+        if (json) {
+          expect(JSON.parse(logSpy.mock.calls[0][0])).toMatchObject({
+            result: { removed: false, removing: true }
+          })
+        } else {
+          expect(logSpy).toHaveBeenCalledWith(
+            'removed: false\nOrca is still deleting the checkout in the background.'
+          )
+        }
+        expect(process.exitCode).toBe(1)
+        expect(callMock).toHaveBeenCalledTimes(2)
+      } finally {
+        process.exitCode = priorExitCode
+      }
+    }
+  )
 
   it('reports an indeterminate removal after the reply timeout without retrying deletion', async () => {
     queueFixtures(callMock, okFixture('req_show', { worktree: { hostId: 'local' } }))

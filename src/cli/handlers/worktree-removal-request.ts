@@ -16,7 +16,7 @@ export async function requestWorktreeRemoval(
   request: WorktreeRemovalRequest
 ): Promise<RuntimeRpcSuccess<RuntimeWorktreeRemoveResult>> {
   try {
-    return await client.call<RuntimeWorktreeRemoveResult>(
+    const response = await client.call<RuntimeWorktreeRemoveResult>(
       'worktree.rm',
       {
         ...request,
@@ -26,6 +26,10 @@ export async function requestWorktreeRemoval(
       },
       { timeoutMs: worktreeRemovalReplyTimeoutMs(request.runHooks) }
     )
+    // Older hosts report removed on acceptance, before the checkout is gone.
+    return response.result.removing
+      ? { ...response, result: { ...response.result, removed: false } }
+      : response
   } catch (error) {
     // The host keeps deleting after this client stops waiting.
     if (error instanceof RuntimeClientError && error.code === 'runtime_timeout') {
