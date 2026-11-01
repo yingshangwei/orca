@@ -1,3 +1,7 @@
+vi.mock('expo-router', async () => {
+  const { useEffect } = await import('react')
+  return { useFocusEffect: (effect: () => () => void) => useEffect(effect, [effect]) }
+})
 /**
  * Leaving a workspace inside the host-area page, where nothing native tears down.
  *

@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { Keyboard, Platform } from 'react-native'
 import { useClipboardWriter } from '../platform/clipboard'
 import { useBackClaim } from '../navigation/use-back-claim'
+import { useSessionLeaveGuard } from './session-leave-guard'
 import { markdownTabSave } from './mobile-session-write-operations'
 import { triggerSuccess, triggerError } from '../platform/haptics'
 import type { DirtyMarkdownDraft, MobileSessionTab } from './mobile-session-route-types'
@@ -31,6 +32,7 @@ export type MobileSessionMarkdownActionsScope = Pick<
   | 'markdownSaveInFlightRef'
   | 'showToast'
   | 'readMarkdownTab'
+  | 'dictationLeaveHold'
 >
 
 export function useMobileSessionMarkdownActions(scope: MobileSessionMarkdownActionsScope) {
@@ -48,7 +50,8 @@ export function useMobileSessionMarkdownActions(scope: MobileSessionMarkdownActi
     markdownSaveSeqRef,
     markdownSaveInFlightRef,
     showToast,
-    readMarkdownTab
+    readMarkdownTab,
+    dictationLeaveHold: { hold: holdLeaveForDictation, holdsLeave: dictationHoldsLeave }
   } = scope
   const clipboard = useClipboardWriter()
   const updateMarkdownLocalContent = useCallback((tabId: string, content: string) => {
@@ -125,6 +128,9 @@ export function useMobileSessionMarkdownActions(scope: MobileSessionMarkdownActi
   }, [hostId, router])
 
   const requestLeaveSession = useCallback(() => {
+    if (holdLeaveForDictation()) {
+      return
+    }
     const dirtyDrafts = getDirtyMarkdownDrafts()
     if (dirtyDrafts.length === 0) {
       leaveSession()
@@ -132,20 +138,19 @@ export function useMobileSessionMarkdownActions(scope: MobileSessionMarkdownActi
     }
     Keyboard.dismiss()
     setLeaveDrafts(dirtyDrafts)
-  }, [getDirtyMarkdownDrafts, leaveSession])
+  }, [getDirtyMarkdownDrafts, holdLeaveForDictation, leaveSession])
 
-  // Native holds the key always: `leaveSession` replaces to the host at the root, where an
-  // unclaimed press would exit the app. On the page an unclaimed press is the shell's own pop,
-  // which is already "leave", so the claim is held only while there is a draft to ask about.
+  // Native always claims Back to avoid root exit; the web shell already pops, so only dirty drafts and dictation need a claim.
   const hasDirtyDraft = getDirtyMarkdownDrafts().length > 0
   useBackClaim(
-    Platform.OS === 'web' && !hasDirtyDraft
+    Platform.OS === 'web' && !hasDirtyDraft && !dictationHoldsLeave
       ? null
       : () => {
           requestLeaveSession()
           return true
         }
   )
+  useSessionLeaveGuard(dictationHoldsLeave ? holdLeaveForDictation : null)
 
   const discardMarkdownLocalContent = useCallback(
     (tab: Extract<MobileSessionTab, { type: 'markdown' }>) => {

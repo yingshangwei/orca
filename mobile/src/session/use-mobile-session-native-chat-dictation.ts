@@ -14,6 +14,7 @@ import {
   SPEECHLESS_SERVER_MESSAGE
 } from '../dictation/mobile-dictation-setup'
 import { useMobileNativeChatController } from './use-mobile-native-chat-controller'
+import { useMobileDictationLeaveHold } from './mobile-dictation-leave-hold'
 import { useMobileNativeChatReadability } from './use-mobile-native-chat-readability'
 import { useMobileNativeChatInputLease } from './use-mobile-native-chat-input-lease'
 import { useMobileNativeChatSendError } from './use-mobile-native-chat-send-error'
@@ -165,6 +166,8 @@ export function useMobileSessionNativeChatDictation(
     }
   })
 
+  const dictationLeaveHold = useMobileDictationLeaveHold(dictation)
+
   const startDictation = useCallback(() => {
     const routeContext = activeHandle
       ? { handle: activeHandle, liveInputEnabled: liveInputTerminalHandles.has(activeHandle) }
@@ -264,6 +267,7 @@ export function useMobileSessionNativeChatDictation(
     showNativeChat,
     showNativeChatRef,
     dictation,
+    dictationLeaveHold,
     startDictation,
     cancelDictation,
     handleDictationToggle,

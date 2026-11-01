@@ -7,10 +7,7 @@ import {
 import type { BrowserViewportOverride } from '../../shared/browser-workspace-types'
 import { BrowserManagerDownloadLifecycle } from './browser-manager-download-lifecycle'
 import { sendGuestCdpCommand } from './guest-cdp-command'
-
-// Why no maxTouchPoints: Chromium rejects values outside 1..16 even when disabling, which left
-// touch emulation (and no-hover media features) on after leaving a mobile preset (#22749).
-const TOUCH_EMULATION_DISABLED = { enabled: false } as const
+import { touchEmulationParams } from './guest-touch-emulation'
 
 export abstract class BrowserManagerViewport extends BrowserManagerDownloadLifecycle {
   // Why: guests are isolated from Orca's preload bridge, so main owns the devtools escape hatch after a tab→guest lookup.
@@ -182,7 +179,7 @@ export abstract class BrowserManagerViewport extends BrowserManagerDownloadLifec
     const touchApplied = await this.runViewportEmulationStep(browserTabId, 'touch emulation', () =>
       dbg.sendCommand(
         'Emulation.setTouchEmulationEnabled',
-        override?.mobile ? { enabled: true, maxTouchPoints: 5 } : TOUCH_EMULATION_DISABLED
+        touchEmulationParams(override?.mobile === true)
       )
     )
     if (this.webContentsIdByTabId.get(browserTabId) !== webContentsId) {

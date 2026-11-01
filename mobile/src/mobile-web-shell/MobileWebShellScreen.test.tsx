@@ -301,8 +301,7 @@ describe('the hybrid shell screen', () => {
     const logged = () => connectionLogStore.get('host-1').map((entry) => entry.message)
     const before = logged().length
     await renderScreen(readyState('session-one'))
-    expect(dependencies.reportShellFailure.mock.calls).toEqual([['document-load-failed']])
-    // Named in the exported log, not only as the generic failure it causes.
+    expect(dependencies.reportShellFailure.mock.calls).toEqual([['host-profile-unreadable']])
     expect(logged().slice(before)).toEqual(['Web shell: host profile unreadable'])
     warned.mockRestore()
   })

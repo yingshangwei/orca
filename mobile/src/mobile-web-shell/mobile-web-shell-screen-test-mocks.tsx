@@ -176,6 +176,7 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
         // down and rebuilt on every render of this screen — and every pending request settled with it.
         snapshot: SCREEN_SNAPSHOT,
         unreadable: dependencies.snapshotUnreadable,
+        retry: () => {},
         readStorage: () => ({ storage: {}, storageOversize: [] }),
         refreshStorage: () => {
           dependencies.storageRefreshes += 1

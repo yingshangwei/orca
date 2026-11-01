@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The one write path every mirrored key goes through, driven against the page's own store.
@@ -19,12 +19,16 @@ vi.mock('@react-native-async-storage/async-storage', async () => ({
 const { publishPageStorage } = await import('../mobile-web-shell/bridge/page-async-storage')
 const { pageStorageEntriesForInit, pageStorageKeysForRoute, PAGE_STORAGE_MAX_VALUE_CHARS } =
   await import('../mobile-web-shell/page-storage-keys')
-const { persistMirrored, readMirroredStorage } = await import('./mirrored-storage-keys')
+const { persistMirrored, readMirroredStorage, retainMirroredStorage } =
+  await import('./mirrored-storage-keys')
 
 const HOST_ID = 'host-1'
 const ROUTE = '/h/host-1/session/wt-1'
 const DOCK_WIDTH = 'orca:hostDockWidth'
 const OTHER_HOST_PIN = 'orca:pins:host-2'
+let releaseStorage = () => {}
+
+afterEach(() => releaseStorage())
 
 /** What the shell would put in the next `init` for this route, which is the mirror's one reader. */
 function initStorage(): Readonly<Record<string, string>> {
@@ -33,6 +37,7 @@ function initStorage(): Readonly<Record<string, string>> {
 }
 
 beforeEach(() => {
+  releaseStorage = retainMirroredStorage(pageStorageKeysForRoute(HOST_ID, ROUTE))
   publishPageStorage({ [DOCK_WIDTH]: '320' }, () => true, HOST_ID, ROUTE)
   // The app's side of the same key, which is what a refused write must leave standing.
   return persistMirrored(DOCK_WIDTH, '320')

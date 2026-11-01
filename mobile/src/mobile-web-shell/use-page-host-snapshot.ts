@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadHosts } from '../transport/host-store'
 import type { BridgeInitHost } from './bridge/bridge-envelope'
 import {
   hydrateMirroredStorage,
+  retainMirroredStorage,
   readMirroredKeyOrStore,
   readMirroredStorage,
   writeMirroredStorage
@@ -22,11 +23,9 @@ export type PageHostSnapshot = {
 export type PageHostSnapshotView = {
   /** Null while the profile read is in flight, and for a host that is not in the store. */
   snapshot: PageHostSnapshot | null
-  /**
-   * The profile read rejected. No host is ever built from it, so without this the session sits in
-   * `ready` with the view un-hidden, no host behind it, and the page re-posting `ready` forever.
-   */
+  // Report rejected native-store reads; no host can answer ready and nothing retries this read automatically.
   unreadable: boolean
+  retry: () => void
   /**
    * The allowlisted keys as the app currently holds them, for the host to put on every `init`.
    * Synchronous because `init` is; the app's own writers keep it current as they write.
@@ -58,25 +57,31 @@ export function usePageHostSnapshot(
 ): PageHostSnapshotView {
   const [snapshot, setSnapshot] = useState<PageHostSnapshot | null>(null)
   const [unreadable, setUnreadable] = useState(false)
+  const [readAttempt, setReadAttempt] = useState(0)
+  const releaseStorageRef = useRef<(() => void) | null>(null)
 
-  // The allowlist is the shell's, not the mirror's: what the page may be handed is named here on
-  // every read and every seat, so nothing else the app happens to mirror can reach it.
-  const refreshStorage = useCallback(
-    (): Promise<void> => hydrateMirroredStorage(pageStorageKeysForRoute(hostId, routePathname)),
-    [hostId, routePathname]
-  )
+  // Apply the shell allowlist on every read/refresh; unrelated mirrored app state must never cross.
+  const refreshStorage = useCallback(async (): Promise<void> => {
+    await hydrateMirroredStorage(pageStorageKeysForRoute(hostId, routePathname))
+  }, [hostId, routePathname])
 
   useEffect(() => {
     let stale = false
+    const keys = pageStorageKeysForRoute(hostId, routePathname)
+    // Retain the next route before releasing the last so shared host-wide keys stay mirrored across route changes.
+    const releaseStorage = retainMirroredStorage(keys)
+    releaseStorageRef.current?.()
+    releaseStorageRef.current = releaseStorage
     setSnapshot(null)
     setUnreadable(false)
-    // Both reads, not whichever answers first. The host is built from the snapshot and answers the
-    // page's pending `ready` the moment it exists, so a profile that beat the store would put the
-    // page's own keys behind an empty map: the list paints unpinned and the New Workspace drawer
-    // opens on no repo until something else reconciles it. Only the profile read can reject.
-    void Promise.all([refreshStorage(), loadHosts()]).then(
-      ([, hosts]) => {
+    // Wait for profile and storage together; a fast profile would otherwise build a host that primes empty preferences.
+    void Promise.all([hydrateMirroredStorage(keys), loadHosts()]).then(
+      ([storageLoaded, hosts]) => {
         if (stale) {
+          return
+        }
+        if (!storageLoaded) {
+          setUnreadable(true)
           return
         }
         const found = hosts.find((profile) => profile.id === hostId)
@@ -112,7 +117,15 @@ export function usePageHostSnapshot(
     return () => {
       stale = true
     }
-  }, [hostId, refreshStorage])
+  }, [hostId, routePathname, readAttempt])
+
+  useEffect(
+    () => () => {
+      releaseStorageRef.current?.()
+      releaseStorageRef.current = null
+    },
+    []
+  )
 
   const writeStorage = useCallback(
     (key: string, value: string | null): void => {
@@ -140,6 +153,7 @@ export function usePageHostSnapshot(
   return {
     snapshot,
     unreadable,
+    retry: useCallback(() => setReadAttempt((attempt) => attempt + 1), []),
     readStorage: useCallback(() => {
       // Bounded here rather than at the mirror, which holds no policy about the keys it is asked
       // for: a value over the cap would otherwise reach `init`, where the page's own schema

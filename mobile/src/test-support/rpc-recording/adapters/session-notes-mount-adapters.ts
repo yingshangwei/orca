@@ -123,7 +123,8 @@ export function sessionNotesMountAdapters(
             readMarkdownTab: () => {
               effect('read-markdown-tab', {})
               return Promise.resolve()
-            }
+            },
+            dictationLeaveHold: { holdsLeave: false, hold: () => false }
           })
         )
       })

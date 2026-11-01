@@ -36,13 +36,21 @@ export default function VoiceSettingsScreen({
   const insets = useSafeAreaInsets()
   const [setup, setSetup] = useState<MobileSpeechSetup | null>(null)
   const [loading, setLoading] = useState(true)
+  // A read clears only its own failure, so a background re-read cannot hide why a change failed.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<ModelBusyAction | null>(null)
   const requestEpoch = useRef(0)
+  const pendingChanges = useRef(0)
+  const rereadWhenSettled = useRef(false)
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false)
   const refresh = useCallback(async (): Promise<boolean | undefined> => {
     if (!operations) {
       return false
+    }
+    // A read sent during a change can predate it: the host clears a deleted model only after removing its files.
+    if (pendingChanges.current > 0) {
+      return undefined
     }
     const epoch = requestEpoch.current
     // Own the spinner from the read that clears it, so a retry after a failed load shows
@@ -55,10 +63,12 @@ export default function VoiceSettingsScreen({
         return undefined
       }
       setSetup(next)
-      setError(null)
+      setLoadError(null)
       return next.models.some(isModelInFlight)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load voice settings')
+      if (epoch === requestEpoch.current) {
+        setLoadError(err instanceof Error ? err.message : 'Failed to load voice settings')
+      }
       return undefined
     } finally {
       setLoading(false)
@@ -73,12 +83,39 @@ export default function VoiceSettingsScreen({
     intervalMs: POLL_INTERVAL_MS
   })
 
+  // Only the newest change's reply is applied; after a skipped reply or a failure, re-read once all changes settle.
+  const sendChange = useCallback(
+    async <T,>(
+      send: () => Promise<T>
+    ): Promise<
+      { ok: true; reply: T; latest: boolean } | { ok: false; error: unknown; latest: boolean }
+    > => {
+      const epoch = ++requestEpoch.current
+      pendingChanges.current += 1
+      try {
+        const reply = await send()
+        const latest = epoch === requestEpoch.current
+        rereadWhenSettled.current ||= !latest
+        return { ok: true, reply, latest }
+      } catch (error) {
+        rereadWhenSettled.current = true
+        return { ok: false, error, latest: epoch === requestEpoch.current }
+      } finally {
+        pendingChanges.current -= 1
+        if (pendingChanges.current === 0 && rereadWhenSettled.current) {
+          rereadWhenSettled.current = false
+          void refreshSetup()
+        }
+      }
+    },
+    [refreshSetup]
+  )
+
   const configure = useCallback(
     async (params: Parameters<VoiceSettingsOperations['configure']>[0]) => {
       if (!operations) {
         return
       }
-      requestEpoch.current += 1
       setError(null)
       // Optimistic flip so the control responds instantly; reconcile below.
       const { enabled, dictationMode } = params
@@ -91,14 +128,17 @@ export default function VoiceSettingsScreen({
             }
           : prev
       )
-      try {
-        setSetup(await operations.configure(params))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not update')
-        void refreshSetup()
+      const result = await sendChange(() => operations.configure(params))
+      if (!result.latest) {
+        return
+      }
+      if (result.ok) {
+        setSetup(result.reply)
+      } else {
+        setError(result.error instanceof Error ? result.error.message : 'Could not update')
       }
     },
-    [operations, refreshSetup]
+    [operations, sendChange]
   )
 
   const handleUseModel = useCallback(
@@ -106,19 +146,20 @@ export default function VoiceSettingsScreen({
       if (!operations) {
         return
       }
-      requestEpoch.current += 1
       setBusyAction({ modelId: model.id, type: 'select' })
       setError(null)
-      try {
-        setSetup(await operations.configure({ enabled: true, modelId: model.id }))
+      const result = await sendChange(() =>
+        operations.configure({ enabled: true, modelId: model.id })
+      )
+      if (!result.ok) {
+        setError(result.error instanceof Error ? result.error.message : 'Could not select model')
+      } else if (result.latest) {
+        setSetup(result.reply)
         setModelDrawerOpen(false)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not select model')
-      } finally {
-        setBusyAction(null)
       }
+      setBusyAction(null)
     },
-    [operations]
+    [operations, sendChange]
   )
 
   const handleDownload = useCallback(
@@ -147,21 +188,20 @@ export default function VoiceSettingsScreen({
         return
       }
       const deletedSelectedModel = setup?.selectedModelId === model.id
-      requestEpoch.current += 1
       setBusyAction({ modelId: model.id, type: 'delete' })
       setError(null)
-      try {
-        setSetup(await operations.delete(model.id))
+      const result = await sendChange(() => operations.delete(model.id))
+      if (!result.ok) {
+        setError(result.error instanceof Error ? result.error.message : 'Delete failed')
+      } else if (result.latest) {
+        setSetup(result.reply)
         if (deletedSelectedModel) {
           setModelDrawerOpen(false)
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Delete failed')
-      } finally {
-        setBusyAction(null)
       }
+      setBusyAction(null)
     },
-    [operations, setup?.selectedModelId]
+    [operations, sendChange, setup?.selectedModelId]
   )
 
   const enabled = setup?.enabled ?? false
@@ -192,7 +232,7 @@ export default function VoiceSettingsScreen({
         </View>
       ) : setup === null ? (
         <View style={[styles.section, styles.sectionTopGap]}>
-          <Text style={styles.errorText}>{error ?? 'Failed to load voice settings.'}</Text>
+          <Text style={styles.errorText}>{loadError ?? 'Failed to load voice settings.'}</Text>
         </View>
       ) : (
         <ScrollView
@@ -261,7 +301,7 @@ export default function VoiceSettingsScreen({
             </Pressable>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {(error ?? loadError) ? <Text style={styles.error}>{error ?? loadError}</Text> : null}
         </ScrollView>
       )}
 

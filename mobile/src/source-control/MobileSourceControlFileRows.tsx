@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
 import { ChevronRight, FileText, Minus, Plus, Trash2 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
-import { MOBILE_GIT_STATUS_LABELS } from './mobile-git-status'
+import { getUnstageablePaths, MOBILE_GIT_STATUS_LABELS } from './mobile-git-status'
 import { formatMobileBranchEntryMeta } from './mobile-branch-entry-format'
 import {
   statusColor,
@@ -82,9 +82,12 @@ export function makeRenderFileRow(state: RowState) {
               pressed && styles.iconButtonPressed
             ]}
             disabled={ioBusy}
-            onPress={() =>
-              void runGitAction(item.unstageActionId, 'git.unstage', { filePath: item.path })
-            }
+            onPress={() => {
+              const filePaths = getUnstageablePaths([item])
+              void (filePaths.length > 1
+                ? runGitAction(item.unstageActionId, 'git.bulkUnstage', { filePaths })
+                : runGitAction(item.unstageActionId, 'git.unstage', { filePath: item.path }))
+            }}
             hitSlop={8}
             accessibilityLabel={`Unstage ${item.path}`}
           >
