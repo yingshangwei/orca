@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -48,6 +48,10 @@ let folder: string
 
 beforeEach(() => {
   mocks.userData = mkdtempSync(join(tmpdir(), 'orca-partition-deps-'))
+  writeFileSync(
+    join(mocks.userData, 'orca-environments.json'),
+    JSON.stringify({ version: 1, environments: [] })
+  )
   folder = join(mocks.userData, 'Partitions', PARTITION.slice('persist:'.length))
   mkdirSync(folder, { recursive: true })
   configureBrowserRoutePartitionBindingsForOrcaProfile({
@@ -160,3 +164,32 @@ it('leaves a folder queued by one Orca profile for that profile to delete', asyn
 
   expect(existsSync(folder)).toBe(true)
 })
+
+it.each(['{', JSON.stringify({ version: 1, environments: [{ futureSchema: true }] })])(
+  'preserves orphan storage without opening sessions when saved identities are unreadable: %s',
+  async (savedEnvironments) => {
+    const store = currentBrowserRoutePartitionBindingStore()
+    rmSync(folder, { recursive: true, force: true })
+    store.set(
+      PARTITION,
+      'a'.repeat(64),
+      deriveLocalSshBrowserRoutePartitionStorageScope({
+        orcaProfileId: 'profile-a',
+        targetId: 'removed'
+      })
+    )
+    mkdirSync(folder, { recursive: true })
+    const marker = join(folder, 'retained-cookie-data')
+    writeFileSync(marker, 'retain this storage')
+    writeFileSync(join(mocks.userData, 'orca-environments.json'), savedEnvironments)
+
+    await expect(collectOrphanedBrowserRoutePartitionStorage(() => [])).rejects.toThrow()
+
+    expect(store.listBindings().has(PARTITION)).toBe(true)
+    expect(readFileSync(marker, 'utf8')).toBe('retain this storage')
+    expect(mocks.fromPartition).not.toHaveBeenCalled()
+    expect(mocks.clearPolicies).not.toHaveBeenCalled()
+    expect(mocks.clearStorage).not.toHaveBeenCalled()
+    expect(mocks.clearCache).not.toHaveBeenCalled()
+  }
+)
