@@ -10,7 +10,7 @@ type SilenceableRemoteView = { isSilent: () => boolean }
 export class RuntimeTerminalViewSubscribers {
   private readonly remoteCounts = new Map<string, { count: number }>()
   private readonly silenceableRemoteViews = new Map<string, Set<SilenceableRemoteView>>()
-  private readonly rawCounts = new Map<string, number>()
+  private readonly rawCounts = new Map<string, { count: number }>()
   private readonly providerAttaches = new Map<string, Promise<boolean>>()
   private readonly attachInventoryWaiters = new Set<string>()
   private readonly spawnPublishedPtys = new Set<string>()
@@ -63,16 +63,24 @@ export class RuntimeTerminalViewSubscribers {
   }
 
   registerRaw(ptyId: string): () => void {
-    this.rawCounts.set(ptyId, (this.rawCounts.get(ptyId) ?? 0) + 1)
+    const record = this.rawCounts.get(ptyId) ?? { count: 0 }
+    record.count += 1
+    this.rawCounts.set(ptyId, record)
     this.deps.notifyPresenceChanged(ptyId)
     return this.releaseOnce(() => {
-      this.decrement(this.rawCounts, ptyId)
+      if (this.rawCounts.get(ptyId) !== record) {
+        return
+      }
+      record.count -= 1
+      if (record.count === 0) {
+        this.rawCounts.delete(ptyId)
+      }
       this.deps.notifyPresenceChanged(ptyId)
     })
   }
 
   hasRaw(ptyId: string): boolean {
-    return (this.rawCounts.get(ptyId) ?? 0) > 0 || this.hasRemote(ptyId)
+    return (this.rawCounts.get(ptyId)?.count ?? 0) > 0 || this.hasRemote(ptyId)
   }
 
   hasRemote(ptyId: string): boolean {
@@ -151,15 +159,6 @@ export class RuntimeTerminalViewSubscribers {
         this.providerAttaches.delete(ptyId)
       }
     })
-  }
-
-  private decrement(counts: Map<string, number>, ptyId: string): void {
-    const next = (counts.get(ptyId) ?? 1) - 1
-    if (next <= 0) {
-      counts.delete(ptyId)
-    } else {
-      counts.set(ptyId, next)
-    }
   }
 
   private releaseOnce(release: () => void): () => void {

@@ -25,14 +25,17 @@ function fixture(
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: titleless identity only reads connection and optional agent evidence fields.
   let pty = { connected: true } as RuntimePtyWorktreeRecord
+  const touchSnapshot = vi.fn()
   const agent = new RuntimePtyForegroundAgent({
     getController: () => controller,
     getPty: () => pty,
-    touchSnapshot: vi.fn(),
+    touchSnapshot,
     finishDelayedSnapshot: vi.fn()
   })
   return {
     agent,
+    touchSnapshot,
+    getPty: () => pty,
     replacePty: () => {
       pty = { ...pty }
     }
@@ -40,6 +43,42 @@ function fixture(
 }
 
 describe('titleless foreground identity lifetime', () => {
+  it('does not let a retired foreground refresh write into a reused record or delete its successor', async () => {
+    const firstRead = deferred<string | null>()
+    const secondRead = deferred<string | null>()
+    const read = vi
+      .fn()
+      .mockReturnValueOnce(firstRead.promise)
+      .mockReturnValueOnce(secondRead.promise)
+    const { agent, getPty, touchSnapshot } = fixture(read)
+    const first = agent.refresh('same-pty')
+    agent.forget('same-pty')
+    const second = agent.refresh('same-pty')
+    expect(read).toHaveBeenCalledTimes(2)
+
+    firstRead.resolve('claude')
+    await expect(first).resolves.toBe(false)
+    expect(getPty().foregroundAgent).toBeUndefined()
+    expect(touchSnapshot).not.toHaveBeenCalled()
+    expect(agent.getPending('same-pty', 0)).toBe(second)
+
+    secondRead.resolve('codex')
+    await expect(second).resolves.toBe(true)
+    expect(getPty().foregroundAgent).toBe('codex')
+    expect(touchSnapshot).toHaveBeenCalledExactlyOnceWith('same-pty')
+  })
+
+  it('does not publish a foreground refresh after its PTY record is replaced', async () => {
+    const read = deferred<string | null>()
+    const { agent, replacePty, getPty, touchSnapshot } = fixture(() => read.promise)
+    const pending = agent.refresh('same-pty')
+    replacePty()
+    read.resolve('claude')
+    await expect(pending).resolves.toBe(false)
+    expect(getPty().foregroundAgent).toBeUndefined()
+    expect(touchSnapshot).not.toHaveBeenCalled()
+  })
+
   it.skipIf(process.platform === 'win32')(
     'cannot restore a retired generation from a late full scan',
     async () => {

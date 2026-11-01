@@ -233,6 +233,31 @@ describe('terminal multiplex paused-output drop notice', () => {
     expect(subscribers.hasRemote('pty-1')).toBe(false)
   })
 
+  it('keeps successor raw viewers when an old generation releases a reused pty id', () => {
+    const notifyPresenceChanged = vi.fn()
+    const subscribers = new RuntimeTerminalViewSubscribers({
+      notifyPresenceChanged,
+      hasMobileSubscribers: () => false,
+      isUnattachedLocalCandidate: () => false,
+      attachProvider: () => null
+    })
+    const releaseOld = subscribers.registerRaw('pty-1')
+    subscribers.clearSubscribers('pty-1')
+    const releaseFirst = subscribers.registerRaw('pty-1')
+    const releaseSecond = subscribers.registerRaw('pty-1')
+    notifyPresenceChanged.mockClear()
+    releaseOld()
+    releaseOld()
+    expect(notifyPresenceChanged).not.toHaveBeenCalled()
+    expect(subscribers.hasRaw('pty-1')).toBe(true)
+    releaseFirst()
+    releaseFirst()
+    expect(subscribers.hasRaw('pty-1')).toBe(true)
+    releaseSecond()
+    expect(subscribers.hasRaw('pty-1')).toBe(false)
+    expect(notifyPresenceChanged).toHaveBeenCalledTimes(2)
+  })
+
   it('does not inject a reply after a discarded query has expired', async () => {
     const answerYieldedTerminalQueries = vi.fn()
     const host = await subscribePausable(

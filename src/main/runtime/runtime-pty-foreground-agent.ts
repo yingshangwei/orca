@@ -87,7 +87,14 @@ export class RuntimePtyForegroundAgent {
     entry.promise = (async () => {
       while (true) {
         entry.startedAfterTitleObservation = entry.requestedAfterTitleObservation
-        const changed = await this.load(ptyId, entry.startedAfterTitleObservation)
+        const changed = await this.load(
+          ptyId,
+          entry.startedAfterTitleObservation,
+          () => this.refreshes.get(ptyId) === entry
+        )
+        if (this.refreshes.get(ptyId) !== entry) {
+          return false
+        }
         if (changed || entry.requestedAfterTitleObservation <= entry.startedAfterTitleObservation) {
           return changed
         }
@@ -155,20 +162,33 @@ export class RuntimePtyForegroundAgent {
   }
 
   forget(ptyId: string): void {
+    this.refreshes.delete(ptyId)
     this.delayedTitles.delete(ptyId)
     this.reads.delete(ptyId)
     this.identifies.delete(ptyId)
     this.confirmedByPtyId.delete(ptyId)
   }
 
-  private async load(ptyId: string, afterTitle: number): Promise<boolean> {
+  private async load(
+    ptyId: string,
+    afterTitle: number,
+    isCurrent: () => boolean
+  ): Promise<boolean> {
     const controller = this.deps.getController()
     const pty = this.deps.getPty(ptyId)
     if (!controller || !pty?.connected || pty.launchAgent) {
       return false
     }
     const result = await this.read(ptyId, afterTitle)
-    if (!result || result.controller !== this.deps.getController() || !result.available) {
+    if (
+      !result ||
+      result.controller !== this.deps.getController() ||
+      !result.available ||
+      !isCurrent() ||
+      this.deps.getPty(ptyId) !== pty ||
+      !pty.connected ||
+      pty.launchAgent
+    ) {
       return false
     }
     const agent = result.process ? (recognizeAgentProcess(result.process)?.agent ?? null) : null
