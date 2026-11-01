@@ -95,10 +95,9 @@ const MARKDOWN_BASE = cn(
   // Why: bots use sub/sup as small-print, and the browser's 75% compounds when nested
   // (13px -> 7.3px). An absolute size stops the compounding at the caption tier.
   '[&_sub]:text-[11px] [&_sup]:text-[11px]',
-  // Why: a badge wrapped in <sub><sub> inherits both -0.25em shifts (5.5px of sag).
-  // Only neutralize wrappers holding an image; real text subscripts keep their offset.
-  '[&_sub:has(img)]:bottom-0 [&_sub:has(img)]:align-middle',
-  '[&_sup:has(img)]:top-0 [&_sup:has(img)]:align-middle',
+  // Nested sub wrappers compound image/icon offsets; preserve real subscripts.
+  '[&_sub:has(img,svg)]:bottom-0 [&_sub:has(img,svg)]:align-middle',
+  '[&_sup:has(img,svg)]:top-0 [&_sup:has(img,svg)]:align-middle',
   '[&_pre]:max-h-none [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap',
   '[&_table]:w-full [&_table]:max-w-full'
 )

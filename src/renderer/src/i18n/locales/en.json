@@ -2384,6 +2384,7 @@
       },
       "TaskPage": {
         "513cddfa7a": "Verifying…",
+        "gitlabLoadFailed": "Could not load GitLab work items. Refresh to try again.",
         "ff69a30681": "Cancel",
         "2abe22ef76": "Your token is encrypted via the OS keychain and stored locally.",
         "246c2b3dd3": "Atlassian account settings",

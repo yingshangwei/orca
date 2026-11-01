@@ -247,7 +247,7 @@ export function createCompactCommentMarkdownComponents(
         </table>
       </div>
     )
-  }
+  } satisfies Components
 }
 
 export function createDocumentCommentMarkdownComponents(

@@ -60,6 +60,8 @@ export type EnqueueTargetedCommandOptions = {
   ensureSession?: boolean
   // Why: text-mutating commands must never fall back to the global tab (may be a worktree the user is viewing).
   requireScopedTarget?: boolean
+  // Element arguments that may be snapshot refs.
+  elements?: readonly (string | undefined)[]
 }
 
 export type AgentBrowserBridgeOptions = {

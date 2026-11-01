@@ -93,7 +93,11 @@ export function stripAgentBrowserTargetArgs(args: string[]): string[] {
 
 // Why: agent-browser returns generic errors for stale/unknown refs; map to a specific code so agents can detect and re-snapshot.
 export function classifyErrorCode(message: string): string {
-  if (/unknown ref|ref not found|element not found: @e/i.test(message)) {
+  if (
+    /unknown ref|stale ref|ref not found|element not found: @e|could not locate element with role=/i.test(
+      message
+    )
+  ) {
     return 'browser_stale_ref'
   }
   return 'browser_error'

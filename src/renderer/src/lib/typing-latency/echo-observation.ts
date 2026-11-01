@@ -3,7 +3,6 @@ import type { TypingInputSource } from './input-events'
 export type EchoCandidate = {
   t0: number
   source: TypingInputSource
-  text: string
   dispatchedAt: number | null
   status:
     | 'undispatched'
@@ -18,12 +17,8 @@ export type RecordedKeystroke = {
   unmatched: number
 }
 
-export function createEchoCandidate(
-  t0: number,
-  source: TypingInputSource,
-  text: string
-): EchoCandidate {
-  return { t0, source, text, dispatchedAt: null, status: 'undispatched' }
+export function createEchoCandidate(t0: number, source: TypingInputSource): EchoCandidate {
+  return { t0, source, dispatchedAt: null, status: 'undispatched' }
 }
 
 export type EchoBatch = {
@@ -39,7 +34,6 @@ export type EchoSourceCounts = Record<TypingInputSource, number>
 export type ExactEchoSample = {
   attribution: 'single-input'
   source: TypingInputSource
-  text: string
   inputToDispatchMs: number
   dispatchToParseMs: number
   parseToPaintMs: number
@@ -85,7 +79,6 @@ export function createEchoObservation(batch: EchoBatch, paintedAt: number): Echo
     return {
       attribution: 'single-input',
       source: candidate.source,
-      text: candidate.text,
       inputToDispatchMs: Math.max(0, dispatchedAt - candidate.t0),
       dispatchToParseMs: Math.max(0, parsedAt - dispatchedAt),
       parseToPaintMs: Math.max(0, paintedAt - parsedAt),

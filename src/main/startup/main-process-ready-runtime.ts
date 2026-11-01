@@ -70,7 +70,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     executeRpc: async (method, params, signal) => {
       const response = await browserClientAutomationDispatcher.dispatch(
         { id: randomUUID(), authToken: 'local-browser-client-automation', method, params },
-        { signal }
+        { signal, caller: { kind: 'local-cli' } }
       )
       if (!response.ok) {
         throw new BrowserClientPageCommandError(response.error.code)

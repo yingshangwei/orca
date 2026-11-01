@@ -133,6 +133,9 @@ describe('getPullRequestDraftContext error handling', () => {
       if (args[0] === 'remote') {
         return { stdout: '--upload-pack=x\n' }
       }
+      if (args[0] === 'for-each-ref') {
+        return { stdout: '' }
+      }
       if (args[0] === 'show-ref' && args.includes('--verify')) {
         throw Object.assign(new Error('missing exact ref'), { code: 1 })
       }
@@ -162,6 +165,9 @@ describe('getPullRequestDraftContext error handling', () => {
     const execGit = vi.fn<GitExec>(async (args) => {
       if (args[0] === 'remote') {
         return { stdout: 'origin\n' }
+      }
+      if (args[0] === 'for-each-ref') {
+        return { stdout: '' }
       }
       if (args[0] === 'show-ref') {
         throw Object.assign(new Error('missing exact ref'), { code: 1 })
@@ -195,6 +201,9 @@ describe('getPullRequestDraftContext error handling', () => {
     const execGit = vi.fn<GitExec>(async (args) => {
       if (args[0] === 'remote') {
         return { stdout: 'fork\n' }
+      }
+      if (args[0] === 'for-each-ref') {
+        return { stdout: '' }
       }
       if (args[0] === 'show-ref' && args.some((arg) => arg.startsWith('refs/remotes/'))) {
         throw Object.assign(new Error('missing exact ref'), { code: 1 })

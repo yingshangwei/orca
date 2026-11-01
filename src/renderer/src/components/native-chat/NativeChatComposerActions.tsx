@@ -1,7 +1,9 @@
+import { memo } from 'react'
 import { ArrowUp, CircleAlert, Mic, Plus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
+import { useUiLanguageRevision } from '@/i18n/use-ui-language-revision'
 import type {
   SessionOptionDescriptor,
   SessionOptionsSurface
@@ -44,7 +46,7 @@ export type NativeChatComposerActionsProps = {
   agent?: string
 }
 
-export function NativeChatComposerActions({
+export const NativeChatComposerActions = memo(function NativeChatComposerActions({
   attachDisabled,
   dictationDisabled,
   sendDisabled,
@@ -68,6 +70,7 @@ export function NativeChatComposerActions({
   focusComposer,
   agent
 }: NativeChatComposerActionsProps): React.JSX.Element {
+  useUiLanguageRevision()
   const stops = isWorking
   const handleCriticalAction = (event: React.MouseEvent<HTMLButtonElement>): void => {
     // A double-click commonly lands after the first send has started and the button has
@@ -208,7 +211,7 @@ export function NativeChatComposerActions({
       </div>
     </div>
   )
-}
+})
 
 /** Shown only after storage refused the draft, so it never appears on a normal save. */
 function DraftNotSavedIcon({ shown }: { shown: boolean }): React.JSX.Element | null {

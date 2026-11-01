@@ -789,17 +789,17 @@ describe('worktree git-common narrow watch (local native platforms)', () => {
         { timeout: 1_000 }
       )
       const stalePendingSubscription = narrowSubscriptions()[1]
+      const beforeReplacement = received.length
       await replaceWorktreesRoot(commonDir, worktreesDir, retainedEntry)
       await vi.advanceTimersByTimeAsync(POLL_MS * RECONCILIATION_TICKS * 4)
       // Reconciliation's snapshot is real filesystem work, so advancing the fake
       // clock schedules the second replacement's tick but does not settle it.
       await vi.waitFor(
         () => {
-          expect(
-            received
-              .flat()
-              .filter((event) => event.type === 'create' && event.path === worktreesDir)
-          ).toHaveLength(2)
+          expect(received.slice(beforeReplacement).flat()).toContainEqual({
+            type: 'delete',
+            path: worktreesDir
+          })
         },
         { timeout: 2_000 }
       )

@@ -179,10 +179,10 @@ describe('run-electron-vite-dev web client prepare', () => {
         }
       })
 
+      const trackedPids = trackPidFile(pidFile)
+
       expect(existsSync(viteFile)).toBe(false)
       expect(stderr).toContain('Web client bundle missing; skipping pairing web build.')
-
-      const trackedPids = trackPidFile(pidFile)
 
       await stopWrapperAndTrackedPids(wrapper, trackedPids)
     } finally {
@@ -229,9 +229,9 @@ describe('run-electron-vite-dev web client prepare', () => {
         }
       })
 
-      expect(readFileSync(viteFile, 'utf8')).toContain('build')
-
       const trackedPids = trackPidFile(pidFile)
+
+      expect(readFileSync(viteFile, 'utf8')).toContain('build')
 
       await stopWrapperAndTrackedPids(wrapper, trackedPids)
     } finally {

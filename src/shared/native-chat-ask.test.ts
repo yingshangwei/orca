@@ -1,11 +1,14 @@
+import { projectStructuredItemToNativeChat } from './structured-agent-session-projection'
 import { describe, expect, it } from 'vitest'
 import {
   NATIVE_CHAT_INTERRUPTED_STATUS_TEXT,
   type NativeChatBlock,
   type NativeChatMessage
 } from './native-chat-types'
+import { readAgentMessageSource, type AgentMessageSource } from './agent-session-message-source'
 import {
   extractPendingAsk,
+  extractPendingMessageReplyAsk,
   nativeChatAskDismissKey,
   parseAskFromStatus,
   resolveNativeChatAsk
@@ -240,7 +243,7 @@ describe('async questions', () => {
     type: 'tool-call',
     name: 'request_user_input_async',
     callId,
-    input: JSON.stringify({ questions: [{ title }] })
+    input: JSON.stringify({ questions: [{ title, options: ['Yes', 'No'] }] })
   })
   const userRow = (id: string, flags: Partial<NativeChatMessage> = {}): NativeChatMessage => ({
     ...message(id, [{ type: 'text', text: 'hi' }]),
@@ -258,11 +261,151 @@ describe('async questions', () => {
     ])
   })
 
-  it('stays open until a user message reaches the agent', () => {
+  it.each(['queued', 'unsent', 'stoppedBeforeStart', 'awaitsRetry', 'sentWhileStopping'] as const)(
+    'stays open while a human row is marked %s',
+    (flag) => {
+      const asked = message('a', [asyncCall('call-a', 'A?'), result()])
+      expect(titles([asked, userRow('waiting', { [flag]: true })])).toEqual(['A?'])
+      expect(extractPendingAsk([asked, userRow('sent')])).toBeNull()
+    }
+  )
+
+  it('keeps async controls across agent notices and replay until human input or interruption', () => {
     const asked = message('a', [asyncCall('call-a', 'A?'), result()])
-    expect(titles([asked, userRow('q', { queued: true }), userRow('u', { unsent: true })])).toEqual(
-      ['A?']
-    )
-    expect(extractPendingAsk([asked, userRow('sent')])).toBeNull()
+    const from: AgentMessageSource = {
+      kind: 'agent',
+      senders: [
+        {
+          party: { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null },
+          name: 'Coder'
+        }
+      ],
+      orchestration: {
+        message: 'mail-notice',
+        mailbox: 'term_b',
+        dispatchId: null,
+        messages: [{ messageId: 'mail-1', runId: 'run-1', from: 'term_a' }]
+      }
+    }
+    for (const source of [
+      from,
+      { ...from, orchestration: null },
+      { ...from, senders: [], orchestration: { message: 'future-notice' } }
+    ]) {
+      const notice = userRow('notice', {
+        from: readAgentMessageSource(source),
+        blocks: [{ type: 'text', text: 'You have 1 orchestration message.' }]
+      })
+      expect(notice.from?.kind).toBe('agent')
+      const history = [asked, notice]
+      for (const extract of [extractPendingAsk, extractPendingMessageReplyAsk]) {
+        const expected = extract([asked])
+        expect(expected?.questions[0]?.options).toEqual([{ label: 'Yes' }, { label: 'No' }])
+        expect(extract(history)).toEqual(expected)
+        expect(extract([...history])).toEqual(expected)
+        expect(extract([...history, userRow('human-answer')])).toBeNull()
+        expect(extract([...history, interrupted('stop')])).toBeNull()
+      }
+    }
+  })
+})
+
+describe('blocking abandonment boundary', () => {
+  // Mixed-source scanner contract: Claude-shaped calls/results plus projected journal notices, not a live capture.
+  const notice = projectStructuredItemToNativeChat({
+    itemId: 'notice',
+    sequence: 2,
+    revision: 1,
+    observedAt: 2,
+    body: {
+      kind: 'message',
+      role: 'user',
+      blocks: [{ type: 'text', text: 'You have 1 orchestration message.' }],
+      from: {
+        kind: 'agent',
+        senders: [],
+        orchestration: {
+          message: 'mail-notice',
+          mailbox: 'term_b',
+          dispatchId: null,
+          messages: [{ messageId: 'mail-1', runId: 'run-1', from: 'term_a' }]
+        }
+      }
+    }
+  })!
+  const boundaries = [
+    notice,
+    {
+      ...notice,
+      from: readAgentMessageSource({ kind: 'agent', senders: null, orchestration: null })
+    },
+    {
+      ...notice,
+      from: readAgentMessageSource({
+        kind: 'agent',
+        senders: [],
+        orchestration: { message: 'future-notice' }
+      })
+    },
+    ...(
+      ['queued', 'unsent', 'stoppedBeforeStart', 'awaitsRetry', 'sentWhileStopping'] as const
+    ).map((flag) => ({ ...notice, from: undefined, [flag]: true }))
+  ]
+  it.each(boundaries)('preserves blocking FIFO across non-answer row %#', (boundary) => {
+    const rows = [
+      message('ordinary', [call('Bash', { command: 'ls' })]),
+      message('ask', [call('AskUserQuestion', QUESTIONS_INPUT)]),
+      boundary,
+      toolTurn('ordinary-result'),
+      toolTurn('ask-result')
+    ]
+    for (let count = 2; count < rows.length; count++) {
+      expect(extractPendingAsk(rows.slice(0, count))?.questions[0]?.question).toBe('Deploy?')
+    }
+    expect(extractPendingAsk(rows)).toBeNull()
+    expect(
+      extractPendingAsk([rows[0]!, rows[1]!, userTurn('human', 'never mind, do this instead')])
+    ).toBeNull()
+  })
+
+  // Normalized source-shaped inputs: OMP toolCall.arguments and OpenCode pending state.input; no decoder imports.
+  // Grok question definition copied from src/main/acp/fixtures/s5-plan-approved.jsonl:6 (recorded ACP, not terminal delivery).
+  it.each([
+    ['OMP/OpenCode canonical shape', 'ask', QUESTIONS_INPUT],
+    [
+      'Grok',
+      'ask_user_question',
+      {
+        questions: [
+          {
+            question: 'Which test approach do you want for the subtract function?',
+            options: [
+              {
+                label: 'node:test (Recommended)',
+                description:
+                  "A math.test.js file using Node's built-in test runner. Run it with node --test. No new dependencies or package.json."
+              },
+              {
+                label: 'Plain assert script',
+                description:
+                  'A small math.test.js that uses node:assert and exits non-zero on failure. Run it with node math.test.js. No test framework.'
+              },
+              {
+                label: 'Add a package.json and a test script',
+                description:
+                  'Add package.json with a test script that runs the same Node built-in tests, so npm test works.'
+              }
+            ],
+            multiSelect: null
+          }
+        ]
+      }
+    ]
+  ])('retains %s normalized blocking input across a projected notice', (_agent, name, input) => {
+    const asked = message('ask', [call(String(name), input)])
+    const pending = extractPendingAsk([asked])
+    expect(pending).not.toBeNull()
+    expect(extractPendingAsk([asked, notice])).toEqual(pending)
+    expect(extractPendingAsk([asked, notice, toolTurn('answered')])).toBeNull()
   })
 })

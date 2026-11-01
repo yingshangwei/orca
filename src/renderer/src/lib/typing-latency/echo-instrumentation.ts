@@ -71,11 +71,10 @@ export type InstrumentedPane = {
 export function recordKeystroke(
   entry: InstrumentedPane,
   now: number,
-  source: KeystrokeSource,
-  text: string = ''
+  source: KeystrokeSource
 ): RecordedKeystroke {
   const dropped = drainTimedOutEchoCandidates(entry, now)
-  const candidate = createEchoCandidate(now, source, text)
+  const candidate = createEchoCandidate(now, source)
   if (entry.pendingCount >= MAX_PENDING_ECHO_CANDIDATES) {
     trackIgnoredEchoDispatch(entry, candidate, now)
     return { candidate, unmatched: dropped + 1 }

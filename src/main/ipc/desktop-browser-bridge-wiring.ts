@@ -168,7 +168,10 @@ export function installDesktopBrowserBridge(options: {
           worktreeIdForPage: (browserPageId) =>
             browserManager.getWorktreeIdForTab(browserPageId) ?? null,
           dispatch: (method, params) =>
-            getDispatcher().dispatch({ id: randomUUID(), authToken: '', method, params }),
+            getDispatcher().dispatch(
+              { id: randomUUID(), authToken: '', method, params },
+              { caller: { kind: 'local-cli' } }
+            ),
           audit: (entry) => log(`audit ${JSON.stringify(entry)}`)
         },
         signal,

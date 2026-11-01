@@ -244,7 +244,7 @@ function startProbe(): string {
       return undefined
     }
     const recordedAt = performance.now()
-    const recorded = recordKeystroke(target, recordedAt, signal.source, signal.text)
+    const recorded = recordKeystroke(target, recordedAt, signal.source)
     state.unmatchedKeystrokes += recorded.unmatched
     if (signal.source === 'ime') {
       return {

@@ -108,17 +108,27 @@ export abstract class AgentBrowserBridgeUtilityCommands extends AgentBrowserBrid
     worktreeId?: string,
     browserPageId?: string
   ): Promise<unknown> {
-    return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      return await this.execAgentBrowser(sessionName, ['download', selector, path])
-    })
+    return this.enqueueTargetedCommand(
+      worktreeId,
+      browserPageId,
+      async (sessionName) => {
+        return await this.execAgentBrowser(sessionName, ['download', selector, path])
+      },
+      { elements: [selector] }
+    )
   }
 
   // ── Highlight command ──
 
   async highlight(selector: string, worktreeId?: string, browserPageId?: string): Promise<unknown> {
-    return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      return await this.execAgentBrowser(sessionName, ['highlight', selector])
-    })
+    return this.enqueueTargetedCommand(
+      worktreeId,
+      browserPageId,
+      async (sessionName) => {
+        return await this.execAgentBrowser(sessionName, ['highlight', selector])
+      },
+      { elements: [selector] }
+    )
   }
 
   async back(worktreeId?: string, browserPageId?: string): Promise<BrowserBackResult> {

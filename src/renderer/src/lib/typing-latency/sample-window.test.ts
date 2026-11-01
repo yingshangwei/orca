@@ -9,7 +9,6 @@ describe('typing latency sample window', () => {
       appendExactLatencySample(samples, {
         attribution: 'single-input',
         source: 'direct',
-        text: 'a',
         inputToDispatchMs: value,
         dispatchToParseMs: value,
         parseToPaintMs: value,

@@ -10,7 +10,6 @@ describe('createInputSourceTally', () => {
     tally.addObservation({
       attribution: 'single-input',
       source: 'direct',
-      text: 'a',
       inputToDispatchMs: 1,
       dispatchToParseMs: 3,
       parseToPaintMs: 4,
@@ -57,7 +56,6 @@ describe('createInputSourceTally', () => {
     tally.addObservation({
       attribution: 'single-input',
       source: 'ime',
-      text: '한',
       inputToDispatchMs: 2,
       dispatchToParseMs: 7,
       parseToPaintMs: 3,
