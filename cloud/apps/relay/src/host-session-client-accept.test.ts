@@ -26,6 +26,8 @@ class FakeSocket extends EventEmitter {
   readonly CLOSED = 3
   readyState = this.OPEN
   readonly send = vi.fn()
+  readonly pause = vi.fn()
+  readonly resume = vi.fn()
   readonly close = vi.fn((code?: number, reason?: string) => {
     this.readyState = this.CLOSED
     this.emit('close', code, Buffer.from(reason ?? ''))
