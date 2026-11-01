@@ -148,6 +148,10 @@ import {
 } from '../worktree-name-retirement'
 import { createRetiredNameLookup } from '../../shared/worktree/retired-name-registry'
 import { findPendingWorktreeRemovalConflict } from '../worktree-removal-table'
+import {
+  openWorktreeCreatePathClaim,
+  type WorktreeCreatePathClaim
+} from '../worktree-create-in-flight'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
   hostWorktreeTarget,
@@ -1004,6 +1008,7 @@ export function createLocalWorktree(
   // create that fails after that point — include copy, push target, terminal startup — must still
   // arm the replacement. Fires exactly once, after startup on the success path.
   const rearm: PreparationRearmHolder = { fire: () => {} }
+  const pathClaim = openWorktreeCreatePathClaim()
   return worktreeCreateGit
     .run(() =>
       performLocalWorktreeCreate(
@@ -1014,10 +1019,12 @@ export function createLocalWorktree(
         rearm,
         timing,
         runtime,
+        pathClaim,
         onWorkspaceCreated
       )
     )
     .finally(() => {
+      pathClaim.release()
       // Closes the create's measured window first, so its own re-arm is not counted against it.
       timing.finish()
       rearm.fire()
@@ -1032,6 +1039,7 @@ async function performLocalWorktreeCreate(
   rearm: PreparationRearmHolder,
   timing: WorktreeCreateTimingRecorder,
   runtime: OrcaRuntimeService,
+  pathClaim: WorktreeCreatePathClaim,
   onWorkspaceCreated?: (worktreeId: string) => void
 ): Promise<CreateWorktreeResult> {
   const settings = store.getSettings()
@@ -1347,7 +1355,8 @@ async function performLocalWorktreeCreate(
       // the path until its removal settles; take the next name instead of racing it.
       if (
         existsSync(worktreePath) ||
-        findPendingWorktreeRemovalConflict(repo.path, { worktreePath })
+        findPendingWorktreeRemovalConflict(repo.path, { worktreePath }) ||
+        !pathClaim.claim(worktreePath)
       ) {
         continue
       }

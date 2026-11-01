@@ -321,6 +321,7 @@ export function createRemoteRuntimePtyTransport(
   }
 
   const recoveryInputHold = createRemoteRuntimeRecoveryInputHold({ holdBeforeFirstConnect: true })
+  let isFirstConnect = true
   let heldInputRelease: {
     stream: RemoteRuntimeMultiplexedTerminal
     waitingForValidation: boolean
@@ -3256,11 +3257,29 @@ export function createRemoteRuntimePtyTransport(
   async function connectHoldingRestoredInput(
     options: Parameters<PtyTransport['connect']>[0]
   ): Promise<PtyConnectResult | undefined> {
-    const expected = recoveryInputHold.expect(restoredInputEndpoint(options.sessionId))
+    const newTerminal =
+      !options.sessionId && isFirstConnect && opts.keepTypeAheadForNewTerminal?.('connect') === true
+    isFirstConnect = false
+    const expected = newTerminal
+      ? recoveryInputHold.expectNewTerminal()
+      : recoveryInputHold.expect(restoredInputEndpoint(options.sessionId))
+    let result: PtyConnectResult | undefined
     try {
-      return await connectPane(options)
+      result = await connectPane(options)
+      return result
     } finally {
-      recoveryInputHold.settleExpectation(expected, handle !== null && !destroyed)
+      const boundHandle = handle !== null && !destroyed ? handle : null
+      const createdFresh = Boolean(result && !result.isReattach && !result.coldRestore)
+      recoveryInputHold.settleExpectation(
+        expected,
+        boundHandle !== null,
+        boundHandle &&
+          createdFresh &&
+          opts.releasePreconnectInput?.() !== false &&
+          opts.keepTypeAheadForNewTerminal?.('bind') === true
+          ? heldInputEndpoint(boundHandle)
+          : null
+      )
       if (handle && recoveryInputHold.isHolding()) {
         releaseHeldInput()
       }
@@ -3507,6 +3526,9 @@ export function createRemoteRuntimePtyTransport(
       }
 
       return {
+        ...(createdTerminal.isReattach !== true && createdTerminal.coldRestore
+          ? { coldRestore: createdTerminal.coldRestore }
+          : {}),
         id: remotePtyId,
         replay: '',
         ...(authoritativePtyIncarnationId ? { incarnationId: authoritativePtyIncarnationId } : {}),

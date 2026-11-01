@@ -1,4 +1,6 @@
 import { useAppStore } from '@/store'
+import { terminalShowsReplayedHistory } from '../replayed-history-terminals'
+import { isWebTerminalSurfaceTabId } from '../../../../../shared/terminal-surface-id'
 import { shouldRetainDisposedPaneSpawn } from './disposed-spawn-retention'
 import { findColdRestoreResumeSource } from './cold-restore-resume-startup'
 import { mainStartsPane } from './main-starts-pane'
@@ -30,17 +32,69 @@ function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
   )
 }
 
+/** New typing must not be promoted to a shell when this pane already shows an older session. */
+function paneMayShowOldTerminal(session: ConnectPanePtySession, atBind: boolean): boolean {
+  if (
+    isWebTerminalSurfaceTabId(session.deps.tabId) ||
+    terminalShowsReplayedHistory(session.pane.terminal)
+  ) {
+    return true
+  }
+  if (atBind) {
+    return false
+  }
+  const state = useAppStore.getState()
+  return Boolean(
+    session.restoredPtyIdForTransport ||
+    state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[session.pane.leafId] ||
+    terminalShowsOutput(session.pane.terminal)
+  )
+}
+
+function terminalShowsOutput(terminal: ConnectPanePtySession['pane']['terminal']): boolean {
+  const buffer = terminal.buffer?.active
+  if (!buffer) {
+    return false
+  }
+  if (buffer.baseY > 0) {
+    return true
+  }
+  for (let row = 0; row < buffer.length; row += 1) {
+    if (buffer.getLine(row)?.translateToString(true)) {
+      return true
+    }
+  }
+  return false
+}
+
+function keepsNewTerminalTypeAhead(session: ConnectPanePtySession, atBind: boolean): boolean {
+  const state = useAppStore.getState()
+  return (
+    !session.paneStartup &&
+    !session.getSleepingRecordForPane(state) &&
+    !findColdRestoreResumeSource(session, state) &&
+    !paneMayShowOldTerminal(session, atBind)
+  )
+}
+
 /** The spawn/attach options a pane hands its PTY transport. */
 export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPtyTransportOptions {
+  const holdsInput = holdsInputUntilConnect(session)
   return {
     terminalKittyKeyboardProtocol:
       session.pane.terminal.options.vtExtensions?.kittyKeyboard === true,
     cwd: session.deps.cwd,
-    ...(holdsInputUntilConnect(session)
+    ...(holdsInput
       ? {
           bufferInputUntilConnect: true,
           // Why: a resume source can land between mount and bind; keys must not flush ahead of it.
           releasePreconnectInput: () => holdsInputUntilConnect(session)
+        }
+      : {}),
+    ...(holdsInput
+      ? {
+          keepTypeAheadForNewTerminal: (phase: 'connect' | 'bind') =>
+            keepsNewTerminalTypeAhead(session, phase === 'bind')
         }
       : {}),
     ...(session.deps.preconnectInput?.length

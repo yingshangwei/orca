@@ -25,7 +25,11 @@ import {
 } from './runtime-local-git-worktree-create'
 import { resolveRuntimeLocalWorktreeCreateBase } from './runtime-local-worktree-create-base'
 import { materializeRuntimeLocalWorktree } from './runtime-local-worktree-materialization'
-import { holdInFlightWorktreeCreate } from '../worktree-create-in-flight'
+import {
+  holdInFlightWorktreeCreate,
+  openWorktreeCreatePathClaim,
+  type WorktreeCreatePathClaim
+} from '../worktree-create-in-flight'
 import { resolveRuntimeSetupDecision } from './runtime-local-worktree-setup'
 import { WorktreeCreateSetupChoiceRefusedError } from './worktree-create-setup-choice-refusal'
 import type { PreparationRearmHolder } from '../worktree-create-preparation'
@@ -62,10 +66,16 @@ type RuntimeLocalWorktreeCreateArgs<T> = {
 }
 
 export function createRuntimeLocalManagedWorktree<T>(args: RuntimeLocalWorktreeCreateArgs<T>) {
-  return worktreeCreateGit.run(() => performRuntimeLocalWorktreeCreate(args))
+  const pathClaim = openWorktreeCreatePathClaim()
+  return worktreeCreateGit
+    .run(() => performRuntimeLocalWorktreeCreate(args, pathClaim))
+    .finally(pathClaim.release)
 }
 
-async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCreateArgs<T>) {
+async function performRuntimeLocalWorktreeCreate<T>(
+  args: RuntimeLocalWorktreeCreateArgs<T>,
+  pathClaim: WorktreeCreatePathClaim
+) {
   const { request, repo, store } = args
   const hostSettings = store.getSettings()
   // Why: the layout choice must reach name retirement and metadata too, not just the path.
@@ -158,7 +168,8 @@ async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCr
       store,
       baseBranch: base.baseBranch,
       localWorktreeGitOptions: worktreeGitOptions,
-      hostedReviewExecutionContext: args.hostedReviewExecutionContext
+      hostedReviewExecutionContext: args.hostedReviewExecutionContext,
+      pathClaim
     })
   )
   const releaseInFlightHold = await holdInFlightWorktreeCreate(

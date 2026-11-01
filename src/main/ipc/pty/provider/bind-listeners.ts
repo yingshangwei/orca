@@ -1,4 +1,3 @@
-import { LocalPtyProvider } from '../../../providers/local-pty-provider'
 import { isCurrentPtyExit, ptyOwnership } from './ownership-state'
 import {
   localBackgroundStreamUnsub,
@@ -68,13 +67,12 @@ export function bindProviderListeners(session: PtyIpcSession): void {
     }) ?? null
   )
 
-  // Why: daemon providers lack configure().onData, so feed the runtime here or their tail buffer (terminal.read, agent-detection, mobile stream) stays empty.
-  const isLocalProvider = localProvider instanceof LocalPtyProvider
+  // Feed the runtime unless the emitting provider already did via configure().
 
   setLocalDataUnsub(
     localProvider.onData((payload) => {
       const rawLength = payload.sequenceChars ?? payload.data.length
-      const outputSeq = isLocalProvider
+      const outputSeq = payload.runtimeFed
         ? session.runtime?.getPtyOutputSequence(payload.id)
         : session.runtime?.onPtyData(
             payload.id,
@@ -101,7 +99,7 @@ export function bindProviderListeners(session: PtyIpcSession): void {
           )
         : undefined
       try {
-        if (!isLocalProvider) {
+        if (!payload.runtimeFed) {
           // Read before the clean-up below forgets it.
           const viewShown = ORCA_LAYOUT_OWNER_IS_MAIN && visibleRendererPtys.has(payload.id)
           clearProviderPtyState(payload.id)

@@ -95,6 +95,9 @@ export abstract class RateLimitServicePolling extends RateLimitServiceFetchQueue
         return { kind: 'full' }
       }
       if (limits.status === 'ok' || limits.status === 'unavailable') {
+        if (this.shouldSkipAutomatedFetch(provider, limits)) {
+          continue
+        }
         if (now - limits.updatedAt >= MIN_REFETCH_MS) {
           return { kind: 'full' }
         }

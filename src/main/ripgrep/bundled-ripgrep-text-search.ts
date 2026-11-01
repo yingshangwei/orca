@@ -30,6 +30,8 @@ import { stopBundledRipgrep } from './bundled-ripgrep-stop'
 // skips unfollowed anyway. One of them must not fail or truncate the whole search.
 const WINDOWS_UNOPENABLE_PATH_OS_ERRORS: ReadonlySet<number> = new Set([1, 2, 1920])
 
+function ignoreCompletedSearchTerminationError(): void {}
+
 export function runBundledRipgrepTextSearch({
   options,
   rootPath,
@@ -56,7 +58,7 @@ export function runBundledRipgrepTextSearch({
     const rgArgs = buildRgArgs(options.query, '.', options)
 
     const acc = createAccumulator()
-    const lines = new SearchSubprocessLineAccumulator()
+    const lines = new SearchSubprocessLineAccumulator(undefined, 'discard')
     const diagnostics = new RipgrepSearchDiagnostics(
       process.platform === 'win32' && !wslDistroForOutput
         ? WINDOWS_UNOPENABLE_PATH_OS_ERRORS
@@ -112,10 +114,7 @@ export function runBundledRipgrepTextSearch({
     }
     const rejectUnavailable = (): void => finish(Promise.reject(bundledRipgrepUnavailableError()))
     const processLine = (line: string): void => {
-      const verdict = ingestRgJsonLine(line, resultRootPath, acc, maxResults, transformAbsPath)
-      if (verdict === 'stop' && child) {
-        stopBundledRipgrep(child, Boolean(wslDistroForOutput))
-      }
+      ingestRgJsonLine(line, resultRootPath, acc, maxResults, transformAbsPath)
     }
 
     // A synchronous spawn failure has no child to clean up.
@@ -140,10 +139,14 @@ export function runBundledRipgrepTextSearch({
     const handleStdoutData = (chunk: string): void => {
       if (!lines.push(chunk, processLine)) {
         acc.truncated = true
+      }
+      if (acc.totalMatches >= maxResults) {
+        acc.truncated = true
+        child?.once('error', ignoreCompletedSearchTerminationError)
+        resolveOnce()
         if (child) {
           stopBundledRipgrep(child, Boolean(wslDistroForOutput))
         }
-        resolveOnce()
       }
     }
     const handleStderrData = (chunk: Buffer): void => {
