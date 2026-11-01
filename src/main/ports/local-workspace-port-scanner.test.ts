@@ -236,6 +236,34 @@ describe('scanWorkspacePorts attribution work', () => {
     runPortScanCommandMock.mockReset()
   })
 
+  it('keeps WSL UNC attribution without probing the distro filesystem on Windows', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const probes = [
+      { ...worktrees[0], path: String.raw`\\wsl.localhost\Ubuntu\home\me\repo` },
+      { ...worktrees[1], path: '//wsl$/Debian/home/me/project' },
+      { ...worktrees[0], id: 'native', path: String.raw`C:\linked` }
+    ]
+    vi.mocked(realpath).mockImplementation(async (root) =>
+      root === String.raw`C:\linked` ? String.raw`C:\project` : String(root)
+    )
+    vi.spyOn(platformScanner, 'scanPlatformListeningPorts').mockResolvedValue({
+      ports: [
+        { host: '127.0.0.1', port: 3000, pid: 101, cwd: probes[0].path },
+        { host: '127.0.0.1', port: 3001, pid: 102, cwd: probes[1].path },
+        { host: '127.0.0.1', port: 3002, pid: 103, cwd: String.raw`C:\project` }
+      ],
+      metadataAvailable: true
+    })
+
+    const result = await scanWorkspacePorts(probes, urlWatcherStub())
+
+    expect(realpath).toHaveBeenCalledTimes(1)
+    expect(realpath).toHaveBeenCalledWith(String.raw`C:\linked`)
+    expect(
+      result.ports.map((port) => (port.kind === 'workspace' ? port.owner.worktreeId : null))
+    ).toEqual([probes[0].id, probes[1].id, 'native'])
+  })
+
   it.each([10, 100])('bounds %i roots, preserving URLs and fresh Stop', async (count) => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), 'orca-port-alias-')))
     const target = path.join(root, 'project'),

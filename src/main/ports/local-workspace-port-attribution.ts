@@ -3,6 +3,7 @@ import { realpath } from 'node:fs/promises'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
 import { PrioritySemaphore } from '../../shared/priority-semaphore'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+import { isWslUncPath } from '../../shared/wsl-paths'
 import type {
   WorkspacePort,
   WorkspacePortOwner,
@@ -89,7 +90,10 @@ export async function resolveWorkspacePortProbes(
   requireFresh = false
 ): Promise<{ probes: NormalizedWorkspacePortProbe[]; complete: boolean }> {
   const probes = normalizeWorkspacePortProbes(worktrees)
-  const paths = [...new Set(worktrees.map((worktree) => worktree.path))]
+  // Resolving a WSL UNC alias can wake a stopped distro during a passive scan.
+  const paths = [...new Set(worktrees.map((worktree) => worktree.path))].filter(
+    (workspacePath) => process.platform !== 'win32' || !isWslUncPath(workspacePath)
+  )
   paths.push(...paths.splice(0, aliasStart++ % (paths.length || 1)))
   const older = paths.map((workspacePath) => pendingRealpaths.get(workspacePath))
   if (requireFresh) {

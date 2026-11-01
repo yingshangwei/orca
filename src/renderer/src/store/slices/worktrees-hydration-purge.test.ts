@@ -59,6 +59,54 @@ describe('fetchAllWorktrees hydration-time purge (design §4.4)', () => {
     addedAt: 0
   }
 
+  it.each(['local', 'runtime:offline'] as const)(
+    'preserves saved %s session state until startup restoration establishes its owner',
+    async (owner) => {
+      const store = createTestStore()
+      const live = makeWorktree({ id: 'repoA::/a/live', repoId: 'repoA', path: '/a/live' })
+      const savedId = 'repoA::/remote/saved'
+      const savedTab = makeTab({ id: 'saved', worktreeId: savedId })
+      mockApi.worktrees.listDetected.mockImplementationOnce(async (args) =>
+        qualifyDetectedResult(
+          args,
+          makeDetectedResult(repoA.id, [live], {
+            catalogVersion: { epoch: 'startup', sequence: 1 }
+          })
+        )
+      )
+      store.setState({
+        repos: [repoA],
+        hydrationSucceeded: false,
+        workspaceSessionReady: false,
+        tabsByWorktree: { [savedId]: [savedTab] },
+        ptyIdsByTabId: { saved: ['saved-pty'] },
+        restoredRuntimeHostIdByWorkspaceSessionKey: owner === 'local' ? {} : { [savedId]: owner }
+      })
+
+      const results = await store.getState().fetchAllWorktrees({
+        visibilityOwnerHostId: 'local',
+        hydrationPurge: 'defer'
+      })
+
+      expect(store.getState().tabsByWorktree[savedId]).toEqual([savedTab])
+      expect(store.getState().ptyIdsByTabId.saved).toEqual(['saved-pty'])
+      expect(store.getState().hasHydratedWorktreePurge).toBe(false)
+
+      store.setState({ hydrationSucceeded: true, workspaceSessionReady: true })
+      purgeHydratedWorktrees(store.setState, store.getState, results)
+
+      if (owner === 'local') {
+        expect(store.getState().tabsByWorktree[savedId]).toBeUndefined()
+        expect(store.getState().ptyIdsByTabId.saved).toBeUndefined()
+        expect(store.getState().hasHydratedWorktreePurge).toBe(true)
+      } else {
+        expect(store.getState().tabsByWorktree[savedId]).toEqual([savedTab])
+        expect(store.getState().ptyIdsByTabId.saved).toEqual(['saved-pty'])
+        expect(store.getState().hasHydratedWorktreePurge).toBe(false)
+      }
+    }
+  )
+
   it.each(['unchanged', 'newer catalog', 'new owner', 'unloaded runtime'])(
     'reuses startup scan evidence after session restoration: %s',
     async (change) => {

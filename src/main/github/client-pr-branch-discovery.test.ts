@@ -334,7 +334,11 @@ describe('getPRForBranch', () => {
 
     expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
       1,
-      ['api', 'repos/acme/old-widgets/pulls?head=acme%3Afeature%2Ftest&state=all&per_page=1'],
+      [
+        'api',
+        'repos/acme/old-widgets/pulls?head=acme%3Afeature%2Ftest&state=all&per_page=1',
+        '--include'
+      ],
       { cwd: '/repo-root' }
     )
     expect(pr).toMatchObject({ number: 44, url: 'https://github.com/acme/widgets/pull/44' })

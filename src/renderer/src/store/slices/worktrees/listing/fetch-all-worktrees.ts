@@ -33,7 +33,9 @@ export function createFetchAllWorktrees(
             : repoHost?.kind !== 'runtime'
         })
       : get().repos
-    const purgeRemovedWorktrees = get().hasHydratedWorktreePurge || !!options?.visibilityOwnerHostId
+    const purgeRemovedWorktrees =
+      get().hasHydratedWorktreePurge ||
+      (!!options?.visibilityOwnerHostId && options.hydrationPurge !== 'defer')
     const results = await mapReposForWorktreeRefresh(
       repos,
       async (repo): Promise<WorktreeRefreshResult> => {

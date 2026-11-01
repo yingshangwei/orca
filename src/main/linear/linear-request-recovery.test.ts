@@ -34,8 +34,8 @@ const nativeFetch = globalThis.fetch
 let traceDirectory: string
 let sink: ReturnType<typeof createLocalFileSink>
 
-function records(): RedactableSpan[] {
-  sink.flush()
+async function records(): Promise<RedactableSpan[]> {
+  await sink.flushAsync()
   let contents: string
   try {
     contents = readFileSync(sink.filePath, 'utf8')
@@ -103,6 +103,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks()
   setActiveSink(null)
+  await sink.flushAsync()
   sink.close()
   rmSync(traceDirectory, { recursive: true, force: true })
   await server.close()
@@ -187,7 +188,7 @@ it('recovers generated and raw SDK reads, retaining headers, options and raw met
     })
   }
   expect(backoff.started.mock.calls.map(([ms]) => ms)).toEqual([100, 100])
-  const spans = records()
+  const spans = await records()
   expect(spans).toHaveLength(4)
   expectRecord(spans[0], 'query', 1, linearTransportErrorCodes(generatedError), 'Failure')
   expectRecord(spans[1], 'query', 2, [], 'Success')
@@ -230,7 +231,7 @@ it('stops persistent real resets at three, sanitizes diagnostics and later reuse
   const codes = linearTransportErrorCodes(failure)
   expect(converted.cause.message).toBe(`Linear transport failure: ${codes.join(', ')}`)
   expect(converted.cause.cause).toBeUndefined()
-  const spans = records()
+  const spans = await records()
   expect(spans).toHaveLength(3)
   spans.forEach((span, index) => expectRecord(span, 'query', index + 1, codes, 'Failure'))
   const finalDiagnostic =
@@ -254,7 +255,7 @@ it('stops persistent real resets at three, sanitizes diagnostics and later reuse
   reset = false
   await expect(client.viewer).resolves.toMatchObject(viewer)
   expect(server.receipts).toHaveLength(4)
-  expectRecord(records()[3], 'query', 1, [], 'Success')
+  expectRecord((await records())[3], 'query', 1, [], 'Success')
 })
 
 it('never replays received mutations, unknown documents or constructor body/method overrides', async () => {
@@ -266,7 +267,7 @@ it('never replays received mutations, unknown documents or constructor body/meth
   expect(server.receipts).toHaveLength(1)
   expect(server.receipts[0].query.trimStart()).toMatch(/^mutation\b/)
   expectRecord(
-    records().at(-1),
+    (await records()).at(-1),
     'mutation',
     1,
     linearTransportErrorCodes(mutationFailure),
@@ -281,7 +282,13 @@ it('never replays received mutations, unknown documents or constructor body/meth
     const failure: unknown = await client.client.rawRequest(query).catch((error: unknown) => error)
     assert(failure instanceof Error)
     expect(server.receipts).toHaveLength(before + 1)
-    expectRecord(records().at(-1), 'unknown', 1, linearTransportErrorCodes(failure), 'Failure')
+    expectRecord(
+      (await records()).at(-1),
+      'unknown',
+      1,
+      linearTransportErrorCodes(failure),
+      'Failure'
+    )
   }
   for (const override of [
     { method: 'POST' },
@@ -347,7 +354,7 @@ it('aborts an active backoff with the original deadline reason and no new reques
     reason
   )
   expect(fetch).toHaveBeenCalledTimes(1)
-  const spans = records()
+  const spans = await records()
   expect(spans).toHaveLength(1)
   const failure = await fetch.mock.results[0].value.catch((error: unknown) => error)
   const codes = linearTransportErrorCodes(failure)
@@ -378,7 +385,7 @@ it('persists the failed first attempt while the real HTTP retry is still pending
   const pending = createLinearClient({ apiKey: 'proof', apiUrl: server.apiUrl }).viewer
   await pendingReceipt
   try {
-    const spans = records()
+    const spans = await records()
     expect(spans).toHaveLength(1)
     const failure = await fetch.mock.results[0].value.catch((error: unknown) => error)
     const codes = linearTransportErrorCodes(failure)
@@ -388,7 +395,7 @@ it('persists the failed first attempt while the real HTTP retry is still pending
     release()
     await pending
   }
-  expectRecord(records()[1], 'query', 2, [], 'Success')
+  expectRecord((await records())[1], 'query', 2, [], 'Success')
 })
 
 it.each([
@@ -438,7 +445,7 @@ it.each([
       ? expect(pending).resolves.toBe('recovered')
       : expect(pending).rejects.toBe(failures[attempts - 1]))
     expect(calls).toBe(attempts)
-    const spans = records()
+    const spans = await records()
     expect(spans).toHaveLength(attempts)
     spans.forEach((span, index) => {
       const failed = index < failures.length
@@ -490,7 +497,7 @@ it('vetoes permanent, unknown, named abort/timeout and bounded-graph failures wi
     ).rejects.toBe(failure)
     expect(request).toHaveBeenCalledTimes(1)
     expectRecord(
-      records().at(-1),
+      (await records()).at(-1),
       'query',
       1,
       linearTransportErrorCodes(failure),
@@ -523,14 +530,14 @@ it('admits transient SDK raw aggregates only within the distinct-node budget', a
     [new AggregateError(Array.from({ length: 15 }, resetError), 'SIXTEEN_NODE_SECRET'), true],
     [new AggregateError(Array.from({ length: 16 }, resetError), 'SEVENTEEN_NODE_SECRET'), false]
   ] as const) {
-    const before = records().length
+    const before = (await records()).length
     const request = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue('recovered')
     const pending = recoverLinearQuery('query Nodes { viewer { id } }', request, {})
     await (retryable
       ? expect(pending).resolves.toBe('recovered')
       : expect(pending).rejects.toBe(failure))
     expect(request).toHaveBeenCalledTimes(retryable ? 2 : 1)
-    const spans = records().slice(before)
+    const spans = (await records()).slice(before)
     expect(spans).toHaveLength(retryable ? 2 : 1)
     expectRecord(spans[0], 'query', 1, ['ECONNRESET'], 'Failure')
     if (retryable) {
@@ -552,7 +559,7 @@ it('delegates non-string documents and own undefined overrides once', async () =
     const request = vi.fn().mockRejectedValue(failure)
     await expect(recoverLinearQuery(document, request, options)).rejects.toBe(failure)
     expect(request).toHaveBeenCalledTimes(1)
-    expectRecord(records().at(-1), 'unknown', 1, ['ECONNRESET'], 'Failure')
+    expectRecord((await records()).at(-1), 'unknown', 1, ['ECONNRESET'], 'Failure')
   }
 })
 
@@ -579,7 +586,7 @@ it.each(['before', 'wait', 'success', 'failure'] as const)(
       recoverLinearQuery('query Abort { viewer { id } }', request, { signal: controller.signal })
     ).rejects.toBe(false)
     expect(request).toHaveBeenCalledTimes(phase === 'before' ? 0 : 1)
-    const spans = records()
+    const spans = await records()
     expect(spans).toHaveLength(phase === 'before' ? 0 : 1)
     if (phase !== 'before') {
       expectRecord(
@@ -621,5 +628,5 @@ it('keeps success and original failure behavior with no sink or a throwing sink'
       )
     ).rejects.toBe(failure)
   }
-  expect(records()).toEqual([])
+  expect(await records()).toEqual([])
 })
