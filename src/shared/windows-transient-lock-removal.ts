@@ -1,17 +1,15 @@
-// Why: Windows releases handles late. Antivirus, the search indexer, a just-exited child and a
-// freshly dlopen'd DLL all keep a tree Node has just emptied locked for a few milliseconds, which
-// surfaces as EBUSY/ENOTEMPTY/EPERM. Node's own `maxRetries` absorbs exactly that, and the repo
-// already settled on 8 attempts — but only product code was using it, so test teardown kept
-// failing tests whose assertions had already passed.
+// Windows may keep deleted-tree handles briefly; sync and async removal use different retry budgets.
 
 import type { RmOptions } from 'node:fs'
 import { rmSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { rm as nodeRm } from 'node:fs/promises'
+import { setTimeout as delay } from 'node:timers/promises'
 
 export const WINDOWS_RM_MAX_RETRIES = 8
 export const WINDOWS_RM_RETRY_DELAY_MS = 150
+const WINDOWS_REMOVE_PASS_DELAYS_MS = [250, 500, 1_000, 2_000]
 
-/** `rm`/`rmSync` options for a recursive removal that must survive a late handle release. */
+/** For `rmSync` only: its native retry loop is top-level, but async `rm` retries per entry and multiplies. */
 export function transientLockRemovalOptions(): RmOptions {
   const base = { recursive: true, force: true }
   if (process.platform !== 'win32') {
@@ -58,7 +56,28 @@ export function removeTreeSync(targetPath: string): void {
   }
 }
 
-/** Recursively remove a directory, retrying the transient Windows locks. */
-export async function removeTree(targetPath: string): Promise<void> {
-  await rm(targetPath, transientLockRemovalOptions())
+type AsyncRm = (path: string, options: RmOptions) => Promise<void>
+
+/** Recursive async delete; a transient Windows lock repeats the whole pass from one bounded budget. */
+export async function removeTree(
+  targetPath: string,
+  options: { rm?: AsyncRm; signal?: AbortSignal } = {}
+): Promise<void> {
+  const rm = options.rm ?? nodeRm
+  const passDelays = process.platform === 'win32' ? WINDOWS_REMOVE_PASS_DELAYS_MS : []
+  for (let attempt = 0; ; attempt += 1) {
+    options.signal?.throwIfAborted()
+    try {
+      // Never `maxRetries` here: async rm retries each nested entry and never stops siblings,
+      // so one held-open file multiplies the work at every directory level.
+      await rm(targetPath, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (attempt >= passDelays.length || !isTransientWindowsLockError(error)) {
+        throw error
+      }
+    }
+    // A pass in flight cannot be cancelled; abort is honored between passes.
+    await delay(passDelays[attempt], undefined, { signal: options.signal })
+  }
 }

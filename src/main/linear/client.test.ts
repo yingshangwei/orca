@@ -115,6 +115,7 @@ async function loadClientModule(options: SafeStorageMockOptions = {}) {
   // Why: client.ts loads @linear/sdk lazily via ./linear-sdk (createRequire) to
   // keep it off the startup parse path; mock the loader, not the raw module.
   vi.doMock('./linear-sdk', () => ({
+    createLinearClient: (options: { apiKey: string }) => new linearClientMock(options),
     loadLinearSdk: () => ({
       AuthenticationLinearError,
       LinearClient: linearClientMock

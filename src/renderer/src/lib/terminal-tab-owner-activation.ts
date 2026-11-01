@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { activateWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
@@ -26,6 +27,30 @@ export function activateTerminalTabOnOwner(
     tabId,
     environmentId,
     leafId,
+    expectedCurrentLocalTabId: resolveWebSessionVisibleTabId(state, worktreeId)
+  })
+}
+
+/** A browser tab the owner hosts; its selection must follow local activation like a terminal's. */
+export function activateBrowserTabOnOwner(
+  worktreeId: string,
+  unifiedTabId: string,
+  browserWorkspaceId: string
+): void {
+  const state = useAppStore.getState()
+  const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId)
+  if (
+    !environmentId ||
+    !isWebRuntimeSessionActive(environmentId) ||
+    !browserWorkspaceHasRemoteOwner(state, browserWorkspaceId, environmentId)
+  ) {
+    return
+  }
+  void activateWebRuntimeSessionTab({
+    worktreeId,
+    tabId: unifiedTabId,
+    environmentId,
+    // Later local navigation cancels this deferred focus, as for terminals.
     expectedCurrentLocalTabId: resolveWebSessionVisibleTabId(state, worktreeId)
   })
 }

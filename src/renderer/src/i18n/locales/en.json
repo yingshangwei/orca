@@ -48,6 +48,10 @@
       "description": "The active workspace is hidden in the sidebar. Revealing it will adjust only the filters hiding it.",
       "confirm": "Adjust filters and reveal",
       "cancel": "Keep filters"
+    },
+    "startupWorktreeRefresh": {
+      "loading": "Discovering workspaces…",
+      "description": "More workspaces may appear while local and remote projects load."
     }
   },
   "app": {
@@ -5828,7 +5832,9 @@
           "51001182e3": "Empty directory",
           "971d85cc84": "Opens as a project on this host · {{value0}}",
           "00c4235c10": "No matches for '{{value0}}'",
-          "largeInputNoMatches": "No matches for this long input"
+          "largeInputNoMatches": "No matches for this long input",
+          "entriesLabel": "Folder entries",
+          "inputLabel": "Filter or path"
         },
         "SleepTwinWorkspaceDialog": {
           "title": "Sleep Workspace",

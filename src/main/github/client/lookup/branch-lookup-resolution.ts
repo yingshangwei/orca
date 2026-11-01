@@ -10,7 +10,6 @@ import {
   resolveGitHubApiRepositoryCandidates
 } from '../../github-api-repository'
 import { mapPRState } from '../../mappers'
-import { noteRepositoryRateLimitSpend } from '../../rate-limit'
 import { ownerRepoFromPullRequestUrl } from './../github-exec-scope'
 import { prRefreshUpstreamError } from './../gh-error-predicates'
 import {
@@ -32,7 +31,6 @@ import {
   createImplicitDefaultBranchPRPolicy,
   type ImplicitDefaultBranchPRContext
 } from './implicit-default-branch-pr'
-import { PR_BRANCH_LOOKUP_BUCKETS } from './pr-lookup-rate-limit'
 import type { HostedReviewLocalGitOptions } from './../github-exec-scope'
 export async function resolvePRForBranchOutcome(input: {
   repoPath: string
@@ -65,13 +63,6 @@ export async function resolvePRForBranchOutcome(input: {
   // here can honor process GH_REPO/GH_HOST and return an unrelated PR.
   if (connectionId && candidates.length === 0) {
     return { kind: 'no-pr', fetchedAt: Date.now() }
-  }
-  // Why (#11532): account every lookup, not just the coordinator's queue —
-  // `hostedReview:forBranch` reaches this directly from renderer polling and
-  // was spending the shared quota invisibly. headRepo is `origin`, the same
-  // identity the coordinator guards on.
-  for (const bucket of PR_BRANCH_LOOKUP_BUCKETS) {
-    noteRepositoryRateLimitSpend(headRepo ?? candidates[0], bucket, 1, ghOptions)
   }
   let data: PullRequestLookupData | null = null
   let dataRepo: OwnerRepo | null = null

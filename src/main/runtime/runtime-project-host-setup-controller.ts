@@ -299,7 +299,7 @@ export class RuntimeProjectHostSetupController {
       const updated = store.updateRepo(
         repo,
         resolveImportedFolderProjectLink(
-          folderRemote,
+          { ...repo, ...folderRemote },
           args.projectId,
           existingProject?.providerIdentity ?? args.projectProviderIdentity
         )

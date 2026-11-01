@@ -24,6 +24,19 @@ describe('Bitbucket repository refs', () => {
 
   afterEach(() => {})
 
+  it.each([
+    'git@ssh.bitbucket.org:team/project.git',
+    'ssh://git@ssh.bitbucket.org:443/team/project.git'
+  ])(
+    'recognizes the Bitbucket SSH alias without treating a lookalike as Bitbucket: %s',
+    (remote) => {
+      expect(parseBitbucketRepoRef(remote)).toEqual({ workspace: 'team', repoSlug: 'project' })
+      expect(
+        parseBitbucketRepoRef(remote.replace('ssh.bitbucket.org', 'ssh.bitbucket.org.example.com'))
+      ).toBeNull()
+    }
+  )
+
   it('parses HTTPS, SSH, and ssh:// Bitbucket remotes', () => {
     expect(parseBitbucketRepoRef('https://bitbucket.org/team/project.git')).toEqual({
       workspace: 'team',

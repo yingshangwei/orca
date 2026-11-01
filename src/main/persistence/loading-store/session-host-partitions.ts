@@ -32,6 +32,11 @@ import {
   sshTargetIdForWorkspaceSessionHost
 } from './workspace-session-terminal-binding-replay'
 import type { TerminalBindingRecoveryOperations } from './terminal-binding-recovery'
+import {
+  keepRuntimePartitionRevisions,
+  noteRuntimeTopologyChange,
+  runtimePartitionFencePrior
+} from './runtime-partition-topology-fence'
 
 type SessionHostPartitionOperationsRuntime = Pick<
   StoreRuntimeState,
@@ -152,9 +157,17 @@ export function removeWorkspaceSessionOwnerInPartition(
     return
   }
   const current = owner.getWorkspaceSession(resolved)
+  const advanceTerminalTopologyRevision = options.advanceTerminalTopologyRevision ?? true
   const session = removeWorkspaceSessionOwner(current, worktreeId, {
-    advanceTerminalTopologyRevision: options.advanceTerminalTopologyRevision ?? true
+    advanceTerminalTopologyRevision
   })
+  if (advanceTerminalTopologyRevision) {
+    noteRuntimeTopologyChange(
+      owner[sessionHostPartitionOperationsContext].runtime,
+      resolved,
+      worktreeId
+    )
+  }
   if (!session) {
     return
   }
@@ -211,8 +224,16 @@ export function setHostWorkspaceSession(
   // Why here and not at the callers: the before-unload stage path writes the renderer's payload
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
   session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
-  // Why: each partition owns its topology fence; renderer writes omit it and must rebase locally.
-  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
+  const { runtime } = owner[sessionHostPartitionOperationsContext]
+  // Each host owns its topology fence; stale renderer snapshots rebase against that host only.
+  session = keepRuntimePartitionRevisions(
+    hostId,
+    sanitizeWorkspaceSessionTerminalRetirements(
+      session,
+      runtimePartitionFencePrior(runtime, hostId, session, prior)
+    ),
+    prior
+  )
   session = preserveMissingWorkspaceSessionTerminalBindings(
     session,
     prior,

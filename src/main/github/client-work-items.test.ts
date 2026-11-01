@@ -287,7 +287,7 @@ describe('listWorkItems', () => {
         '--repo',
         'acme/widgets',
         '--search',
-        'is:pr assignee:@me sort:created-desc'
+        'assignee:@me sort:created-desc'
       ],
       { cwd: '/repo-root' }
     )
@@ -519,7 +519,7 @@ describe('listWorkItems', () => {
         '--repo',
         'acme/widgets',
         '--search',
-        'is:pr is:open draft:true sort:created-desc'
+        'is:open draft:true sort:created-desc'
       ],
       { cwd: '/repo-root' }
     )
@@ -579,7 +579,7 @@ describe('listWorkItems', () => {
         '--repo',
         'acme/widgets',
         '--search',
-        'is:pr is:merged sort:created-desc'
+        'is:merged sort:created-desc'
       ],
       { cwd: '/repo-root' }
     )
@@ -647,7 +647,7 @@ describe('listWorkItems', () => {
         '--state',
         'all',
         '--search',
-        'is:pr is:closed -is:merged sort:created-desc'
+        'is:closed -is:merged sort:created-desc'
       ]),
       { cwd: '/repo-root' }
     )
@@ -753,7 +753,7 @@ describe('listWorkItems', () => {
         '--repo',
         'acme/widgets',
         '--search',
-        'is:pr is:open sort:created-desc'
+        'is:open sort:created-desc'
       ],
       { cwd: '/repo-root' }
     )

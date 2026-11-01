@@ -209,5 +209,5 @@ async function removeCheckoutLeftByGit(
     throw error
   }
   console.warn(`[git] worktree remove left files at "${worktreePath}"; deleting them`)
-  await removeHostTree(worktreePath)
+  await removeHostTree(worktreePath, { signal: options.checkoutDeleteSignal })
 }

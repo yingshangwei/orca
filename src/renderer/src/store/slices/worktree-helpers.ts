@@ -45,6 +45,7 @@ import type {
 } from '@/lib/pending-worktree-creation'
 import type { AppState } from '../types'
 import type { WorktreeRefreshAllOptions } from './worktree-refresh-options'
+import type { WorktreeRefreshResult } from './worktrees/listing/worktree-refresh-result'
 export type { WorktreePurgeTarget, WorktreePurgeTargets } from './worktree-purge-target'
 import type { WorktreePurgeTargets } from './worktree-purge-target'
 export type { WorktreeDeleteState, WorktreeDeleteStateTarget } from './worktree-delete-state-types'
@@ -179,7 +180,7 @@ export type WorktreeSlice = {
     ): Promise<HostQualifiedDetectedWorktreeResult>
     (repoId: string, options?: WorktreeFetchOptions): Promise<boolean>
   }
-  fetchAllWorktrees: (options?: WorktreeRefreshAllOptions) => Promise<void>
+  fetchAllWorktrees: (options?: WorktreeRefreshAllOptions) => Promise<WorktreeRefreshResult[]>
   fetchWorktreeLineage: (options?: {
     forceLocalOwner?: boolean
     executionHostId?: ExecutionHostId

@@ -2,6 +2,7 @@
 // claim shared by a pane opening over its own record and a targeted resume into a fresh pane.
 
 import { findPaneSleepingRecord } from './pane-sleeping-record'
+import { hookRowPaneResumeRecord, isPaneLocalHookRow } from './hook-row-pane-resume-record'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from './apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
@@ -73,19 +74,33 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
 
   /**
    * The pane's resume launch: undefined when it owns no record, `{}` (plain shell, record kept)
-   * when the record cannot be resumed here or another resume took it.
+   * when a stored record cannot be resumed here or another resume took it. A record read from the
+   * hook store is no promise to keep: its vetoes give undefined, so the tab's agent launches fresh.
    */
   protected async resolvePaneOwnedResumeStartup(
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): Promise<PaneResumeStartup | Record<string, never> | undefined> {
     const stored = this.getPaneSleepingAgentRecord(worktreeId, tab)
-    const record = stored && this.isPaneOwnedResumeRecord(stored) ? stored : null
+    const record = stored
+      ? this.isPaneOwnedResumeRecord(stored)
+        ? stored
+        : null
+      : // Resume the hook store's conversation, never replay the pane's original launch.
+        hookRowPaneResumeRecord({
+          rows:
+            this.getAgentProviderSessionRowsForPaneFn?.(makePaneKey(tab.parentTabId, tab.leafId)) ??
+            [],
+          worktreeId,
+          tab: this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree?.[worktreeId]?.find(
+            (candidate) => candidate.id === tab.parentTabId
+          )
+        })
     if (!record) {
       return undefined
     }
-    // Why: nothing here spends the record, so a session another pane also records could be
-    // resumed twice (two writers on one transcript), as could one already live in another pane.
+    const vetoed = stored ? {} : undefined
+    // Records are unspent here; exclude aliases and already-live panes to prevent duplicate transcript writers.
     const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
     const aliases = this.findPaneSleepingAgentRecord(worktreeId, tab)?.aliases ?? []
     const sharedWithAnotherPane = Object.entries(records ?? {}).some(
@@ -101,23 +116,24 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
       ? null
       : this.agentSessionResumeClaims.claim(record, makePaneKey(tab.parentTabId, tab.leafId))
     if (!resumeClaim) {
-      return {}
+      return vetoed
     }
-    const resume = await this.preparePaneOwnedResume(worktreeId, record).catch(() => null)
+    const resume = await this.preparePaneOwnedResume(worktreeId, record, !stored).catch(() => null)
     if (!resume) {
       resumeClaim.settleFailure(false)
-      return {}
+      return vetoed
     }
     return { ...resume, resumeClaim }
   }
 
   private async preparePaneOwnedResume(
     worktreeId: string,
-    record: SleepingAgentSessionRecord
+    record: SleepingAgentSessionRecord,
+    fromHookRows: boolean
   ): Promise<MobileTerminalResumeCommand | null> {
     if (
       (await this.isProviderSessionLiveInAnotherPane(record, record.paneKey)) ||
-      this.hookStoreNamesAnotherSessionForPane(record)
+      this.hookStoreNamesAnotherSessionForPane(record, fromHookRows)
     ) {
       return null
     }
@@ -186,10 +202,15 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
   }
 
   /** The pane moved on to another conversation after the record was saved; the hook store is authoritative. */
-  private hookStoreNamesAnotherSessionForPane(record: SleepingAgentSessionRecord): boolean {
+  private hookStoreNamesAnotherSessionForPane(
+    record: SleepingAgentSessionRecord,
+    fromHookRows: boolean
+  ): boolean {
     return (this.getAgentProviderSessionRowsForPaneFn?.(record.paneKey) ?? []).some(
       (row) =>
         row.providerSession !== undefined &&
+        // Judge a hook-read record by the rows it was read from.
+        (!fromHookRows || isPaneLocalHookRow(row, record.worktreeId)) &&
         !agentProviderSessionsEqual(record.agent, row.providerSession, record.providerSession)
     )
   }

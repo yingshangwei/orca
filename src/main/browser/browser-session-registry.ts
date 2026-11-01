@@ -56,6 +56,7 @@ class BrowserSessionRegistry {
   private activeOrcaProfileId = DEFAULT_LOCAL_ORCA_PROFILE_ID
   private metadataPathOverride: string | null = null
   private defaultPartition = ORCA_BROWSER_PARTITION
+  onProfileDeleted: ((profileId: string) => Promise<void>) | null = null
 
   constructor() {
     this.resetDefaultProfile()
@@ -279,6 +280,13 @@ class BrowserSessionRegistry {
       pendingCookieImports,
       pendingCookieDbPath: typeof defaultPendingImport === 'string' ? defaultPendingImport : null
     })
+
+    try {
+      await this.onProfileDeleted?.(profileId)
+    } catch (error) {
+      // The profile is already deleted and persisted; continue its original storage cleanup.
+      console.warn('[browser-session] Failed to retire route partitions for deleted profile', error)
+    }
 
     // Why: clear the partition's storage so deleting a profile doesn't leave orphaned cookies/cache behind.
     try {

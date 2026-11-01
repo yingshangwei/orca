@@ -39,6 +39,10 @@ import {
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
 import { ensureLocalRuntimeCapabilities } from '../runtime/local-runtime-capabilities'
+import {
+  finishStartupWorktreeHydration,
+  refreshStartupWorktrees
+} from '../startup/startup-worktree-refresh'
 
 async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]> {
   try {
@@ -214,6 +218,8 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             )
           })
           restoreStructuredLaunchSurfaces()
+          // Discovery must not wait for terminal or SSH restoration.
+          const startupWorktreeRefresh = refreshStartupWorktrees(actions, () => cancelled)
           await timeRendererStartupStep('prepare-terminal-startup-restoration', () =>
             window.api.app.prepareTerminalStartupRestoration()
           )
@@ -296,8 +302,12 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
           // Why (issue #1158): unlock the session writer only after hydration and all dependent steps succeeded, so a mid-startup throw can't serialize partially-mutated state to disk.
           actions.setHydrationSucceeded(true)
           actions.setTerminalStartupRestorationReady(true)
-          // Why the explicit opt-in: unconditional seeding hijacks every empty dev
-          // profile's active workspace, making onboarding/empty-state flows untestable.
+          void startupWorktreeRefresh.then((results) => {
+            if (!cancelled) {
+              finishStartupWorktreeHydration(results)
+            }
+          })
+          // Require opt-in dev seeding so empty profiles can exercise onboarding without selection hijacking.
           if (
             import.meta.env.DEV &&
             String(import.meta.env.VITE_ACTIVITY_DEV_FIXTURE).toLowerCase() === 'true'
@@ -309,42 +319,6 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
           logRendererStartupDiagnostic('startup-hydration-done', {
             durationMs: Math.round(performance.now() - startupStartedAt)
           })
-          void (async () => {
-            try {
-              try {
-                // Why: remote rows must not render under a fallback visibility while their owner default is still loading.
-                await timeRendererStartupStep('owner-visibility-defaults', () =>
-                  actions.awaitOwnerWorktreeVisibilityDefaultsHydration()
-                )
-                await timeRendererStartupStep('remote-catalog-refresh', async () => {
-                  await actions.fetchReposForAllHosts()
-                  await actions.fetchProjectGroupsForAllHosts()
-                  await actions.fetchFolderWorkspacesForAllHosts()
-                })
-              } catch (err) {
-                console.warn('Remote startup catalog refresh failed:', err)
-              }
-              if (!cancelled) {
-                try {
-                  await timeRendererStartupStep('remote-worktree-refresh', async () => {
-                    // Why: the full scan is not required for session recovery, so keep it off the startup-critical path.
-                    await actions.fetchAllWorktrees()
-                    // Why: the startup prune only saw session-referenced repos; use the deferred scan's
-                    // authoritative results to drop deleted-worktree visit timestamps that would
-                    // otherwise accumulate unbounded (disconnected SSH stays non-authoritative and is kept).
-                    actions.pruneLastVisitedTimestamps()
-                    await actions.fetchWorktreeLineage()
-                  })
-                } catch (err) {
-                  console.warn('Deferred startup worktree refresh failed:', err)
-                }
-              }
-            } finally {
-              if (!cancelled) {
-                useAppStore.setState({ startupWorktreeRefreshCompleted: true })
-              }
-            }
-          })()
         }
       } catch (error) {
         await recoverFromDegradedStartup({

@@ -7,6 +7,7 @@ import {
   isSshCredentialDeclined
 } from '../ssh-credential-decline'
 import { createSshUserDisconnectedError, isSshUserDisconnected } from '../ssh-user-disconnect'
+import { markSshSessionStartFailure } from '../ssh-session-start-failure'
 
 /** A remembered sign-in only applies to the endpoint it was given for; an edited host must ask. */
 function signInEndpoint(target: SshTarget): string {
@@ -40,6 +41,17 @@ export class SshConnectionManager {
 
   /** `probe`: a user's connection test, which a Disconnect does not refuse. */
   async connect(target: SshTarget, options?: { probe?: boolean }): Promise<SshConnection> {
+    try {
+      return await this.openSession(target, options)
+    } catch (error) {
+      throw markSshSessionStartFailure(error)
+    }
+  }
+
+  private async openSession(
+    target: SshTarget,
+    options?: { probe?: boolean }
+  ): Promise<SshConnection> {
     // Why: background dials would revive a host the user disconnected (#30086); before reuse, so
     // none borrows the transport a connection test opened.
     if (!options?.probe && isSshUserDisconnected(target.id)) {

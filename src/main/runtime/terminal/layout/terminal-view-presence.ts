@@ -79,6 +79,11 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     return this.terminalViewSubscribers.hasRaw(ptyId)
   }
 
+  /** A pane or remote view uses this PTY; main's own ingestion stream does not count. */
+  hasTerminalViewer(ptyId: string): boolean {
+    return this.getLeavesForPty(ptyId).length > 0 || this.hasRawTerminalViewSubscriber(ptyId)
+  }
+
   /** Whether a remote view will receive this PTY's output now, and so answers its queries. */
   hasRemoteTerminalViewSubscriber(ptyId: string): boolean {
     return this.terminalViewSubscribers.hasRemoteReceivingOutput(ptyId)
