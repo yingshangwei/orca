@@ -53,6 +53,22 @@ describe('orchestration send structured payload flags', () => {
       json: true
     } as never)
 
+  it('rejects an empty --from without sending as the ambient terminal', async () => {
+    vi.stubEnv('ORCA_TERMINAL_HANDLE', 'term_ambient')
+
+    await expect(
+      invokeSend(
+        new Map<string, string | boolean>([
+          ['from', ''],
+          ['to', 'term_coord'],
+          ['subject', 'report']
+        ])
+      )
+    ).rejects.toMatchObject({ code: 'invalid_argument' })
+    expect(getTerminalHandleMock).not.toHaveBeenCalled()
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('serializes common worker payload fields as JSON', async () => {
     await invokeSend(
       new Map<string, string | boolean>([
