@@ -12,6 +12,7 @@ import type { ClaudeAccountService } from '../claude-accounts/service'
 import type { ClaudeRuntimeAuthService } from '../claude-accounts/runtime-auth-service'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { RateLimitService } from '../rate-limits/service'
+import type { ClaudePaneSessionSync } from '../claude/claude-pane-session-sync'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import type { DesktopRelayService } from '../runtime/mobile-cloud-relay/desktop-relay-service'
 import type { DesktopRelayServiceInstaller } from '../runtime/mobile-cloud-relay/desktop-relay-service-installer'
@@ -86,6 +87,8 @@ export const mainProcessState = {
   claudeRuntimeAuth: null as ClaudeRuntimeAuthService | null,
   runtime: null as OrcaRuntimeService | null,
   rateLimits: null as RateLimitService | null,
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null slot to the sync main-process-ready-runtime starts after the first window.
+  claudePaneSessionSync: null as ClaudePaneSessionSync | null,
   runtimeRpc: null as OrcaRuntimeRpcServer | null,
   serveReadinessPublisher: new ServeReadinessPublisher(),
   desktopRelayService: null as DesktopRelayService | null,

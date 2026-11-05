@@ -15,7 +15,14 @@ export function getManagedScript(target: 'local' | 'posix' = 'local'): string {
       // Why: the endpoint file holds this install's live port/token; sourcing it lets a surviving PTY reach the current server (see claude/hook-service.ts).
       'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
       ...buildWindowsHookEnvironmentGuardLines(),
-      buildWindowsAgentHookCurlPostCommand('codex'),
+      // Why an empty default: cmd keeps `%CLAUDE_CODE_SESSION_ID%` literal when it is unset.
+      'set "ORCA_PARENT_CLAUDE_SESSION="',
+      'if defined CLAUDE_CODE_SESSION_ID set "ORCA_PARENT_CLAUDE_SESSION=%CLAUDE_CODE_SESSION_ID%"',
+      // Why spliced in: only codex runs as a Claude child, so the shared poster stays as it is.
+      buildWindowsAgentHookCurlPostCommand('codex').replace(
+        '--data-urlencode "payload@-"',
+        '--data-urlencode "parentClaudeSession=%ORCA_PARENT_CLAUDE_SESSION%" --data-urlencode "payload@-"'
+      ),
       'exit /b 0',
       ...buildWindowsHookStdinDrainEpilogue(),
       ''
@@ -53,6 +60,9 @@ export function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     'if [ -n "$ORCA_AGENT_HOOK_ENDPOINT" ] && [ -r "$ORCA_AGENT_HOOK_ENDPOINT" ]; then',
     '  load_hook_endpoint "$ORCA_AGENT_HOOK_ENDPOINT"',
     'fi',
+    // Why: a codex a Claude session started (its Bash tool) inherits this pane key; the server keeps
+    // it from replacing the pane's agent. Orca strips this stamp from every PTY it spawns.
+    'orca_parent_claude_session="${CLAUDE_CODE_SESSION_ID:-}"',
     'if [ -z "$ORCA_AGENT_HOOK_PORT" ] || [ -z "$ORCA_AGENT_HOOK_TOKEN" ] || [ -z "$ORCA_PANE_KEY" ]; then',
     '  spool_hook_event',
     '  exit 0',

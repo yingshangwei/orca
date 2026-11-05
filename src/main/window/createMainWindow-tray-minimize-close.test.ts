@@ -321,7 +321,8 @@ describe('createMainWindow', () => {
 
       expect(instance.hide).not.toHaveBeenCalled()
       expect(webContents.send).toHaveBeenCalledWith('window:close-requested', {
-        isQuitting: false
+        isQuitting: false,
+        requestId: expect.any(Number)
       })
     })
   })

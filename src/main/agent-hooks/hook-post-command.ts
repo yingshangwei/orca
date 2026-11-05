@@ -24,6 +24,7 @@ export function buildPosixAgentHookPostCommand(
     `  ${indent}-H "X-Orca-Agent-Hook-Meta-Encoding: base64" \\`,
     `  ${indent}-H "X-Orca-Agent-Hook-Meta: \${orca_hook_metadata}" \\`,
     `  ${indent}-H "X-Orca-Agent-Process: \${orca_agent_process:-}" \\`,
+    `  ${indent}-H "X-Orca-Parent-Claude-Session: \${orca_parent_claude_session:-}" \\`,
     `  ${indent}--data-binary @-`,
     'else',
     `  printf '%s' "$payload" | ${curlCommand} -sS -X POST "http://127.0.0.1:\${ORCA_AGENT_HOOK_PORT}/hook/${source}" \\`,
@@ -38,6 +39,7 @@ export function buildPosixAgentHookPostCommand(
     `  ${indent}--data-urlencode "env=\${ORCA_AGENT_HOOK_ENV}" \\`,
     `  ${indent}--data-urlencode "version=\${ORCA_AGENT_HOOK_VERSION}" \\`,
     `  ${indent}--data-urlencode "agentProcess=\${orca_agent_process:-}" \\`,
+    `  ${indent}--data-urlencode "parentClaudeSession=\${orca_parent_claude_session:-}" \\`,
     `  ${indent}--data-urlencode "payload@-"`,
     'fi'
   ]

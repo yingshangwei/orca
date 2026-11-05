@@ -1,5 +1,6 @@
 import { hasOtherAgentProcessOwner } from '../shared/agent-process-presence'
 import { isOwnerProviderGuestHook } from '../shared/agent-hook-owner-presence'
+import { isNestedClaudeChildHookBody } from '../shared/agent-hook-nested-claude-child-body'
 import { sameAgentStatusTerminalOwner } from '../shared/agent-status-terminal-owner'
 import { normalizeHookPayload } from '../shared/agent-hook-listener'
 import {
@@ -25,6 +26,11 @@ export class RelayProviderHookNormalization {
   ): AgentHookEventPayload | null {
     // Why: the owner's own provider folds would take the guest's prompt and tools.
     if (isOwnerProviderGuestHook(canonical, source, body, env)) {
+      return null
+    }
+    // Why the canonical row: each provider's view below holds only that provider's rows, so a
+    // child codex there never sees the Claude that owns the pane.
+    if (isNestedClaudeChildHookBody(canonical, source, body, env)) {
       return null
     }
     let state = this.states.get(source)

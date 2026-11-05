@@ -18,6 +18,8 @@ export type CreateMainWindowOptions = {
   getIsQuitting?: () => boolean
   /** Notifies the caller when the renderer vetoes unload, so the quit latch clears — a prevented beforeunload cancels the in-flight app.quit(). */
   onQuitAborted?: () => void
+  /** Settles before a close asks the renderer to checkpoint, so main's last view of each pane's agent reaches that checkpoint. */
+  beforeCloseRequest?: () => Promise<void>
   onRendererProcessGone?: (
     details: Electron.RenderProcessGoneDetails,
     webContentsId: number,

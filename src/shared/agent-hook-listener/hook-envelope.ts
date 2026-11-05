@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import type { IncomingHttpHeaders } from 'node:http'
 
 import type { AgentHookSource } from '../agent-hook-relay'
+import { HOOK_PARENT_CLAUDE_SESSION_FIELD } from '../agent-hook-nested-claude-child'
 import { parsePaneKey } from '../stable-pane-id'
 import { MAX_PANE_KEY_LEN, warnOnHookEnvOrVersionMismatch } from './listener-limits'
 import type { HookListenerState } from './listener-state'
@@ -81,9 +82,11 @@ export function mergeAgentHookRequestHeaders(body: unknown, headers: IncomingHtt
   if (!metadata.paneKey) {
     return body
   }
+  const parentClaudeSession = readHookHeader(headers, 'x-orca-parent-claude-session')?.trim()
   return {
     ...metadata,
     agentProcess: readHookHeader(headers, 'x-orca-agent-process'),
+    ...(parentClaudeSession ? { [HOOK_PARENT_CLAUDE_SESSION_FIELD]: parentClaudeSession } : {}),
     payload: body
   }
 }

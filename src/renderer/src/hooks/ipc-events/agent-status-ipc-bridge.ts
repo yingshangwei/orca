@@ -16,6 +16,7 @@ import type {
 import { shouldRetryPendingAgentStatusesAfterStoreUpdate } from './agent-status-pending-retry-gate'
 
 import { registerAgentStatusStartupSnapshot } from './agent-status-startup-snapshot'
+import { setQueuedAgentStatusFlush } from './agent-status-queued-flush'
 
 const PENDING_AGENT_STATUS_RETRY_MS = 100
 const PENDING_AGENT_STATUS_TTL_MS = 15_000
@@ -260,6 +261,14 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
     }
   }
 
+  setQueuedAgentStatusFlush(() => {
+    if (liveAgentStatusBurstTimer !== null) {
+      globalThis.clearTimeout(liveAgentStatusBurstTimer)
+      flushLiveAgentStatusBurst()
+    }
+    flushPendingAgentStatuses()
+  })
+
   registerAgentStatusListeners({
     unsubs,
     enqueueLiveAgentStatus,
@@ -286,6 +295,7 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
   return {
     disposeAsyncState: () => {
       disposed = true
+      setQueuedAgentStatusFlush(null)
       startupSnapshot.dispose()
       snapshotRequestId += 1
       if (pendingAgentStatusRetryTimer !== null) {

@@ -40,6 +40,7 @@ import { requireMainWindowServices } from './main-window-service-readiness'
 import { recordRendererLaunchFailureProbe } from '../window/renderer-launch-failure-probe'
 
 import { isResourceWindowVisible } from '../window/resource-view-admission'
+import { CLAUDE_PANE_SESSION_QUIT_SYNC_MS } from '../claude/claude-pane-session-sync'
 import {
   applyBackgroundActivationPolicy,
   applyServeDesktopWindowActivationPolicy
@@ -99,6 +100,9 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   }
   const window = createMainWindow(store, {
     getIsQuitting: () => state.isQuitting,
+    beforeCloseRequest: () =>
+      state.claudePaneSessionSync?.syncBeforeQuit(CLAUDE_PANE_SESSION_QUIT_SYNC_MS) ??
+      Promise.resolve(),
     onQuitAborted: () => {
       state.isQuitting = false
       clearExpectedRendererReload()

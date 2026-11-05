@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   AGENT_HOOK_SPOOL_MAX_FILES,
+  buildSpoolHookBody,
   drainAgentHookSpoolAsync,
   launchTokenHash,
   type SpoolRecord
@@ -32,8 +33,20 @@ describe('agent hook spool', () => {
     expect(spoolLine).toBeDefined()
     expect(spoolLine!.match(/printf/g)).toHaveLength(1)
     expect(spoolLine).toContain(
-      '"$spool_now" "$(spool_json_escape "${orca_agent_process:-}")" "$payload"'
+      '"$spool_now" "$(spool_json_escape "${orca_agent_process:-}")" "$(spool_json_escape "${orca_parent_claude_session:-}")" "$payload"'
     )
+  })
+
+  it('replays the parent Claude session a spooled child hook carried', () => {
+    expect(
+      buildSpoolHookBody({
+        paneKey: 'tab:leaf',
+        source: 'codex',
+        receivedAt: 1,
+        parentClaudeSession: 'claude-main',
+        payload: {}
+      })
+    ).toMatchObject({ parentClaudeSession: 'claude-main' })
   })
 
   it('waits for a newline before replaying a complete-looking final record', async () => {

@@ -167,6 +167,8 @@ function installWillQuitHandler(): void {
     stopBackgroundWorktreeRemovals()
     // Why keepStatus: the chat teardown above reads each chat's background work from that store
     // after this returns; cleared, a chat whose only work was a subagent or command is not offered.
+    state.claudePaneSessionSync?.dispose()
+    state.claudePaneSessionSync = null
     agentHookServer.stop({ keepStatus: true })
     // Why Windows only: POSIX hooks short-circuit on ORCA_PANE_KEY, while Windows must register a
     // bare script path that cannot express the guard and would otherwise keep spawning after quit.

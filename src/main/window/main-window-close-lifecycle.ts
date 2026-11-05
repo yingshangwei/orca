@@ -59,6 +59,28 @@ export function installMainWindowCloseLifecycle(args: {
     }
   }
 
+  // Why every close: each one ends in the renderer's unload checkpoint, which records what each pane
+  // resumes, so main's latest view of its agents must reach the renderer first. A newer request or a
+  // vetoed unload retires the one still waiting.
+  const sendCloseRequestAfterReconciliation = (
+    requestId: number,
+    request: { isQuitting: boolean; requestId?: number }
+  ): void => {
+    const send = (): void => {
+      if (!mainWindow.isDestroyed() && requestId === closeRequestSequence) {
+        mainWindow.webContents.send('window:close-requested', request)
+      }
+    }
+    const reconcile = opts?.beforeCloseRequest
+    if (!reconcile) {
+      send()
+      return
+    }
+    void reconcile()
+      .catch(() => {})
+      .finally(send)
+  }
+
   // Windows minimize-to-tray: hide instead of close when enabled; returns true when it hid so callers skip their close path.
   const hideToTrayIfEnabled = (): boolean => {
     const isRendererCrashed = mainWindow.webContents.isCrashed?.() ?? false
@@ -122,14 +144,12 @@ export function installMainWindowCloseLifecycle(args: {
       armQuitRendererAckTimer(requestId)
     }
     // Why: renderer owns the close decision; the always-mounted App root subscription lets even pre-workspace states reply (#5144).
-    mainWindow.webContents.send('window:close-requested', {
-      isQuitting,
-      requestId
-    })
+    sendCloseRequestAfterReconciliation(requestId, { isQuitting, requestId })
   })
   mainWindow.webContents.on('will-prevent-unload', () => {
     // Why: a prevented beforeunload cancels the quit; release the bounds-persistence freeze so later resizing still saves.
     state.resumeBoundsPersistence()
+    closeRequestSequence += 1
     clearQuitRendererAckTimer()
     opts?.onQuitAborted?.()
     mainWindow.webContents.send('window:unload-prevented')
@@ -176,7 +196,17 @@ export function installMainWindowCloseLifecycle(args: {
     if (hideToTrayIfEnabled()) {
       return
     }
-    mainWindow.webContents.send('window:close-requested', { isQuitting: false })
+    const requestId = ++closeRequestSequence
+    // Why: this retires a quit request still waiting on its reconciliation, so it carries that
+    // quit and takes over its ACK deadline; otherwise the deadline destroys a responsive window.
+    const supersedesQuit = quitRendererAckRequestId !== null
+    if (supersedesQuit) {
+      armQuitRendererAckTimer(requestId)
+    }
+    sendCloseRequestAfterReconciliation(requestId, {
+      isQuitting: supersedesQuit && (opts?.getIsQuitting?.() ?? false),
+      requestId
+    })
   }
   // Why: renderer-drawn title-bar ··· menu button replicates the Alt-key reveal autoHideMenuBar provides (Windows/Linux).
   const popupMenuChannel = 'menu:popup'

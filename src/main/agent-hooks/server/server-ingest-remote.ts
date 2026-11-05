@@ -19,6 +19,10 @@ import {
 } from '../../../shared/claude-compact-completion'
 import { launchTokenHash } from '../../../shared/agent-hook-spool'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
+import {
+  isNestedClaudeChildInClaudePane,
+  readRelayedParentClaudeSession
+} from '../../../shared/agent-hook-nested-claude-child'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import {
   AGENT_STATUS_LEGACY_UNADVERTISED_PEER_CAPABILITIES,
@@ -196,6 +200,10 @@ export abstract class AgentHookServerIngestRemote extends AgentHookServerIngestS
       this.observations.rebind(paneKey)
     }
     const previousStatus = this.state.lastStatusByPaneKey.get(paneKey)
+    // Why here too: a relay older than this check forwards the child, and a newer one forwards its stamp.
+    if (isNestedClaudeChildInClaudePane(readRelayedParentClaudeSession(envelope), previousStatus)) {
+      return
+    }
     let acceptedCompactCompletion = false
     if (hookEventName === 'PreCompact' || hookEventName === 'PostCompact') {
       // Why: PreCompact is never registered and proves nothing (an aborted compact emits it alone);

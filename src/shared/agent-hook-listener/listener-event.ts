@@ -55,6 +55,8 @@ export type AgentHookEventPayload = {
   toolAgentType?: string
   /** Provider-owned conversation/session id needed to resume a sleeping agent. */
   providerSession?: AgentProviderSessionMetadata
+  /** The Claude session that started this hook's agent as a child; the receiver drops it on a Claude pane. */
+  parentClaudeSession?: string
   /** Session identity update with no turn-state transition; refreshes durable resume metadata without a fake status row. */
   providerSessionOnly?: boolean
   /** True when this event is a relay cache replay rather than a live hook. */

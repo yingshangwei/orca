@@ -32,6 +32,7 @@ export type RemoteAgentStatusEnvelope = {
   toolAgentType?: string
   providerSession?: unknown
   providerSessionOnly?: unknown
+  parentClaudeSession?: unknown
   isReplay?: boolean
   turnEndedAt?: unknown
   turnEndDisposition?: unknown

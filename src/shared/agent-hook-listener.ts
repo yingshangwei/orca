@@ -30,6 +30,10 @@ import {
 } from './agent-hook-listener/opencode-session-registry'
 import { claudeRowHasUnlistedLiveWork } from './agent-hook-listener/providers/claude-pane-hold-evidence'
 import { readString } from './agent-hook-listener/tool-input-preview'
+import {
+  isNestedClaudeChildInClaudePane,
+  readHookParentClaudeSession
+} from './agent-hook-nested-claude-child'
 /** Canonical transport-agnostic normalization entry shared by main and relay listeners. */
 const CLAUDE_EXIT_SESSION_END_REASONS = new Set([
   'prompt_input_exit',
@@ -168,6 +172,11 @@ export function normalizeHookPayload(
   }
   const previousStatus = state.lastStatusByPaneKey.get(paneKey)
   const agentProcess = readHookAgentProcess(source, record.agentProcess)
+  // Why before the provider folds: a child's events would seed caches for an agent the pane does not run.
+  const parentClaudeSession = readHookParentClaudeSession(source, record)
+  if (isNestedClaudeChildInClaudePane(parentClaudeSession, previousStatus)) {
+    return null
+  }
   const previousReceivedAt =
     previousStatus &&
     'receivedAt' in previousStatus &&
@@ -341,6 +350,7 @@ export function normalizeHookPayload(
       : {}),
     ...(providerSession ? { providerSession } : {}),
     ...(providerSessionOnly ? { providerSessionOnly: true } : {}),
+    ...(parentClaudeSession ? { parentClaudeSession } : {}),
     ...dispatched.hostTurnSignals,
     payload: transportPayload
   }

@@ -35,6 +35,7 @@ import {
   ORCA_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
   ORCA_RENDERER_UNLOAD_PREVENTED_EVENT
 } from '../../../shared/renderer-shutdown-events'
+import { applyQueuedAgentStatusesNow } from '@/hooks/ipc-events/agent-status-queued-flush'
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
@@ -87,7 +88,11 @@ export function useAppSessionPersistence(): void {
       // Switch point: main captures its panes' agents itself as it stages the quit.
       captureSleepingAgentSessions: ORCA_LAYOUT_OWNER_IS_MAIN
         ? () => {}
-        : () => useAppStore.getState().captureAllSleepingAgentSessions('quit'),
+        : () => {
+            // Why: a reload or app restart reaches this checkpoint without the close coordinator.
+            applyQueuedAgentStatusesNow()
+            useAppStore.getState().captureAllSleepingAgentSessions('quit')
+          },
       // Why: re-read state after capture() calls populated scrollback buffers
       // into the store via Zustand setters. The shouldCaptureSession read is
       // only for the gating flags and would miss those updates.

@@ -121,6 +121,8 @@ export type AgentHookRelayEnvelope = {
   toolAgentType?: string
   /** Provider-owned conversation/session id needed to resume a sleeping agent. */
   providerSession?: AgentProviderSessionMetadata
+  /** The Claude session that started this hook's agent as a child (see agent-hook-nested-claude-child). */
+  parentClaudeSession?: string
   /** True when this envelope updates resume identity without changing turn status. */
   providerSessionOnly?: boolean
   /** True when the relay is replaying its cache after Orca reconnects. */

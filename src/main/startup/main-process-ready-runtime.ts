@@ -36,6 +36,10 @@ import { pruneDesktopOrcadArtifactCache } from '../orcad/orcad-artifact-cache-re
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { repairDuplicatePtyPanesOnStart } from '../runtime/moved-pane-owner-rekey'
 import { WslUsageReporter } from '../telemetry/wsl-usage-reporter'
+import { agentHookServer } from '../agent-hooks/server'
+import { startClaudePaneSessionSync } from '../claude/claude-pane-session-sync'
+import { getLocalPtyProvider } from '../ipc/pty/provider/registry'
+import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
 
 // Headless serve never opens a window, so the sweep still has to run off a timer there.
 const WORKTREE_TRASH_SWEEP_FALLBACK_MS = 15_000
@@ -100,6 +104,17 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
   }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
   runAfterFirstWindowShown(() => {
     new WslUsageReporter(store, app.getPath('userData')).start()
+  }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
+  // Why: with Orca's Claude hook off, Claude's own session registry is the only record of the session
+  // a pane runs; without it a restart resumes nothing or an older session.
+  runAfterFirstWindowShown(() => {
+    state.claudePaneSessionSync = startClaudePaneSessionSync({
+      statusRows: () => agentHookServer.getStatusSnapshot(),
+      listPtys: () => getLocalPtyProvider().listProcesses({ deadlineMs: Date.now() + 5_000 }),
+      transcript: (sessionId) => resolveSessionFilePath('claude', sessionId),
+      record: (paneKey, providerSession) =>
+        agentHookServer.recordClaudeSessionFromProcess({ paneKey, providerSession })
+    })
   }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
   runAfterFirstWindowShown(() => {
     void pruneDesktopOrcadArtifactCache(app.getPath('userData')).catch((error) => {

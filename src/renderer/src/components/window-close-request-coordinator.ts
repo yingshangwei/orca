@@ -10,6 +10,7 @@
 // save/discard instead of being silently vetoed by a beforeunload handler.
 
 import { showShutdownCheckpointFailureToast } from '@/lib/shutdown-checkpoint-failure-toast'
+import { applyQueuedAgentStatusesNow } from '@/hooks/ipc-events/agent-status-queued-flush'
 
 export type WindowCloseRequestHandler = (data: { isQuitting: boolean }) => void
 
@@ -76,6 +77,8 @@ export async function dispatchWindowCloseRequest(data: { isQuitting: boolean }):
   if (closeInFlight) {
     return
   }
+  // Why first: every branch below reaches the unload checkpoint, which saves what each pane resumes.
+  applyQueuedAgentStatusesNow()
   closeInFlight = true
   try {
     if (!(await runWindowCloseGuards())) {

@@ -20,9 +20,9 @@ import {
   structuredAgentSessionRowStateStartedAt
 } from '../../../shared/structured-agent-session-status-started-at'
 import { structuredStatusLegacyEvent } from './server-structured-status-row'
-import { AgentHookServerIngestTerminal } from './server-ingest-terminal'
+import { AgentHookServerClaudeProcessSession } from './server-claude-process-session'
 
-export abstract class AgentHookServerIngestStructured extends AgentHookServerIngestTerminal {
+export abstract class AgentHookServerIngestStructured extends AgentHookServerClaudeProcessSession {
   ingestStructuredStatus(
     summary: AgentSessionStatusSummary,
     subject: AgentStatusStructuredSessionSubject

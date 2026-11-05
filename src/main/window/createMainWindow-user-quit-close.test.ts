@@ -114,6 +114,95 @@ describe('serve user-Quit window close', () => {
     expect(instance.destroy).not.toHaveBeenCalled()
   })
 
+  it('waits for the pre-quit reconciliation before asking the renderer to checkpoint', async () => {
+    const { windowHandlers, webContents } = setupWindow()
+    let settle: () => void = () => {}
+    const beforeQuitCloseRequest = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          settle = resolve
+        })
+    )
+    createMainWindow(null, {
+      getIsQuitting: () => true,
+      beforeCloseRequest: beforeQuitCloseRequest
+    })
+
+    windowHandlers.close({ preventDefault: vi.fn() })
+    await Promise.resolve()
+    expect(beforeQuitCloseRequest).toHaveBeenCalledOnce()
+    expect(webContents.send).not.toHaveBeenCalledWith('window:close-requested', expect.anything())
+    settle()
+    await vi.waitFor(() =>
+      expect(webContents.send).toHaveBeenCalledWith('window:close-requested', {
+        isQuitting: true,
+        requestId: expect.any(Number)
+      })
+    )
+  })
+
+  it('drops a close the renderer vetoed while main was still reconciling', async () => {
+    const { windowHandlers, webContents } = setupWindow()
+    let settle: () => void = () => {}
+    createMainWindow(null, {
+      getIsQuitting: () => true,
+      beforeCloseRequest: () =>
+        new Promise<void>((resolve) => {
+          settle = resolve
+        })
+    })
+
+    windowHandlers.close({ preventDefault: vi.fn() })
+    windowHandlers['will-prevent-unload']?.()
+    settle()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(webContents.send).not.toHaveBeenCalledWith('window:close-requested', expect.anything())
+  })
+
+  it('reconciles before a renderer-drawn close too', async () => {
+    const { ipcHandlers, webContents } = setupWindow()
+    const beforeCloseRequest = vi.fn(async () => {})
+    createMainWindow(null, { getIsQuitting: () => false, beforeCloseRequest })
+
+    ipcHandlers['window:request-close']?.({ sender: { id: 42 } })
+    await vi.waitFor(() =>
+      expect(webContents.send).toHaveBeenCalledWith('window:close-requested', {
+        isQuitting: false,
+        requestId: expect.any(Number)
+      })
+    )
+    expect(beforeCloseRequest).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a quit alive when a renderer-drawn close supersedes it mid-reconciliation', async () => {
+    const { windowHandlers, ipcHandlers, webContents, instance } = setupWindow()
+    const settles: (() => void)[] = []
+    createMainWindow(null, {
+      getIsQuitting: () => true,
+      beforeCloseRequest: () =>
+        new Promise<void>((resolve) => {
+          settles.push(resolve)
+        })
+    })
+
+    windowHandlers.close({ preventDefault: vi.fn() })
+    ipcHandlers['window:request-close']?.({ sender: { id: 42 } })
+    settles.forEach((settle) => settle())
+    await vi.advanceTimersByTimeAsync(0)
+    const requests = webContents.send.mock.calls.filter(
+      ([channel]) => channel === 'window:close-requested'
+    )
+    expect(requests).toEqual([
+      ['window:close-requested', { isQuitting: true, requestId: expect.any(Number) }]
+    ])
+    ipcHandlers['window:close-request-received']?.(
+      { sender: { id: 42 } },
+      lastCloseRequestId(webContents.send)
+    )
+    await vi.advanceTimersByTimeAsync(WINDOW_QUIT_RENDERER_ACK_TIMEOUT_MS)
+    expect(instance.destroy).not.toHaveBeenCalled()
+  })
+
   it('keeps a plain window close without a deadline', async () => {
     const { windowHandlers, instance } = setupWindow()
     createMainWindow(null, { getIsQuitting: () => false })
